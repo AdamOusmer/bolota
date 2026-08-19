@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { FOLLOW_MAX_PITCH, FOLLOW_MAX_YAW, FOLLOW_MORPH, followLook, mountEngine } from "../src/engine";
+import {
+  FOLLOW_MAX_PITCH,
+  FOLLOW_MAX_YAW,
+  FOLLOW_MORPH,
+  followEase,
+  followLook,
+  mountEngine,
+} from "../src/engine";
 import { MAX_PITCH_DRIFT, MAX_YAW_DRIFT } from "../src/bloub/face";
 import { PITCH } from "../src/bloub/gaze";
 
@@ -289,14 +296,16 @@ describe("handle.follow — retarget is eased, not a snap", () => {
 
     // Jump straight to the far edge — `follow`'s own retarget constant
     // (`FOLLOW_MORPH` in `src/engine.ts`, 0.08s — a short, dedicated
-    // pointer-tracking duration, not bloub's own 0.24s ambient
-    // `LOOK_MORPH`) means the target is fully reached by ~80ms. Sampling
-    // partway through that window (48ms) should be clearly short of the
-    // final target. Sampling right at the jump would not show this: that
-    // first tick is the same one `aimGaze` calls `engine.setLook` on, and
-    // `BotEngine.sample` at that exact instant reads `k = 0` (no time has
-    // passed *since* the call yet) — the retarget only starts becoming
-    // visible on the frames after.
+    // pointer-tracking duration) drives `followEase` (CSS `ease`,
+    // `cubic-bezier(0.25, 0.1, 0.25, 1)`), not `BotEngine`'s own
+    // `easeInOutCubic` — see `aimGaze`'s own doc comment for why the curve
+    // is driven here instead of through `BotEngine.setLook`'s built-in
+    // morph. Sampling partway through the 80ms window (48ms) should be
+    // clearly short of the final target. Sampling right at the jump would
+    // not show this: that first tick is the same one `aimGaze` retargets
+    // `from`/`to`/`retargetAt` on, and `easedNow` at that exact instant
+    // reads `k = 0` (no time has passed *since* the retarget yet) — the
+    // curve only starts becoming visible on the frames after.
     move(doc, view, view.innerWidth, view.innerHeight / 2);
     run(doc, 48);
     const early = eyeX(svg as unknown as FakeElement)!;
@@ -311,6 +320,55 @@ describe("handle.follow — retarget is eased, not a snap", () => {
     const between =
       (start <= early && early <= settled) || (settled <= early && early <= start);
     expect(between).toBe(true);
+  });
+
+  test("responds fast (CSS ease's own high initial slope, unlike easeInOutCubic's near-zero one)", () => {
+    const { doc, svg, handle } = mount();
+    const view = doc.defaultView;
+    handle.follow("window");
+
+    move(doc, view, view.innerWidth / 2, view.innerHeight / 2);
+    run(doc, 500);
+    const start = eyeX(svg as unknown as FakeElement)!;
+
+    // The tick `move()` lands in is the one `aimGaze` registers the
+    // retarget on — `easedNow` there reads `k = 0` (no time has passed
+    // *since* `retargetAt` within that same tick), so the curve's own
+    // response only becomes visible starting the tick after.
+    move(doc, view, view.innerWidth, view.innerHeight / 2);
+    run(doc, 32); // one tick to register the retarget, one more to move
+    const oneFrameIn = eyeX(svg as unknown as FakeElement)!;
+    run(doc, 300);
+    const settled = eyeX(svg as unknown as FakeElement)!;
+
+    const totalSweep = Math.abs(settled - start);
+    const progressed = Math.abs(oneFrameIn - start);
+    // `easeInOutCubic` at the same k (~0.2, one 16ms tick into an 80ms
+    // morph) would be under 3% of the way there (4 * 0.2^3); CSS `ease` is
+    // already ~30% (see `followEase(0.2)`, pinned below) — this is the gap
+    // that made the pre-switch curve read as slow to start.
+    expect(progressed).toBeGreaterThan(totalSweep * 0.15);
+  });
+});
+
+describe("followEase — CSS ease, cubic-bezier(0.25, 0.1, 0.25, 1)", () => {
+  test("endpoints and a handful of pinned reference values", () => {
+    expect(followEase(0)).toBe(0);
+    expect(followEase(1)).toBe(1);
+    // Values from evaluating this exact cubic-bezier solve independently;
+    // 0.5 -> ~0.802 is the commonly-cited midpoint value for CSS `ease`.
+    expect(followEase(0.1)).toBeCloseTo(0.0948, 3);
+    expect(followEase(0.2)).toBeCloseTo(0.2952, 3);
+    expect(followEase(0.5)).toBeCloseTo(0.8024, 3);
+    expect(followEase(0.9)).toBeCloseTo(0.9943, 3);
+  });
+
+  test("high initial slope, low final slope (fast start, gentle settle — not symmetric like ease-in-out)", () => {
+    const earlyStep = followEase(0.1) - followEase(0);
+    const lateStep = followEase(1) - followEase(0.9);
+    expect(earlyStep).toBeGreaterThan(lateStep);
+    // Comfortably more than half the curve is covered by the halfway point.
+    expect(followEase(0.5)).toBeGreaterThan(0.7);
   });
 });
 
@@ -333,7 +391,14 @@ describe("handle.follow — composes with idle life", () => {
     expect(a).not.toBe(b);
   });
 
-  test("idle wander resumes on its own after the pointer holds still", () => {
+  test("a parked pointer holds the gaze locked, indefinitely — no stillness handback", () => {
+    // Arbitration rule: while `following` is true and a pointer position is
+    // known, follow owns the eyes completely (`wander: 0`) for as long as
+    // the pointer stays put. There used to be a few-seconds stillness
+    // timeout that released back to idle on its own; a parked cursor fought
+    // idle wander under that rule (the eyes visibly tugged off target
+    // between glances) and it's gone — the only way back to idle now is an
+    // actual pointerleave, `follow(false)`, or `destroy()`.
     const { doc, svg, handle } = mount();
     handle.play("idle", { loop: true });
     handle.follow("window");
@@ -341,13 +406,59 @@ describe("handle.follow — composes with idle life", () => {
     run(doc, 200); // settled onto the tracked target (well past FOLLOW_MORPH)
     const tracked = eyeXY(svg as unknown as FakeElement)!;
 
-    // Hold the pointer perfectly still (no further `move()` calls) well
-    // past `FOLLOW_IDLE_RESUME_DELAY` (3s) — `aimGaze` should release the
-    // gaze back to idle on its own, without ever seeing a pointerleave.
-    run(doc, 3500);
-    const resumed = eyeXY(svg as unknown as FakeElement)!;
+    // Hold the pointer perfectly still (no further `move()` calls) for far
+    // longer than the old 3s handback — 10s, with no leave event anywhere.
+    run(doc, 10000);
+    const stillTracked = eyeXY(svg as unknown as FakeElement)!;
 
-    expect(resumed).not.toEqual(tracked);
+    // Idle wander's own measured travel is ~166.9 viewBox units per 10s
+    // (`bloub/face.ts`'s widen-wander commit) — if wander had resumed, this
+    // gap would be on that order. What's actually still live here is only
+    // breathing sway (`liveliness()`'s `driftX`/`driftY`, independent of
+    // `wander` and far smaller: amplitude 0.006-0.007 of the body radius),
+    // so the bound below is generous for that and nowhere close to wander.
+    const drift = Math.hypot(stillTracked.x - tracked.x, stillTracked.y - tracked.y);
+    expect(drift).toBeLessThan(3);
+  });
+
+  test("pointerleave still releases back to idle wander immediately", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("idle", { loop: true });
+    handle.follow("window");
+    move(doc, doc.defaultView, 700, 300);
+    run(doc, 200);
+    const tracked = eyeXY(svg as unknown as FakeElement)!;
+
+    doc.fire("pointerleave", {});
+    run(doc, 500); // past BotEngine's own default release morph (LOOK_MORPH, 0.24s)
+    const released = eyeXY(svg as unknown as FakeElement)!;
+
+    expect(released).not.toEqual(tracked);
+  });
+
+  test("play('idle') mid-tracking does not clobber the gaze target", () => {
+    // `play()` only calls `engine.setState`, never `engine.setLook` — the
+    // Look/gaze subsystem and the state/pose subsystem are independent in
+    // `BotEngine` (see `bloub/engine.ts`: `setState` touches `cur`/`prev`/
+    // `tCur`/`departFige` only). Re-playing the *same already-looping*
+    // state mid-track should therefore leave the tracked target untouched.
+    const { doc, svg, handle } = mount();
+    handle.play("idle", { loop: true });
+    handle.follow("window");
+    move(doc, doc.defaultView, 700, 300);
+    run(doc, 200); // settled
+    const before = eyeXY(svg as unknown as FakeElement)!;
+
+    handle.play("idle", { loop: true }); // same tick, no time elapsed
+    const after = eyeXY(svg as unknown as FakeElement)!;
+
+    expect(after).toEqual(before);
+
+    // And tracking still responds to further pointer movement afterward.
+    move(doc, doc.defaultView, 200, 300);
+    run(doc, 200);
+    const moved = eyeXY(svg as unknown as FakeElement)!;
+    expect(moved).not.toEqual(after);
   });
 });
 

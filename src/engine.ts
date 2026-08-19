@@ -39,7 +39,7 @@ import { BotEngine, type BotFrame, type Look } from "./bloub/engine";
 import { EXPRESSIONS, EXPRESSION_BY_ID } from "./bloub/expressions";
 import { MAX_PITCH_DRIFT, MAX_YAW_DRIFT } from "./bloub/face";
 import { PITCH } from "./bloub/gaze";
-import { clamp } from "./bloub/math";
+import { clamp, lerp } from "./bloub/math";
 import { PROFILE_SAMPLES } from "./bloub/profiles";
 import { POSES, STATE_BY_ID, type StateId } from "./bloub/states";
 import { superellipse } from "./shape";
@@ -275,6 +275,47 @@ export function followLook(nx: number, ny: number): Look {
   };
 }
 
+/**
+ * CSS's `ease` keyword, `cubic-bezier(0.25, 0.1, 0.25, 1)` — fast initial
+ * response, gentle deceleration into the target. User-requested swap-in for
+ * the follow retarget specifically (idle wander and expression morphs keep
+ * `BotEngine`'s own curves, untouched below). Not `bloub/math.ts`'s
+ * `easings` — that file is a verbatim port and this curve has no bloub
+ * equivalent, so it lives here instead, beside the rest of this bridge's
+ * own math (`followLook` above, `damp`/`blurFor` earlier in this file).
+ *
+ * Standard cubic-bezier solve: `x(t)`/`y(t)` are the same third-degree
+ * Bernstein form `easings.easeOutCubic` etc. expand from by hand, but a
+ * *generic* two-point bezier (unlike those) has no closed form from
+ * `x` back to `t` — Newton-Raphson on `x(t) - x = 0` converges in a
+ * handful of iterations for control points this mild (both x-coordinates
+ * strictly increasing, no sharp corner), same technique browsers use for
+ * CSS's own `cubic-bezier()` easing functions.
+ */
+function cubicBezierEase(p1x: number, p1y: number, p2x: number, p2y: number): (x: number) => number {
+  const cx = 3 * p1x;
+  const bx = 3 * (p2x - p1x) - cx;
+  const ax = 1 - cx - bx;
+  const cy = 3 * p1y;
+  const by = 3 * (p2y - p1y) - cy;
+  const ay = 1 - cy - by;
+  const sampleX = (t: number) => ((ax * t + bx) * t + cx) * t;
+  const sampleY = (t: number) => ((ay * t + by) * t + cy) * t;
+  const sampleXDeriv = (t: number) => (3 * ax * t + 2 * bx) * t + cx;
+  return (x: number) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i++) {
+      const d = sampleXDeriv(t);
+      if (Math.abs(d) < 1e-6) break;
+      t -= (sampleX(t) - x) / d;
+    }
+    return sampleY(t);
+  };
+}
+export const followEase = cubicBezierEase(0.25, 0.1, 0.25, 1);
+
 // `BotEngine.LOOK_MORPH` (0.24s) is bloub's own constant for its settings-
 // panel arrival — an occasional, discrete retarget, not a continuously-
 // updating pointer stream. Driving `setLook` off a live `pointermove`
@@ -283,24 +324,49 @@ export function followLook(nx: number, ny: number): Look {
 // guard, by design, so a *moving* target never fully lands), and at 0.24s
 // the per-frame progress from a near-continuous stream of resets is small
 // enough that a fast sweep visibly trails the cursor by most of a second.
-// A short, dedicated pointer-tracking constant fixes this without a new
-// easing curve (still `easeInOutCubic`, still `BotEngine`'s own morph):
-// simulated against a 1s linear sweep across the full deflection range,
-// 0.24s trails by 15.3 of 16deg at t=1s; 0.08s trails by 7.1deg; 0.05s by
-// 2.1deg. 0.08s is the pick — fast enough that a *held* pointer (the
-// common case, since `aimGaze` only calls `setLook` when the target
-// actually moves) completes its single clean arrival in well under the
-// 100ms "starts moving" bar, while staying long enough (~5 frames) to
-// still read as an eased arrival rather than a binary snap for quick,
-// repeated micro-movements.
+// A short, dedicated pointer-tracking constant fixes this: simulated
+// against a 1s linear sweep across the full deflection range, 0.24s trails
+// by 15.3 of 16deg at t=1s; 0.08s trails by 7.1deg; 0.05s by 2.1deg. 0.08s
+// is the pick — fast enough that a *held* pointer (the common case, since
+// `aimGaze` only calls `setLook` when the target actually moves) completes
+// its single clean arrival in well under the 100ms "starts moving" bar,
+// while staying long enough (~5 frames) to still read as an eased arrival
+// rather than a binary snap for quick, repeated micro-movements.
+//
+// This is now `followEase`'s own duration, not a morph handed to
+// `BotEngine.setLook` — `aimGaze` drives the curve itself every tick and
+// feeds `setLook` the already-eased yaw/pitch (see `PASSTHROUGH_MORPH`
+// below), so `BotEngine`'s own `easeInOutCubic` retarget curve never runs
+// on the follow path at all.
 export const FOLLOW_MORPH = 0.08;
 
-// "idle wander yields to follow while pointer active, resumes a few
-// seconds after the pointer stops [moving]": a cursor parked motionless
-// over the tracked target should not pin the gaze there forever — after
-// this many seconds of no *new* position, `aimGaze` releases back to
-// `null` (idle's own pose + wander), same as an actual pointerleave.
-export const FOLLOW_IDLE_RESUME_DELAY = 3;
+// A near-zero morph handed to `engine.setLook` once `aimGaze` has already
+// computed this tick's eased yaw/pitch itself — `BotEngine.setLook` can't
+// take `0` (its own `lookAtTime` would divide by it), so this is the same
+// "just enough to not be zero" duration bloub's own `BloubBot.vue` uses for
+// its scripted (already-eased) gazes (`SCRIPT_MORPH = 1 / 60`).
+//
+// Passing `now` itself here does NOT work, even with this tiny a morph:
+// `setLook(look, now, morph)` sets `this.lookAt = now`, and the *same*
+// tick's `engine.sample(now)` right after reads `k = (now - this.lookAt) /
+// morph = 0` — `BotEngine`'s own fast path only returns the freshly-set
+// `this.look` once `k >= 1`, so at `k = 0` it renders `lookPrev` (the
+// value from BEFORE this call) instead, no matter how small `morph` is.
+// Called every tick with a new pre-eased value, that made the display
+// permanently a full tick behind whatever `aimGaze` had just computed —
+// measured live, the eyes never converged, which is what the "still really
+// slow" report was actually catching (not `FOLLOW_MORPH` itself).
+//
+// Fix: backdate the timestamp handed to `setLook` by `PASSTHROUGH_MORPH`,
+// i.e. tell `BotEngine` this target was set `PASSTHROUGH_MORPH` seconds
+// ago. `k` at the *current* real `now` is then `PASSTHROUGH_MORPH /
+// PASSTHROUGH_MORPH = 1` exactly — the fast path fires immediately, so
+// this tick's `sample()` shows precisely the eased value just computed,
+// not a lagged one. `PASSTHROUGH_MORPH` is kept far below any real frame
+// interval (down to ~240Hz refresh) so the *next* call's own `lookPrev`
+// capture also lands past `k = 1` against the previous (also backdated)
+// call — both directions exact, no residual blend either way.
+const PASSTHROUGH_MORPH = 0.001;
 
 function el<K extends keyof SVGElementTagNameMap>(
   doc: Document,
@@ -614,17 +680,48 @@ export function mountEngine(
   let following = false;
   let pointer: { x: number; y: number } | null = null;
   let followCleanup: (() => void) | null = null;
-  // Last target actually handed to `engine.setLook`, so `aimGaze` can skip
-  // redundant calls (see `FOLLOW_MORPH`'s own doc comment on why every
-  // call unconditionally resets `BotEngine`'s own morph clock) and can
-  // tell a genuinely new position apart from a merely-still-known one.
+  // Last target actually handed to `engine.setLook`, so `aimGaze` can tell
+  // a genuinely new position apart from a merely-still-known one and skip
+  // redundant retargets.
   let lastNx: number | null = null;
   let lastNy: number | null = null;
-  /** Clock time `nx`/`ny` last actually changed — drives `IDLE_RESUME_DELAY`. */
-  let lastMoveAt = 0;
-  /** True once this idle period's release (`setLook(null, ...)`) has fired,
-   * so a still-motionless pointer doesn't re-issue it every tick. */
-  let released = false;
+
+  // Arbitration: while `following` is true AND a pointer position is
+  // known, follow owns the eyes completely (`wander: 0`, held there for as
+  // long as the pointer stays put — a parked cursor means eyes locked on
+  // it calmly, not a cue to hand back to idle). The ONLY way back to idle
+  // wander is `pointer` going `null` — an actual pointerleave, or
+  // `follow(false)`/`destroy()` (both call `detachFollow`, which clears
+  // `pointer`). An earlier version also released after a few seconds of
+  // pointer *stillness*; that fought a genuinely parked cursor (wander
+  // tugging the eyes off target between glances) and is gone — stillness
+  // is no longer a signal for anything here.
+  //
+  // `followEase`'s own from/to/start — driven here, not through
+  // `BotEngine.setLook`'s built-in morph (hardcoded to `easeInOutCubic`
+  // engine-wide), because the ask is CSS `ease` on the follow retarget
+  // specifically while idle wander and expression morphs keep their
+  // existing curves untouched. `easedNow` is a plain time-based eased
+  // interpolation with a fixed `FOLLOW_MORPH` duration — deliberately NOT
+  // an exponential/`damp()`-style smoother: a damper's own time constant
+  // would sit *in front of* this curve and stack additional latency on
+  // top of it, which is exactly what made retargeting feel slow to start
+  // in the first place (see `FOLLOW_MORPH`'s doc comment above).
+  let fromYaw = 0;
+  let fromPitch = 0;
+  let toYaw = 0;
+  let toPitch = 0;
+  let retargetAt = 0;
+  /** True while `followEase`'s curve hasn't reached its target yet — once
+   * it has, `aimGaze` stops pushing a `setLook` every tick until the next
+   * genuine pointer change. */
+  let transitioning = false;
+
+  function easedNow(now: number): { yaw: number; pitch: number } {
+    const k = clamp((now - retargetAt) / FOLLOW_MORPH);
+    const e = followEase(k);
+    return { yaw: lerp(fromYaw, toYaw, e), pitch: lerp(fromPitch, toPitch, e) };
+  }
 
   function detachFollow() {
     followCleanup?.();
@@ -660,7 +757,7 @@ export function mountEngine(
     following = true;
     lastNx = null;
     lastNy = null;
-    released = false;
+    transitioning = false;
     ensureRunning();
   }
 
@@ -668,9 +765,15 @@ export function mountEngine(
    * Re-evaluated every tick — the avatar's own box can move under a fixed
    * pointer (scroll, layout, resize), and bloub re-reads it every frame for
    * the same reason ("le rectangle est relu a chaque image") — but only
-   * calls into `engine.setLook` when the resulting target actually differs
-   * from the last one applied, or when `FOLLOW_IDLE_RESUME_DELAY` has
-   * elapsed since it last did (see the notes above `lastNx`/`lastMoveAt`).
+   * *retargets* (captures a new `from`/`to`/`retargetAt`) when the result
+   * actually differs from the last one applied (see the note above
+   * `lastNx`). While `followEase`'s curve is still catching up to its
+   * target (`transitioning`), this pushes the freshly-eased yaw/pitch into
+   * `engine.setLook` every tick — `PASSTHROUGH_MORPH`'s own doc comment
+   * covers why that doesn't re-introduce `BotEngine`'s own morph on top of
+   * it. Once settled, a parked pointer holds the last target indefinitely:
+   * `BotEngine` keeps whatever `Look` it was last given, so there is
+   * nothing further to push until the pointer actually moves or leaves.
    */
   function aimGaze(now: number) {
     if (!following) return;
@@ -683,7 +786,7 @@ export function mountEngine(
       if (lastNx !== null || lastNy !== null) {
         lastNx = null;
         lastNy = null;
-        released = true;
+        transitioning = false;
         engine.setLook(null, now);
       }
       return;
@@ -694,16 +797,32 @@ export function mountEngine(
     const nx = clamp((pointer.x - (box.left + box.width / 2)) / halfW, -1, 1);
     const ny = clamp((pointer.y - (box.top + box.height / 2)) / halfH, -1, 1);
     if (nx !== lastNx || ny !== lastNy) {
+      // Retarget from wherever the curve currently sits — mid-flight or
+      // already settled, `easedNow` covers both (a settled `k` clamps to 1
+      // and returns `to` exactly) — toward the newly computed target.
+      const cur = easedNow(now);
+      fromYaw = cur.yaw;
+      fromPitch = cur.pitch;
+      const target = followLook(nx, ny);
+      toYaw = target.yaw;
+      toPitch = target.pitch;
+      retargetAt = now;
       lastNx = nx;
       lastNy = ny;
-      lastMoveAt = now;
-      released = false;
-      engine.setLook(followLook(nx, ny), now, FOLLOW_MORPH);
-      return;
+      transitioning = true;
     }
-    if (!released && now - lastMoveAt >= FOLLOW_IDLE_RESUME_DELAY) {
-      released = true;
-      engine.setLook(null, now);
+    if (transitioning) {
+      const eased = easedNow(now);
+      // Backdated on purpose — see `PASSTHROUGH_MORPH`'s own doc comment:
+      // this makes `BotEngine` treat the target as already `PASSTHROUGH_MORPH`
+      // seconds old, so its own `k >= 1` fast path fires immediately and
+      // `sample()` shows exactly `eased`, this same tick, unblended.
+      engine.setLook(
+        { yaw: eased.yaw, pitch: eased.pitch, mix: 1, spin: 0, wander: 0 },
+        now - PASSTHROUGH_MORPH,
+        PASSTHROUGH_MORPH,
+      );
+      if (now - retargetAt >= FOLLOW_MORPH) transitioning = false;
     }
   }
 
