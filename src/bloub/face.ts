@@ -158,14 +158,40 @@ export interface LivelinessOptions {
   float?: boolean
 }
 
+/**
+ * blobatar divergence from the bloub port: the four amplitude terms below (feeding
+ * `dYaw`/`dPitch`/`dRoll`) were measured off bloub's own reference video at
+ * 5.5+1.6deg yaw, 4.2+1.3deg pitch, 2.2deg roll — correct for THAT video, but user
+ * testing on blobatar avatars called the resulting idle drift "stuck... they move but
+ * subtle movement, we need more." Raised ~2.2-2.3x here (yaw 7.1deg -> 16.1deg max,
+ * pitch 5.5deg -> 12.4deg max, roll 2.2deg -> 4.8deg max) — still a wander, not a
+ * cartoon look-around, but the travel is now large enough to read as alive rather
+ * than as a static rest pose with occasional jitter.
+ *
+ * `eyefit.ts`'s `DERIVE_YAW`/`DERIVE_PITCH` import `MAX_YAW_DRIFT`/`MAX_PITCH_DRIFT`
+ * below rather than restating these sums, so the anchor-correction coverage always
+ * matches the amplitude actually in play here — see that file's comment on why a
+ * stale copy there is exactly the bug this whole module exists to prevent.
+ */
+const WANDER_YAW_SLOW = 12.5
+const WANDER_YAW_FAST = 3.6
+const WANDER_PITCH_SLOW = 9.5
+const WANDER_PITCH_FAST = 2.9
+const WANDER_ROLL = 4.8
+
+/** Exported so `eyefit.ts` can bound its correction table on the real amplitude. */
+export const MAX_YAW_DRIFT = WANDER_YAW_SLOW + WANDER_YAW_FAST
+export const MAX_PITCH_DRIFT = WANDER_PITCH_SLOW + WANDER_PITCH_FAST
+
 export function liveliness(t: number, opt: LivelinessOptions = {}): Liveliness {
   const { wander = 1, blink = true, float = true } = opt
 
   // Periodes premieres entre elles : la derive ne se repete jamais a l'oeil.
   return {
-    dYaw: (loopNoise(t, 11.3, 0.4) * 5.5 + loopNoise(t, 3.7, 2.1) * 1.6) * wander,
-    dPitch: (loopNoise(t, 9.1, 1.3) * 4.2 + loopNoise(t, 4.3, 0.7) * 1.3) * wander,
-    dRoll: loopNoise(t, 13.7, 3.2) * 2.2 * wander,
+    dYaw: (loopNoise(t, 11.3, 0.4) * WANDER_YAW_SLOW + loopNoise(t, 3.7, 2.1) * WANDER_YAW_FAST) * wander,
+    dPitch:
+      (loopNoise(t, 9.1, 1.3) * WANDER_PITCH_SLOW + loopNoise(t, 4.3, 0.7) * WANDER_PITCH_FAST) * wander,
+    dRoll: loopNoise(t, 13.7, 3.2) * WANDER_ROLL * wander,
     lid: blink ? blinkLid(t) : 1,
     // Au repos la video est quasiment immobile (centre stable a +-0.003, rayon
     // constant) : toute la vie passe par le regard et les clignements. On garde

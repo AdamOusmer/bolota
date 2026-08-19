@@ -230,6 +230,19 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: true,
+    // blobatar eye-visibility audit (see `burst`/`comet` below for the cases that
+    // DID change): left at `eyeAlpha: 0`, deliberately. The body does not shrink
+    // toward a face here, it BECOMES one of the three dots (comment below, and
+    // `sil` reuses the dot's own radius/position) — same size and shape as its two
+    // un-eyed siblings. There is no face plane left to anchor a pair of capsule
+    // eyes to; forcing them on would mean drawing eyes floating over a plain dot
+    // indistinguishable from the decor either side of it, not "keeping the avatar's
+    // identity," so this is the "truly impossible" case the fix explicitly carves
+    // out. The pop this state's own entry/exit would otherwise have is still
+    // covered: `BotEngine.sample`'s state-transition cross-fade (`blendPose`,
+    // eased) ramps `eyeAlpha` over the transition `morph`, so going in and out of
+    // `thinking` fades rather than pops even though this pose itself never turns
+    // the eyes back on.
     pose: (t) => {
       const mid = dotPulse(t, 1)
       // Les points lateraux sortent des flancs de la boule : dans la video ils
@@ -296,6 +309,10 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
+    // blobatar eye-visibility audit: left at `eyeAlpha: 0`. `sil` here is
+    // `barItalic` — a thin italic glyph bar, not a round body — there is no face
+    // plane for a pair of capsule eyes to sit on. Truly impossible, not overlooked;
+    // covered by the same cross-fade as `thinking` above.
     pose: (t) => {
       // Course mesuree : -0.087 -> +0.732 en 1.5 s, ease-in-out, micro-overshoot.
       const p = clamp(t / 1.5)
@@ -358,6 +375,8 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
+    // blobatar eye-visibility audit: left at `eyeAlpha: 0` — same reasoning as
+    // `alert`, `sil` is `barUpright()`, a bar glyph with no face plane.
     pose: () =>
       base({
         sil: barUpright(),
@@ -373,6 +392,12 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
+    // blobatar eye-visibility audit: left at `eyeAlpha: 0`, but for a different
+    // reason than `thinking`/`alert`/`exclaim` above — `sil` here IS still a round
+    // body (a small bouncing ball), so a face plane exists. This is the one state
+    // where "no eyes" is the correct read regardless: the bot is asleep, and closed
+    // eyes are what "asleep" means — showing open eyes here would read as a bug in
+    // the other direction. Not changed.
     pose: (t) =>
       base({
         // Rebond vertical mesure : +-0.19 autour de +0.11, periode 0.6 s.
@@ -541,13 +566,25 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
+    // blobatar eye-visibility audit: unlike `thinking`/`alert`/`exclaim`, `sil`
+    // never stops being a circle here — it shrinks to 0.166 of resting radius and
+    // regrows, but a face plane exists the whole time. Verbatim bloub hid the eyes
+    // from t=0 to 1.85 (85% of the 2.6s duration) and popped them in over the last
+    // 0.4s instead. Divergence: `eyeAlpha` now tracks the same `collapse`/`regrow`
+    // curve driving the body (`bodyScale` below), floored at 0.18 instead of 0 —
+    // the eyes shrink and dim toward the collapse instant exactly as much as the
+    // body does (via the existing `bodyRadius` fit in `bloub/engine.ts`'s
+    // `sample()`, unchanged), staying faintly present instead of vanishing, then
+    // regrow with the body. No new snap: the driving curve is the same
+    // `easeOutQuint` already used for `sil`, so alpha and size move together.
     pose: (t) => {
       // Effondrement mesure : 1.0 -> 0.166 en 0.7 s, ease-out, sans rebond.
       const collapse = 1 - 0.834 * easings.easeOutQuint(clamp(t / 0.7))
       const regrow = easings.easeOutQuint(clamp((t - 1.7) / 0.7))
+      const bodyScale = collapse + (1 - collapse) * regrow
       return base({
-        sil: circle(collapse + (1 - collapse) * regrow),
-        eyeAlpha: clamp((t - 1.85) / 0.4),
+        sil: circle(bodyScale),
+        eyeAlpha: 0.18 + 0.82 * bodyScale,
         dots: particles(t, 1),
         dotsBehind: true
       })
@@ -565,16 +602,25 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
+    // blobatar eye-visibility audit: same case as `burst` above — `sil` shrinks to
+    // `COMET_DOT` (0.129 of resting radius, comparable to burst's 0.166) but never
+    // stops being a circular body, so a face plane exists throughout. User report
+    // named this one explicitly ("comet collapses to a dot"). Same divergence:
+    // `eyeAlpha` now tracks `bodyScale` (floored at 0.18) instead of staying at 0
+    // until t=2 (83% of the 2.4s duration) and popping in over the last 0.35s.
+    // At `COMET_DOT` scale the eyes render tiny — a natural fade by proportion, not
+    // a second alpha ramp fighting the geometry.
     pose: (t) => {
       const collapse = 1 - (1 - COMET_DOT) * easings.easeOutQuint(clamp(t / 0.55))
       const regrow = easings.easeOutQuint(clamp((t - 1.85) / 0.6))
+      const bodyScale = collapse + (1 - collapse) * regrow
       const fade = clamp((t - 0.15) / 0.25) * clamp((1.95 - t) / 0.3)
       return base({
         // Le point derive de 0.035 vers le bas puis remonte (wobble mesure).
-        sil: circle(collapse + (1 - collapse) * regrow, {
+        sil: circle(bodyScale, {
           cy: Math.sin(clamp(t / 1.7) * Math.PI) * 0.035
         }),
-        eyeAlpha: clamp((t - 2) / 0.35),
+        eyeAlpha: 0.18 + 0.82 * bodyScale,
         arcs: COMET_RIBBONS.map((s, i) => ({ id: `cm${i}`, seed: s, t, opacity: fade }))
       })
     }
