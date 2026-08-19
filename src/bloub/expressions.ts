@@ -11,6 +11,21 @@
  * the French originals (`neutre`, `attentif`, `surpris`, `excite`,
  * `heureux`, `hilare`, `colere`, `triste`, `effraye`, `mefiant`, `confus`,
  * `curieux`, `fier`, `timide`, `blase`, `somnolent`).
+ *
+ * `aside` is a bolota-specific divergence from that verbatim port (same
+ * split as `idle`/`wander` in ../bloub/states.ts): bloub's own `neutre`
+ * carries `REST_GAZE` (yaw +28.49, pitch +28.62) as its gaze, which is the
+ * pose fitted off the reference video's resting frame — both eyes land on
+ * the SAME side of the face's vertical axis (`eyePoses(REST_GAZE, 1)` gives
+ * x = +0.19 and +0.62, not a mirrored pair around 0), a sideways glance, not
+ * a forward gaze. Upstream this is what `neutre` means, but bolota's
+ * `neutral` id is expected to read as "gaze straight ahead" (see
+ * `setExpression`'s doc comment in ../engine.ts and this repo's use of
+ * `neutral` as `DEFAULT_EXPRESSION`), so the two got renamed apart instead
+ * of silently disagreeing: `neutral` below is a NEW entry with a true zero
+ * `HeadGaze`, and bloub's original off-center pose kept its eye/split shape
+ * under the id `aside` (not `wander` — that id already names a STATE in
+ * ../bloub/states.ts, and reusing it for an expression would collide).
  */
 import { EYE_H, EYE_SPLIT, EYE_W, REST_GAZE, type HeadGaze } from './face'
 import { lerp } from './math'
@@ -37,6 +52,7 @@ import type { EyeCfg } from './states'
 /** Enumerated so the i18n layer checks their translations at compile time. */
 export type ExpressionId =
   | 'neutral'
+  | 'aside'
   | 'attentive'
   | 'surprised'
   | 'excited'
@@ -71,8 +87,21 @@ const pair = (w: number, h: number, tilt = 0, open = 1): [EyeCfg, EyeCfg] => [
 
 export const EXPRESSIONS: BotExpression[] = [
   {
-    // the pose measured frame by frame off the reference video
+    // true resting face: gaze dead ahead, both eyes mirrored around the
+    // vertical axis. bolota addition — see this file's header comment for
+    // why this isn't bloub's own `neutre` (that's `aside`, right below)
     id: 'neutral',
+    gaze: { yaw: 0, pitch: 0, roll: 0 },
+    split: EYE_SPLIT,
+    eyes: [eye(EYE_W, EYE_H), eye(EYE_W, EYE_H)]
+  },
+  {
+    // bloub's own `neutre`: the pose measured frame by frame off the
+    // reference video — a sideways glance (`REST_GAZE`), not a forward
+    // gaze. Kept under its own id rather than dropped: it's still the
+    // exact upstream-measured pose and may read as "looking away/aside"
+    // intentionally. See this file's header comment for the rename.
+    id: 'aside',
     gaze: { ...REST_GAZE },
     split: EYE_SPLIT,
     eyes: [eye(EYE_W, EYE_H), eye(EYE_W, EYE_H)]

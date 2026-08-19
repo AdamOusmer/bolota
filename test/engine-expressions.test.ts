@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { BotEngine } from "../src/bloub/engine";
 import { EXPRESSION_BY_ID } from "../src/bloub/expressions";
+import { eyePoses } from "../src/bloub/face";
 import { STATE_BY_ID } from "../src/bloub/states";
 import { mountEngine } from "../src/engine";
 
@@ -97,14 +98,14 @@ function eyeD(svg: FakeElement): string | null {
 }
 
 describe("expressions on the engine handle", () => {
-  test("all 16 bloub expression ids are present, bloub's own array order", () => {
+  test("all 17 bloub expression ids are present, bloub's own array order plus bolota's `aside` split", () => {
     const { handle } = mount();
     expect(handle.expressions).toEqual([
-      "neutral", "attentive", "surprised", "excited", "happy", "laughing",
+      "neutral", "aside", "attentive", "surprised", "excited", "happy", "laughing",
       "angry", "sad", "scared", "suspicious", "confused", "curious",
       "proud", "shy", "unimpressed", "sleepy",
     ]);
-    expect(handle.expressions).toHaveLength(16);
+    expect(handle.expressions).toHaveLength(17);
   });
 
   test("setExpression throws on an unknown id", () => {
@@ -207,5 +208,32 @@ describe("expressions compose with play/burst/comet — state keeps body/decor/a
         expect(expressed.sample(t).eyes).toEqual(plain.sample(t).eyes);
       }
     }
+  });
+});
+
+describe("`neutral` is a true straight-ahead gaze", () => {
+  test("gaze has no yaw/pitch/roll offset", () => {
+    const neutral = EXPRESSION_BY_ID.get("neutral")!;
+    expect(neutral.gaze.yaw).toBe(0);
+    expect(neutral.gaze.pitch).toBe(0);
+    expect(neutral.gaze.roll).toBe(0);
+  });
+
+  test("both eye centers are equidistant from the body's vertical axis (x=0), mirrored", () => {
+    const neutral = EXPRESSION_BY_ID.get("neutral")!;
+    const [inner, outer] = eyePoses(neutral.gaze, 1, neutral.split);
+    // mirrored around x=0: same |x|, opposite sign
+    expect(inner!.x).toBeCloseTo(-outer!.x, 10);
+    // and dead level: no vertical (up/down) gaze offset either
+    expect(inner!.y).toBeCloseTo(0, 10);
+    expect(outer!.y).toBeCloseTo(0, 10);
+  });
+
+  test("`aside` (bloub's original off-center `neutre` pose) is NOT mirrored around x=0 -- that's the bug `neutral` fixes", () => {
+    const aside = EXPRESSION_BY_ID.get("aside")!;
+    const [inner, outer] = eyePoses(aside.gaze, 1, aside.split);
+    // both eyes land on the same side of the axis, proving the drift
+    expect(Math.sign(inner!.x)).toBe(Math.sign(outer!.x));
+    expect(inner!.x).not.toBeCloseTo(-outer!.x, 1);
   });
 });
