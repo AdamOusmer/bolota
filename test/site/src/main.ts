@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
-import { bolota, parts, normalizeSeed, type BolotaOptions } from "bolota";
+import { bolota, parts, normalizeSeed, type BolotaOptions } from "@luzir/bolota";
 import {
   idle,
   happy,
@@ -16,21 +16,21 @@ import {
   shy,
   sick,
   type Expression,
-} from "bolota/expression";
-import "bolota/motion.css";
+} from "@luzir/bolota/expression";
+import "@luzir/bolota/motion.css";
 // NOTE(e875087): "bolota/frames.css" and "bolota/decor" were removed --
 // the bb-* CSS keyframe approximations are gone, replaced entirely by the
 // bloub JS engine below. Importing either now fails module resolution.
-import { mountEngine, engineStates, type EngineHandle } from "bolota/engine";
-import { runSequence } from "bolota/sequences";
-// NOTE(e875087): "bolota/sequences" API changed shape completely. It used
+import { mountEngine, engineStates, type EngineHandle } from "@luzir/bolota/engine";
+import { runSequence } from "@luzir/bolota/sequences";
+// NOTE(e875087): "@luzir/bolota/sequences" API changed shape completely. It used
 // to be `runSequence(el: Element, seq: FrameSeq, opts?) => cancel fn`, with
 // `entrance`/`burst`/`orbit`/`comet` exported as FrameSeq constants. Now it's
 // `runSequence(handle: EngineHandle, name: "entrance"|"burst"|"orbit"|"comet") => void`,
 // a one-line lookup table onto `handle.play(state)` -- no cancel fn exists
 // anymore because `mountEngine`'s `play()` already returns to "idle" on its
 // own once a non-looping state's duration elapses (see engine.ts's `tick()`).
-// The old `import { runSequence, burst } from "bolota/sequences"` from the
+// The old `import { runSequence, burst } from "@luzir/bolota/sequences"` from the
 // previous phase no longer resolves: `burst` (the FrameSeq const) is gone.
 
 const findings: string[] = [];
