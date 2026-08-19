@@ -4,7 +4,12 @@
     "noEmit": false,
     "emitDeclarationOnly": true,
     "declaration": true,
-    "declarationMap": true,
+    // Off, not true: a declaration map's `sources` point at `../src/*.ts`,
+    // and the publish `files` list (package.json) ships `dist` only — no
+    // `src` — so a `.d.ts.map` in the tarball would dangle, pointing a
+    // consumer's "go to definition" at a path that does not exist in their
+    // node_modules. `declaration` alone is everything type resolution needs.
+    "declarationMap": false,
     "rootDir": "src",
     "outDir": "dist"
   },

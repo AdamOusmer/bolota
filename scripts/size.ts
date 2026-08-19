@@ -23,7 +23,7 @@ const ENTRIES: {
   ext?: string;
 }[] = [
   {
-    // Expressions are passed in as values from `blobatar/expression`, so a
+    // Expressions are passed in as values from `bolota/expression`, so a
     // consumer who never imports one carries no pose code at all — see the
     // "blob + happy" entry below for what one costs. Held tight deliberately:
     // this is the number that catches the option creeping back into the core.
@@ -45,7 +45,7 @@ const ENTRIES: {
     // here rather than 200 B higher.
     //
     // Raised from 3780 by 20 B for trait overrides, and the number is the whole
-    // argument for that design: making *every* axis of the blobatar configurable
+    // argument for that design: making *every* axis of the bolota configurable
     // cost one lookup and an inline clamp on the trait reader, because the
     // layout already addressed its values by key. A prop per knob would have
     // put ~25 named options and their plumbing in this row instead. Measured at
@@ -56,7 +56,7 @@ const ENTRIES: {
     // existed only to keep two of them apart: the palette's variant-keyed ramp
     // and floor tables, the `expressive` flag, and the `variant` argument
     // threaded through `resolve`.
-    // Blobatar 2 binds its ten-shape style directly. The private composer keeps
+    // Bolota 2 binds its ten-shape style directly. The private composer keeps
     // silhouette implementations local without retaining a runtime generation
     // branch or any historical mapping in this graph (ADR-0008).
     // Measured against published v0.2.0's six-shape renderer: 3657 → 4247 B
@@ -81,8 +81,8 @@ const ENTRIES: {
     name: "blob only",
     budget: 4550,
     external: [] as string[],
-    source: `import { blobatar } from "../../src/blob";
-             globalThis.x = blobatar(String(globalThis.seed));`,
+    source: `import { bolota } from "../../src/blob";
+             globalThis.x = bolota(String(globalThis.seed));`,
   },
   {
     // The barrel. Costs more than `blob only` above because it also carries the
@@ -91,19 +91,19 @@ const ENTRIES: {
     name: "barrel",
     budget: 4540,
     external: [],
-    source: `import { blobatar } from "../../src/index";
-             globalThis.x = blobatar(String(globalThis.seed));`,
+    source: `import { bolota } from "../../src/index";
+             globalThis.x = bolota(String(globalThis.seed));`,
   },
   {
     // Raised from 4490 alongside "blob only" above — same capsule-eye cost.
     name: "uri",
     budget: 4630,
     external: [],
-    source: `import { blobatarUri } from "../../src/uri";
-             globalThis.x = blobatarUri(String(globalThis.seed));`,
+    source: `import { bolotaUri } from "../../src/uri";
+             globalThis.x = bolotaUri(String(globalThis.seed));`,
   },
   {
-    // The point of `blobatar/expression` being its own entry: importing one
+    // The point of `bolota/expression` being its own entry: importing one
     // expression must not drag the other three in. Measured against "blob only"
     // above — the delta is what a single pose actually costs.
     // Measured: +343 B for the first expression (the shared serializer and bake,
@@ -112,9 +112,9 @@ const ENTRIES: {
     name: "blob + happy",
     budget: 4870,
     external: [],
-    source: `import { blobatar } from "../../src/blob";
+    source: `import { bolota } from "../../src/blob";
              import { happy } from "../../src/expression";
-             globalThis.x = blobatar(String(globalThis.seed), { expression: happy });`,
+             globalThis.x = bolota(String(globalThis.seed), { expression: happy });`,
   },
   {
     name: "traits only",
@@ -125,7 +125,7 @@ const ENTRIES: {
   },
   {
     // Bundled rather than gzipped straight off disk, so a syntax error here
-    // fails the gate instead of shipping. Paid once per app, not per blobatar,
+    // fails the gate instead of shipping. Paid once per app, not per bolota,
     // which is the whole reason the keyframes are not inlined into each SVG.
     name: "motion css",
     // Raised again from 950 for the expression layer: nine `@property`
@@ -139,7 +139,7 @@ const ENTRIES: {
     // foreshortening alone measured 854, and the two obvious factorings both
     // came out *larger* than writing the chains out (see `@keyframes mo-wrap`).
     // Worth it here and nowhere else — this file is paid once per app, so 180
-    // bytes buys the same 3D read that per-blobatar markup could not afford.
+    // bytes buys the same 3D read that per-bolota markup could not afford.
     // Raised from 1200 for two corrections rather than features: the shared
     // `transform-box`/`transform-origin` rule that puts the body layers'
     // pivot back at the middle of the frame instead of SVG's default corner,
@@ -149,7 +149,7 @@ const ENTRIES: {
     //
     // Raised from 1250 for the exaggeration pass, which is a net add of ~130 B
     // after the body-scale and lean channels came out. Three things bought it,
-    // and all three are things markup would otherwise have to carry per blobatar:
+    // and all three are things markup would otherwise have to carry per bolota:
     //
     //  - Per-eye asymmetry. Three registrations and four derived values on
     //    `.mo-eye`, replacing the only other option — per-eye inline styles,
@@ -166,8 +166,8 @@ const ENTRIES: {
     // file: pausing the idle loops on touch devices, where the hover rule two
     // lines above it has already pinned `--mo-amp` at zero and the loops can
     // therefore only resolve to the identity pose. Measured on a page with
-    // sixty blobatars, it took style and layout in a Lighthouse trace from
-    // 6.7s to 1.9s — the loops are ~8 per blobatar and most of them drive
+    // sixty bolotas, it took style and layout in a Lighthouse trace from
+    // 6.7s to 1.9s — the loops are ~8 per bolota and most of them drive
     // registered custom properties, which recalculate on the main thread
     // rather than compositing. A grid that reads as a crowd is the case this
     // library invites, so that is the case worth being cheap in.
