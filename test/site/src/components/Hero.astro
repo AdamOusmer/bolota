@@ -18,7 +18,7 @@
 // own rather than bundled eagerly into site.ts) has its first frame ready.
 // A URL-hash seed is client-only, so it can only ever repaint after
 // hydration, that's unavoidable, but the *default* paint is instant.
-import { bolota } from "bolota";
+import { bolota } from "@luzir/bolota";
 import { DEFAULT_SEED } from "../scripts/lib/curated-seeds";
 
 const heroStaticSvg = bolota(DEFAULT_SEED);
