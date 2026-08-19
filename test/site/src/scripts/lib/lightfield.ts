@@ -73,19 +73,25 @@ export function setupLightfield(root: HTMLElement) {
 
   const pointer = { x: -9999, y: -9999, active: false };
 
-  // Pointer interaction, amplified from the original baseline: user
-  // feedback on the shafts/embers experiment was "no reaction", meaning
-  // THIS interaction (the only one the page had) was too subtle to read,
-  // not that anything was missing. RADIUS was 160 (interaction zone),
-  // PULL_STRENGTH was 0.05 (how hard a mote gets pulled at zero distance,
-  // 0-1), DISPLACE was 0.02 (how much of that pull actually moves the mote
-  // each frame), BRIGHTEN_BOOST was 0.55 (max extra alpha near the
-  // pointer). All four raised so the lean and brighten are clearly
-  // perceptible on a single pointer move, not just as a cumulative drift
-  // over many frames.
+  // Pointer interaction. History: original baseline was RADIUS 160,
+  // PULL_STRENGTH 0.05, DISPLACE 0.02, BRIGHTEN_BOOST 0.55 (how hard a
+  // mote gets pulled at zero distance, how much of that pull actually
+  // moves the mote each frame, and the max extra alpha near the pointer,
+  // respectively) — user feedback on the shafts/embers experiment was "no
+  // reaction", meaning this interaction was too subtle to read, so all
+  // four got raised (RADIUS 220, PULL_STRENGTH 0.16, DISPLACE 0.05,
+  // BRIGHTEN_BOOST 0.85). Later user call: that pull itself read as too
+  // strong. PULL_STRENGTH and DISPLACE dialed back down toward (not all
+  // the way to) the original — roughly half the amplified pull-per-frame
+  // magnitude (`PULL_STRENGTH * RADIUS * DISPLACE` at zero distance: 1.76
+  // amplified, 0.16 original, 0.44 here) — gentle, but still clearly
+  // perceptible on a single pointer move, not a reversion to "no
+  // reaction". RADIUS and BRIGHTEN_BOOST untouched: the ask was pull
+  // strength/displacement specifically, not the interaction zone size or
+  // the brighten response.
   const RADIUS = 220;
-  const PULL_STRENGTH = 0.16;
-  const DISPLACE = 0.05;
+  const PULL_STRENGTH = 0.08;
+  const DISPLACE = 0.025;
   const BRIGHTEN_BOOST = 0.85;
 
   function build() {
@@ -94,7 +100,8 @@ export function setupLightfield(root: HTMLElement) {
     if (!w || !h) return;
     canvas!.width = Math.round(w * dpr);
     canvas!.height = Math.round(h * dpr);
-    const count = w < 700 ? 46 : 84;
+    // Raised from 46/84 (user request: noticeably denser field).
+    const count = w < 700 ? 72 : 132;
     motes = Array.from({ length: count }, () => ({
       x: Math.random() * w,
       y: Math.random() * h,
