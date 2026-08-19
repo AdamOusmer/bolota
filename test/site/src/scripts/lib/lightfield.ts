@@ -1,21 +1,30 @@
 /**
  * The living light background, Luzir's signature: "luz" is Portuguese for
  * light, so the whole page sits on a drifting field of it instead of a flat
- * color. Three cheap layers, all GPU/canvas-friendly, no dependency:
+ * color. Four cheap layers, all GPU/canvas-friendly, no dependency:
  *
- *  1. `.lightfield__rays` (src/styles/global.css), two large blurred radial
- *     gradients (warm + cool) that drift via a single CSS `transform`
- *     keyframe.
+ *  1. `.lightfield__shaft` x3 (src/styles/global.css + the inline custom
+ *     properties in Base.astro), tall blurred diagonal gradients that
+ *     breathe opacity on their own desynced CSS animations. Pure CSS, no
+ *     JS drives them directly, but this file's `SHAFTS` constant mirrors
+ *     their position/angle/width by hand (documented at its declaration)
+ *     so the mote/ember effects below can line up with them visually.
  *  2. A canvas of small drifting motes (this file), warm/cool mixed, that
- *     gently brighten and lean toward the pointer within a small radius:
- *     "light responds to you" without any per-frame DOM writes.
- *  3. `.lightfield__torch`, a radial-gradient spotlight pinned to the
+ *     gently brighten and lean toward the pointer within a small radius
+ *     ("light responds to you" without any per-frame DOM writes), and also
+ *     brighten slightly while passing through a shaft's band.
+ *  3. Embers on that same canvas: 1-2 concurrent brighter warm sparks that
+ *     rise from a shaft's base and fade out, distinct from the ambient
+ *     motes' slow drift.
+ *  4. `.lightfield__torch`, a radial-gradient spotlight pinned to the
  *     pointer via two CSS custom properties, same spotlight technique the
  *     tile/card hover glow uses, just page-wide and much dimmer.
  *
- * Restored verbatim (visually) to this first-iteration version per an
- * explicit later user decision: a simplified single-hue, particle-free pass
- * was tried and rejected in favor of this one. The mote hues are still
+ * 2026-08-19 spec amendment replaced the original two orb gradients (layer
+ * 1 above used to be `.lightfield__rays`, unconditionally-visible blurred
+ * radial gradients) with the shafts, and added the ember/brightening
+ * behavior to layer 2; grain, torch and the base mote canvas are otherwise
+ * unchanged from the first-iteration version. The mote hues are still
  * tokens, not literals, `--mote-warm-rgb`/`--glow-cool-rgb` in
  * src/styles/tokens.css, read once via `getComputedStyle` below since a
  * `<canvas>` 2D context has no way to resolve `var()` itself the way CSS
@@ -23,6 +32,41 @@
  */
 
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+/**
+ * Mirrors the three `.lightfield__shaft` elements' `--shaft-x`/
+ * `--shaft-angle`/`--shaft-w` inline styles in Base.astro. Kept in sync by
+ * hand (same pattern as the mote-hue tokens above): a `<canvas>` can't read
+ * another element's computed custom properties, and hunting three live
+ * `.lightfield__shaft` nodes down every frame just to read static geometry
+ * would be needless DOM work for something that never changes at runtime.
+ * `xPct` is the shaft's anchor as a percent of viewport width (its CSS
+ * `left`), `angleDeg` its CSS `rotate()`, `wVw` its CSS width in vw.
+ */
+const SHAFTS = [
+  { xPct: 20, angleDeg: 16, wVw: 26 },
+  { xPct: 52, angleDeg: -10, wVw: 20 },
+  { xPct: 78, angleDeg: 22, wVw: 22 },
+] as const;
+
+/** Perpendicular distance from (x, y) to a shaft's centerline, in px. The
+ * shaft's anchor sits at `top: -20%` in its own CSS, same here. */
+function shaftBrighten(x: number, y: number, w: number, h: number): number {
+  let boost = 0;
+  for (const s of SHAFTS) {
+    const anchorX = (s.xPct / 100) * w;
+    const anchorY = -0.2 * h;
+    const rad = (s.angleDeg * Math.PI) / 180;
+    const dirX = Math.sin(rad);
+    const dirY = Math.cos(rad);
+    const vx = x - anchorX;
+    const vy = y - anchorY;
+    const perp = Math.abs(vx * dirY - vy * dirX);
+    const halfWidth = ((s.wVw / 100) * w) / 2;
+    if (perp < halfWidth) boost = Math.max(boost, 0.22 * (1 - perp / halfWidth));
+  }
+  return boost;
+}
 
 /** Reads an "R G B" custom property (see tokens.css's `-rgb` tokens) off the
  * root element, for contexts that can't resolve `var()` themselves (canvas
@@ -40,6 +84,17 @@ interface Mote {
   vy: number;
   a: number;
   warm: boolean;
+}
+
+/** A single ember: brighter and shorter-lived than an ambient mote, rises
+ * from a shaft's base and fades in/out over its `maxLife` (frame count, not
+ * ms, same fixed-per-frame-increment style the rest of this file uses). */
+interface Ember {
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+  vy: number;
 }
 
 export function setupLightfield(root: HTMLElement) {
@@ -61,9 +116,46 @@ export function setupLightfield(root: HTMLElement) {
   let h = 0;
   let dpr = Math.min(window.devicePixelRatio || 1, 2);
   let motes: Mote[] = [];
+  let embers: Ember[] = [];
 
   const pointer = { x: -9999, y: -9999, active: false };
   const RADIUS = 160;
+
+  // "Occasional... 1-2 at a time": a low per-frame spawn chance capped at
+  // MAX_EMBERS concurrent, checked before every spawn roll so the cap holds
+  // even across a dropped-frame gap.
+  const MAX_EMBERS = 2;
+  const EMBER_SPAWN_CHANCE = 0.006;
+
+  function maybeSpawnEmber() {
+    if (embers.length >= MAX_EMBERS || Math.random() > EMBER_SPAWN_CHANCE) return;
+    const shaft = SHAFTS[Math.floor(Math.random() * SHAFTS.length)]!;
+    const anchorX = (shaft.xPct / 100) * w;
+    embers.push({
+      x: anchorX + (Math.random() - 0.5) * 0.03 * w,
+      y: h + 10,
+      life: 0,
+      maxLife: 320 + Math.random() * 200,
+      vy: -(0.22 + Math.random() * 0.18),
+    });
+  }
+
+  /** Fades in over the first 15% of life, holds, fades out over the last
+   * 30%, same shape as the reveal system's own ease-in/ease-out feel. */
+  function emberAlpha(e: Ember): number {
+    const t = e.life / e.maxLife;
+    if (t < 0.15) return t / 0.15;
+    if (t > 0.7) return Math.max(0, 1 - (t - 0.7) / 0.3);
+    return 1;
+  }
+
+  function paintEmber(e: Ember) {
+    const a = emberAlpha(e) * 0.85;
+    ctx!.beginPath();
+    ctx!.arc(e.x, e.y, 1.7, 0, Math.PI * 2);
+    ctx!.fillStyle = `rgb(${moteWarmRgb} / ${a.toFixed(3)})`;
+    ctx!.fill();
+  }
 
   function build() {
     w = canvas!.clientWidth;
@@ -115,6 +207,8 @@ export function setupLightfield(root: HTMLElement) {
       const distSq = dx * dx + dy * dy;
       if (distSq < RADIUS * RADIUS) alpha = Math.min(1, alpha + (1 - distSq / (RADIUS * RADIUS)) * 0.55);
     }
+    // Spec: "motes brightening slightly inside a shaft's band".
+    alpha = Math.min(1, alpha + shaftBrighten(m.x, m.y, w, h));
     const rgb = m.warm ? moteWarmRgb : moteCoolRgb;
     ctx!.beginPath();
     ctx!.arc(m.x, m.y, m.r, 0, Math.PI * 2);
@@ -132,6 +226,15 @@ export function setupLightfield(root: HTMLElement) {
       step(m);
       paint(m);
     }
+
+    maybeSpawnEmber();
+    for (const e of embers) {
+      e.y += e.vy;
+      e.life += 1;
+    }
+    embers = embers.filter((e) => e.life < e.maxLife && e.y > -20);
+    for (const e of embers) paintEmber(e);
+
     ctx!.globalCompositeOperation = "source-over";
   }
 
