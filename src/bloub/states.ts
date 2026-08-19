@@ -26,7 +26,7 @@ import {
   type DotRender
 } from './decor'
 import { EYE_H, EYE_SPLIT, EYE_W, REST_GAZE, type HeadGaze } from './face'
-import { TAU, clamp, easings } from './math'
+import { TAU, clamp, easings, lerp } from './math'
 import {
   circle,
   hullOfCircles,
@@ -163,6 +163,24 @@ function spinningTriangle(rot: number): Silhouette {
     cy: TRI_ORBIT * Math.cos(rot)
   })
 }
+
+/**
+ * bolota addition: `wink`'s own gesture timing — close, hold, open, rest,
+ * in seconds. `wink` used to be a HELD pose (no `t` at all, the eye shut for
+ * the whole state), not a gesture; see the `wink` entry below for the
+ * timeline these four numbers drive. Unlike `ORBIT_PERIOD`, nothing else in
+ * this state has its own frequency to land in sync with — the eye-shape
+ * interpolation IS the whole animation — so these were picked for feel, not
+ * derived from a measured rate: quick shut, a short readable hold, a
+ * slightly slower reopen (blinks in the reference material consistently
+ * close faster than they open), then a rest long enough that a repeating
+ * `loop('wink')` reads as "gesture, pause, gesture," not a twitch.
+ */
+const WINK_CLOSE = 0.16
+const WINK_HOLD = 0.12
+const WINK_OPEN = 0.18
+const WINK_REST = 1.04
+export const WINK_PERIOD = WINK_CLOSE + WINK_HOLD + WINK_OPEN + WINK_REST
 
 /* ---------------------------------------------------------------------- states */
 
@@ -325,17 +343,52 @@ export const STATES: StateDef[] = [
     blinkIn: true,
     baseFace: false,
     baseBody: true,
-    pose: () =>
-      base({
+    // bolota addition: see `WINK_CLOSE`'s own doc comment. `period` is
+    // gesture (close+hold+open) plus a rest — `loop('wink')` therefore
+    // reads as a repeating "gesture, pause, gesture," and a one-shot
+    // `play('wink')` plays exactly one (the bridge's own `duration`-based
+    // return-to-idle is untouched — it governs the NON-looped case, `period`
+    // only the looped one). Not `ownsLiveliness`: gaze here is a constant
+    // for the whole state, same as every other non-`orbit` state, and still
+    // wants idle's wander on top of it.
+    period: WINK_PERIOD,
+    pose: (t) => {
+      // The closed eye isn't the open eye squashed: it's a horizontal dash
+      // WIDER than the open eye (0.447 versus 0.236) — pose itself
+      // untouched, only WHEN the second eye is at each end of it changed.
+      const open = { w: 0.236, h: 0.464 }
+      const closed = { w: 0.447, h: 0.089 }
+      // Close -> hold -> open -> rest, eased with the house curve
+      // (`easeInOutCubic`, `math.ts`) for a natural accelerate-decelerate
+      // gesture rather than a snap into or out of the closed pose. `k` is
+      // the closed-ness fraction: 0 = fully open (both `t = 0` and the rest
+      // tail land here, so the loop wrap is a hold on a constant, not a
+      // jump), 1 = fully closed.
+      let k: number
+      if (t < WINK_CLOSE) {
+        k = easings.easeInOutCubic(clamp(t / WINK_CLOSE))
+      } else if (t < WINK_CLOSE + WINK_HOLD) {
+        k = 1
+      } else if (t < WINK_CLOSE + WINK_HOLD + WINK_OPEN) {
+        k = 1 - easings.easeInOutCubic(clamp((t - WINK_CLOSE - WINK_HOLD) / WINK_OPEN))
+      } else {
+        k = 0
+      }
+      return base({
         gaze: { yaw: -5.37, pitch: 4.55, roll: 6.7 },
         split: 16.25,
-        // The closed eye isn't the open eye squashed: it's a horizontal
-        // dash WIDER than the open eye (0.447 versus 0.236).
         eyes: [
-          { w: 0.236, h: 0.464, open: 1 },
-          { w: 0.447, h: 0.089, open: 1 }
+          // The inner eye stays open throughout — this is a WINK, one eye —
+          // and is otherwise untouched by this state, so it keeps blinking
+          // on its own independent, wall-clock-driven schedule
+          // (`liveliness`'s `lid`, applied downstream in
+          // `bloub/engine.ts`'s `sample()` regardless of what state is
+          // playing).
+          { w: open.w, h: open.h, open: 1 },
+          { w: lerp(open.w, closed.w, k), h: lerp(open.h, closed.h, k), open: 1 }
         ]
       })
+    }
   },
 
   {

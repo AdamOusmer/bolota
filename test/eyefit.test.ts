@@ -3,7 +3,7 @@ import { BotEngine, type Look } from "../src/bloub/engine";
 import { eyePoses } from "../src/bloub/face";
 import { r2 } from "../src/bloub/math";
 import { radiusAtAngle, superellipseProfile, toPoints } from "../src/bloub/shape";
-import { ORBIT_PERIOD, STATE_BY_ID, type StateId } from "../src/bloub/states";
+import { ORBIT_PERIOD, STATE_BY_ID, WINK_PERIOD, type StateId } from "../src/bloub/states";
 
 // `BotEngine.sample(t)` is pure and DOM-free ("clockless engine" — see its own
 // doc comment), so every check here drives it with an explicit clock instead of a
@@ -396,5 +396,103 @@ describe("orbit — eyes ride the body's own wobbling center", () => {
       }
     }
     expect(anyDeviation).toBe(true);
+  });
+});
+
+describe("wink — a real gesture, not a held pose", () => {
+  const winkDef = STATE_BY_ID.get("wink")!;
+  const OPEN_H = 0.464;
+  const CLOSED_H = 0.089;
+
+  test("t=0 and t=period-epsilon show both eyes open", () => {
+    for (const t of [0, WINK_PERIOD - 0.001]) {
+      const eyes = winkDef.pose(t).eyes;
+      expect(eyes[0]!.h).toBeCloseTo(OPEN_H, 3);
+      expect(eyes[1]!.h).toBeCloseTo(OPEN_H, 3);
+    }
+  });
+
+  test("mid-hold shows the winking eye fully closed", () => {
+    // Anywhere strictly inside the hold beat (see `WINK_CLOSE`'s doc
+    // comment for the phase boundaries) — sampling the midpoint of it.
+    const eyes = winkDef.pose(0.22).eyes;
+    expect(eyes[1]!.h).toBeCloseTo(CLOSED_H, 3);
+    expect(eyes[1]!.w).toBeCloseTo(0.447, 3);
+  });
+
+  test("the inner eye never moves — pose leaves it alone for its own blink schedule", () => {
+    for (let t = 0; t < WINK_PERIOD; t += 0.05) {
+      const eyes = winkDef.pose(t).eyes;
+      expect(eyes[0]!.h).toBeCloseTo(OPEN_H, 6);
+      expect(eyes[0]!.w).toBeCloseTo(0.236, 6);
+    }
+  });
+
+  test("close and reopen are eased, not snapped", () => {
+    // Same technique as the look-retarget easing proof above: a house-curve
+    // (easeInOutCubic) ease has near-zero SLOPE at k=0, so only a small
+    // fraction of the full open->closed swing should land in the first 10%
+    // of the close phase — a linear or ease-out ramp would front-load much
+    // more of it.
+    const closeDur = 0.16; // WINK_CLOSE, not exported — mirrors states.ts
+    const h0 = winkDef.pose(0).eyes[1]!.h;
+    const h10pct = winkDef.pose(closeDur * 0.1).eyes[1]!.h;
+    const hFull = winkDef.pose(closeDur).eyes[1]!.h;
+    const total = Math.abs(hFull - h0);
+    const early = Math.abs(h10pct - h0);
+    expect(early / total).toBeLessThan(0.15);
+  });
+
+  test("every wink channel is phase-continuous across 3 full loop cycles", () => {
+    const engine = new BotEngine(R, "idle");
+    engine.reset("wink", 0, true);
+    const dt = 1 / 60;
+    const cycles = 3;
+    const totalT = WINK_PERIOD * cycles;
+
+    type Sample = { e0h: number; e1h: number; e1w: number; e0x: number; e0y: number; e1x: number; e1y: number };
+    const series: Sample[] = [];
+    for (let t = 0; t <= totalT; t += dt) {
+      const frame = engine.sample(t);
+      const raw = winkDef.pose(t % WINK_PERIOD);
+      const centers = eyeCenters(frame.eyes);
+      series.push({
+        e0h: raw.eyes[0]!.h,
+        e1h: raw.eyes[1]!.h,
+        e1w: raw.eyes[1]!.w,
+        e0x: centers[0]?.x ?? NaN,
+        e0y: centers[0]?.y ?? NaN,
+        e1x: centers[1]?.x ?? NaN,
+        e1y: centers[1]?.y ?? NaN
+      });
+    }
+
+    const keys: (keyof Sample)[] = ["e0h", "e1h", "e1w", "e0x", "e0y", "e1x", "e1y"];
+    const boundaryIdx = new Set<number>();
+    for (let c = 1; c < cycles; c++) boundaryIdx.add(Math.round((WINK_PERIOD * c) / dt));
+    for (const key of keys) {
+      let midMax = 0;
+      let boundaryMax = 0;
+      for (let i = 1; i < series.length; i++) {
+        const d = Math.abs(series[i]![key] - series[i - 1]![key]);
+        const nearBoundary = [...boundaryIdx].some((b) => Math.abs(i - b) <= 1);
+        if (nearBoundary) boundaryMax = Math.max(boundaryMax, d);
+        else midMax = Math.max(midMax, d);
+      }
+      expect(boundaryMax).toBeLessThanOrEqual(midMax * 1.5 + 0.05);
+    }
+  });
+
+  test("one-shot play (unlooped) still ends the gesture and holds open, no repeat", () => {
+    // Mirrors how the bridge plays a state without `loop: true`: `t` grows
+    // unbounded (`BotEngine.wrapped()` only wraps when `looping` is true, so
+    // an unlooped `pose(t)` call never sees a wrapped value either — this
+    // exercises exactly that raw, unwrapped `t`). Past `WINK_PERIOD` the
+    // phase math's own `else` branch (rest) holds — it does not wrap on its
+    // own, so a single play never re-closes the eye.
+    for (const t of [WINK_PERIOD + 0.1, WINK_PERIOD * 2, WINK_PERIOD * 3]) {
+      const eyes = winkDef.pose(t).eyes;
+      expect(eyes[1]!.h).toBeCloseTo(OPEN_H, 3);
+    }
   });
 });
