@@ -112,79 +112,26 @@ pre {
 }
 
 /* ── light field (background) ──
-   Living background, Luzir's signature. As of the 2026-08-19 spec
-   amendment this is: three soft diagonal light shafts (below), a canvas of
-   small warm/cool motes plus occasional brighter rising embers (both in
-   lib/lightfield.ts), a noise grain overlay, and a pointer-pinned torch
-   spotlight. Supersedes v2's original two blurred orb gradients (deleted:
-   user feedback was "too AI"). The warm tone reuses --light-rgb (the
-   site's one accent); the cool tone and the torch's warm-white are their
-   own tokens (--glow-cool-rgb, --torch-rgb in tokens.css) since nothing
-   else on the page needs that exact hue, still tokens, not literals, per
-   the no-raw-colors-outside-tokens.css rule. */
+   Living background, Luzir's signature: a canvas of small warm/cool motes
+   that lean toward and brighten near the pointer, a noise grain overlay,
+   and a pointer-pinned torch spotlight. Orbs (v2's original two blurred
+   radial gradients) and a later shafts/embers pass are both gone for good:
+   user feedback on shafts/embers was "looks weird, no reaction, brings
+   nothing new, just noise", and orbs were "too AI" before that. This is
+   the liked baseline, restored exactly; see lib/lightfield.ts for the
+   mote/pointer interaction (amplified, not reverted, per the same
+   feedback: "no reaction" meant the existing motes needed to react more
+   visibly, not that another layer needed adding). The warm tone reuses
+   --light-rgb (the site's one accent); the cool tone and the torch's
+   warm-white are their own tokens (--glow-cool-rgb, --torch-rgb in
+   tokens.css) since nothing else on the page needs that exact hue, still
+   tokens, not literals, per the no-raw-colors-outside-tokens.css rule. */
 
 .lightfield {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-}
-
-/* Three shafts "from high offstage lamps": a tall, narrow, blurred linear
-   gradient per shaft, angled and positioned via inline custom properties
-   in Base.astro (kept in sync by hand with lib/lightfield.ts's SHAFTS
-   constant, which reads the same x/angle/width to brighten motes that
-   fall inside a shaft's band). `opacity` breathes between two alpha
-   points shy of the CSS gradient's own peak, landing in the spec's
-   ~0.04-0.07 window; each shaft's own `--shaft-dur`/`--shaft-delay`
-   desyncs the breathing so they never move in lockstep. The small
-   translateY sway is the "near-imperceptible drift". */
-
-.lightfield__shafts {
-  position: absolute;
-  inset: -10%;
-  overflow: hidden;
-}
-
-.lightfield__shaft {
-  position: absolute;
-  top: -20%;
-  left: var(--shaft-x);
-  width: var(--shaft-w);
-  height: 140%;
-  transform: translateX(-50%) rotate(var(--shaft-angle));
-  transform-origin: top center;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    rgb(var(--light-rgb) / 0.07) 32%,
-    rgb(var(--light-rgb) / 0.025) 68%,
-    transparent 100%
-  );
-  filter: blur(20px);
-  opacity: 0.6;
-  animation: shaftBreathe var(--shaft-dur, 11s) ease-in-out infinite;
-  animation-delay: var(--shaft-delay, 0s);
-  will-change: opacity, transform;
-}
-
-@keyframes shaftBreathe {
-  0%,
-  100% {
-    opacity: 0.55;
-    transform: translateX(-50%) rotate(var(--shaft-angle)) translateY(0);
-  }
-  50% {
-    opacity: 1;
-    transform: translateX(-50%) rotate(var(--shaft-angle)) translateY(1.5%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lightfield__shaft {
-    animation: none;
-    opacity: 0.8;
-  }
 }
 
 .lightfield__grain {
