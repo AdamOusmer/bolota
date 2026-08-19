@@ -313,10 +313,28 @@ Tags follow `vX.Y.Z` (e.g. `v2.0.1`), matching the `version` field in
 3. Publishing the Release triggers `.github/workflows/release.yml`, which
    typechecks, tests, checks size budgets, builds, verifies the tarball
    (`bun pm pack`), confirms the tag matches `package.json`'s version, and
-   runs `npm publish --provenance --access public`.
+   runs `npm publish --access public`.
 
 The workflow also runs on `workflow_dispatch` with a `dry-run` input, for
 exercising the same gate and tarball verification without publishing.
+
+Publishing uses npm's [Trusted Publishing](https://docs.npmjs.com/trusted-publishers)
+(OIDC) — no npm token is stored in this repo. Before the first release, configure
+it once on npmjs.com, on the `bolota` package's Settings page, under "Trusted
+Publisher":
+
+- Organization or user: `AdamOusmer`
+- Repository: `bolota`
+- Workflow filename: `release.yml` (filename only, not the full path)
+- Environment name: `npm-release` (matches the `environment:` in
+  `release.yml`; optional on npm's side, but set it if the GitHub environment
+  below is configured, so npm rejects publishes from anywhere else)
+- Allowed actions: `npm publish`
+
+Optionally, create a matching `npm-release` environment under this repo's
+Settings > Environments to add protection rules (e.g. required reviewers)
+around who can trigger an actual publish. Not required for OIDC to work —
+just extra scoping.
 
 ***
 
