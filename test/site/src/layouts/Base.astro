@@ -53,7 +53,17 @@ const favicon = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' vi
   <body>
     <div data-nav-sentinel aria-hidden="true" style="position:absolute; top:0; left:0; width:1px; height:1px;"></div>
     <div class="lightfield" data-lightfield aria-hidden="true">
-      <div class="lightfield__rays"></div>
+      <!-- Three offstage light shafts, replacing v2's two orb gradients
+           (2026-08-19 spec amendment: "too AI"). Position/angle/width here
+           are read back in lib/lightfield.ts's SHAFTS constant to test
+           motes for the "brightening inside a shaft's band" ember effect,
+           the two must be kept in sync by hand (same pattern already used
+           for the mote hue tokens in that file). -->
+      <div class="lightfield__shafts" data-shafts>
+        <div class="lightfield__shaft" style="--shaft-x:20%; --shaft-angle:16deg; --shaft-w:26vw; --shaft-dur:11s; --shaft-delay:0s;"></div>
+        <div class="lightfield__shaft" style="--shaft-x:52%; --shaft-angle:-10deg; --shaft-w:20vw; --shaft-dur:9s; --shaft-delay:3.2s;"></div>
+        <div class="lightfield__shaft" style="--shaft-x:78%; --shaft-angle:22deg; --shaft-w:22vw; --shaft-dur:13s; --shaft-delay:6.5s;"></div>
+      </div>
       <canvas class="lightfield__motes" data-motes></canvas>
       <div class="lightfield__torch"></div>
       <div class="lightfield__grain"></div>
