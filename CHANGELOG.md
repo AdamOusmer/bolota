@@ -8,9 +8,7 @@ already in production, and no other release note in a package like this one is
 as important. Releases that move it say so first.
 
 The mapping itself is frozen per **generation**, and the package major selects
-one: `blobatar@1` renders gen1, `blobatar@2` renders gen2. See
-[ADR-0006](../../docs/adr/0006-generations.md) and
-[ADR-0008](../../docs/adr/0008-package-majors-select-generations.md).
+one: `blobatar@1` renders gen1, `blobatar@2` renders gen2.
 
 ## 2.0.0
 
