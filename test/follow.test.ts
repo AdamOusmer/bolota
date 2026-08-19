@@ -411,8 +411,8 @@ describe("handle.follow — composes with idle life", () => {
     run(doc, 10000);
     const stillTracked = eyeXY(svg as unknown as FakeElement)!;
 
-    // Idle wander's own measured travel is ~166.9 viewBox units per 10s
-    // (`bloub/face.ts`'s widen-wander commit) — if wander had resumed, this
+    // Idle wander's own measured travel is ~106.6 viewBox units of x per 10s
+    // (`bloub/face.ts`'s wander-amplitude tuning) — if wander had resumed, this
     // gap would be on that order. What's actually still live here is only
     // breathing sway (`liveliness()`'s `driftX`/`driftY`, independent of
     // `wander` and far smaller: amplitude 0.006-0.007 of the body radius),

@@ -204,16 +204,28 @@ export interface LivelinessOptions {
  * Measured 10s eye-center path at these values: 112.50 -> 252.48 (x 82.78 -> 166.90,
  * y 61.90 -> 158.13 — x/y now 1.06, was 1.34).
  *
+ * Round 3 verdict (later request): 252.48 reads as too busy — the owner wants the
+ * excursion size down, not the cadence, which round 2 had already established was
+ * the free lever. So round 3 touches ONLY amplitude, scaling all four terms by the
+ * same 0.63 factor (yaw 7.81+2.27, pitch 7.75+2.33, roll 3.28 — periods untouched at
+ * round 2's 6.0/1.8 yaw, 5.1/2.1 pitch, 7.3/3.2 roll) rather than re-deriving a new
+ * split: round 2's x/y balance (1.06) is a ratio, so a uniform scale preserves it
+ * exactly. Measured 10s eye-center path: 252.48 -> 160.41 (x 166.90 -> 106.59, y
+ * 158.13 -> 100.13, x/y 1.06 unchanged). New yaw/pitch sums (10.08/10.08, was
+ * 16.0/16.0) sit well clear of round 2's measured containment cliff (~16.1/12.4,
+ * overflow past that point) — shrinking amplitude only moves further from that
+ * cliff, never toward it, so this needed no fresh containment sweep.
+ *
  * `eyefit.ts`'s `DERIVE_YAW`/`DERIVE_PITCH` import `MAX_YAW_DRIFT`/`MAX_PITCH_DRIFT`
  * below rather than restating these sums, so the anchor-correction coverage always
  * matches the amplitude actually in play here — see that file's comment on why a
  * stale copy there is exactly the bug this whole module exists to prevent.
  */
-const WANDER_YAW_SLOW = 12.4
-const WANDER_YAW_FAST = 3.6
-const WANDER_PITCH_SLOW = 12.3
-const WANDER_PITCH_FAST = 3.7
-const WANDER_ROLL = 5.2
+const WANDER_YAW_SLOW = 7.81
+const WANDER_YAW_FAST = 2.27
+const WANDER_PITCH_SLOW = 7.75
+const WANDER_PITCH_FAST = 2.33
+const WANDER_ROLL = 3.28
 
 /** Exported so `eyefit.ts` can bound its correction table on the real amplitude. */
 export const MAX_YAW_DRIFT = WANDER_YAW_SLOW + WANDER_YAW_FAST

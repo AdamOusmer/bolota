@@ -95,15 +95,17 @@ describe("bug 2 — wander gaze travel", () => {
       prev = cur;
     }
     // Round 1: original amplitude (7.1/5.5deg) -> 50.96 units; raised ~2.2x
-    // (`face.ts`) -> 112.50, x (82.78) leading y (61.90) by 1.34x. Round 2 verdict:
-    // still not enough. Amplitude turned out to be tightly gated by `eyefit.ts`'s
-    // containment solve (see `face.ts`'s comment — a 600s+ sweep found the real
-    // feasibility cliff sits almost exactly at round 1's numbers), so round 2
-    // spent its budget mostly on period instead — measured amplitude-gated only,
-    // period nearly free — landing at 252.48 (x 166.90 / y 158.13, ratio 1.06).
-    // Floor set well under the measured value so the test catches a regression,
-    // not a re-tune.
-    expect(travel).toBeGreaterThan(200);
+    // (`face.ts`) -> 112.50, x (82.78) leading y (61.90) by 1.34x. Round 2: still
+    // not enough, so period was shortened instead of amplitude (the free lever —
+    // see `face.ts`'s comment), landing at 252.48 (x 166.90 / y 158.13, ratio 1.06).
+    // Round 3 (later request): 252.48 read as too busy. Amplitude alone was scaled
+    // down 0.63x (periods untouched, so this is purely a smaller excursion, not a
+    // slower one), landing at 160.41 (x 106.59 / y 100.13, ratio unchanged at
+    // 1.06). Bounded on both sides now (not just a floor) so the test catches
+    // either a regression back toward stuck/subtle OR a re-inflation back toward
+    // "too busy" — target band is ~150-170.
+    expect(travel).toBeGreaterThan(150);
+    expect(travel).toBeLessThan(170);
     // x-y balance: neither axis should dominate the way x did pre-round-2.
     expect(tx / ty).toBeGreaterThan(0.7);
     expect(tx / ty).toBeLessThan(1.4);
