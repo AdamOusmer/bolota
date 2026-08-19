@@ -1,16 +1,65 @@
 # Changelog
 
-What changed, and — where it matters — what it costs to upgrade.
+What changed, and (where it matters) what it costs to upgrade.
 
-The thing this file exists to state clearly is churn. A blobatar is derived from
-a name, so anything that moves the seed → look mapping changes faces that are
+The thing this file exists to state clearly is churn. A face is derived from a
+name, so anything that moves the seed to look mapping changes faces that are
 already in production, and no other release note in a package like this one is
 as important. Releases that move it say so first.
 
-The mapping itself is frozen per **generation**, and the package major selects
-one: `blobatar@1` renders gen1, `blobatar@2` renders gen2.
+The mapping is frozen per **generation**. bolota renders gen2, and a
+generation change ships as a major, never as a patch.
 
-## 2.0.0
+## 0.1.0
+
+First release of this fork, published as `@luzir/bolota`. The version line
+restarts here: the renderer it inherits is [blobatar][blobatar]'s gen2, but
+the engine, the API surface and the package are new enough that carrying
+upstream's numbering would claim a stability this has not earned yet. Faces
+are identical to blobatar 2's for the same seed. Upstream's own release notes
+are kept below for the seed-mapping record.
+
+### Added
+
+- **A live animation engine**, `@luzir/bolota/engine`, ported from
+  [bloub][bloub]. `mountEngine()` drives a seeded face on a real `<svg>`
+  through fourteen states and seventeen held expressions, follows the pointer,
+  and honours `prefers-reduced-motion`.
+- **Every engine state renders on the seed's own silhouette.** This is the
+  divergence from bloub that the fork exists for: upstream swaps in its own
+  built-in body shapes per state, which threw away the identity the seed is
+  for. Body scale is still the state's to choose, and the eyes scale with it.
+- `@luzir/bolota/sequences`, friendly names for four of the engine's states.
+
+### Changed
+
+- **Renamed to bolota**, published under the `@luzir` scope. The library, its
+  entry points and its function names all follow (`blobatar()` is `bolota()`,
+  `blobatarUri()` is `bolotaUri()`).
+- **Eyes are always the fixed dark capsule pair**, bloub's, instead of
+  flipping polarity against the body colour. The darkest body tone no longer
+  clears the old 4.5:1 eye-contrast floor, and that floor is no longer
+  enforced for `eye`/`head`: it ships as authored rather than walked back.
+  `test/color.test.ts` names the tones that fall short.
+- Golden fixtures regenerated for the eye rework: 1343 renders.
+
+### Removed
+
+- **The React adapter.** `parts()` is the published seam instead: one
+  framework-agnostic split, rather than a component per framework.
+- **Everything that was not the library**: the HTTP avatar endpoint, its
+  server, the docs site and the monorepo around them. The library lives at the
+  repository root, and `src/` plus `test/` is all there is.
+
+***
+
+## Upstream history (blobatar)
+
+Kept verbatim from the fork point, because the seed-mapping churn it records
+is what a face's stability depends on. The package names and version numbers
+in this section are upstream's, not this package's.
+
+### blobatar 2.0.0
 
 **Every seed renders differently.** gen2's ten silhouettes replace gen1's six,
 and a new shape is not additive — it takes its share of the band table from the
@@ -56,7 +105,7 @@ yet, and upgrade when it is.
   could disagree became one that cannot. Only reachable through `traits`
   overrides, and only on a droplet.
 
-## 1.0.0
+### blobatar 1.0.0
 
 - Stabilised the API at 1.0 and added `blobatar/generation`, making gen2
   available as an opt-in value while gen1 stayed the default for the whole
@@ -67,15 +116,18 @@ yet, and upgrade when it is.
 - `blobatar.dev/avatar/<name>` went live — the same renderer as an HTTP
   endpoint, for the `<img src>` case that never wanted a dependency.
 
-## 0.2.0
+### blobatar 0.2.0
 
 - Nine more expressions, for thirteen: `idle`, `happy`, `sad`, `mad`,
   `surprised`, `wink`, `sleepy`, `smug`, `unsure`, `scared`, `love`, `shy` and
   `sick`. Each is a value imported from `blobatar/expression`, so a consumer
   who uses none carries none.
 
-## 0.1.0
+### blobatar 0.1.0
 
 - First release: deterministic blobatars from any string, the six-silhouette
   gen1 vocabulary, `blobatar/react`, `blobatar/uri`, animation through
   `blobatar/motion.css`, and full trait overrides.
+
+[blobatar]: https://github.com/Alain00/blobatar
+[bloub]: https://github.com/jeremy-prt/bloub

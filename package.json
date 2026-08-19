@@ -1,7 +1,7 @@
 {
   "name": "@luzir/bolota",
-  "version": "2.0.0",
-  "description": "Deterministic geometric bolotas from any string. No dependencies.",
+  "version": "0.1.0",
+  "description": "Deterministic avatars from any string, with a live animation engine. No dependencies.",
   "type": "module",
   "//sideEffects": "Not `false`. That would license bundlers to drop `import \"@luzir/bolota/motion.css\"` as dead weight, and animated bolotas would silently render static for everyone shipping through a bundler.",
   "sideEffects": ["*.css"],
@@ -57,11 +57,11 @@
   },
   "keywords": ["bolota", "avatar", "identicon", "svg", "deterministic", "no-dependencies"],
   "license": "MIT",
-  "author": "Alain",
+  "author": "Adam Ousmer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Alain00/blobatar.git"
+    "url": "git+https://github.com/AdamOusmer/bolota.git"
   },
-  "homepage": "https://github.com/Alain00/blobatar#readme",
-  "bugs": "https://github.com/Alain00/blobatar/issues"
+  "homepage": "https://github.com/AdamOusmer/bolota#readme",
+  "bugs": "https://github.com/AdamOusmer/bolota/issues"
 }

@@ -1,38 +1,49 @@
-<!-- Fork of https://github.com/Alain00/blobatar — MIT, see Acknowledgements -->
+[npm-shield]: https://img.shields.io/npm/v/@luzir/bolota.svg?style=for-the-badge
+
+[npm-url]: https://www.npmjs.com/package/@luzir/bolota
+
 [forks-shield]: https://img.shields.io/github/forks/AdamOusmer/bolota.svg?style=for-the-badge
+
 [forks-url]: https://github.com/AdamOusmer/bolota/network/members
+
 [stars-shield]: https://img.shields.io/github/stars/AdamOusmer/bolota.svg?style=for-the-badge
+
 [stars-url]: https://github.com/AdamOusmer/bolota/stargazers
+
 [issues-shield]: https://img.shields.io/github/issues/AdamOusmer/bolota.svg?style=for-the-badge
+
 [issues-url]: https://github.com/AdamOusmer/bolota/issues
+
 [license-shield]: https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge
+
 [license-url]: LICENSE
+
 
 <!-- PROJECT HEADER -->
 <div align="center">
 
+[![npm][npm-shield]][npm-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
 [![Issues][issues-shield]][issues-url]
-[![License: MIT][license-shield]][license-url]
+[![MIT][license-shield]][license-url]
 
 <h3 align="center">bolota</h3>
 
   <p align="center">
-    Deterministic, dependency-free SVG blob avatars from any string.
+    One string in, one face out. Forever the same face.
     <br />
-    Same name in, same face out — every time, on every machine.
+    Deterministic avatars that blink, drift and look at your cursor.
     <br />
-    <br />
-    <a href="#quick-start"><strong>Explore the docs »</strong></a>
     <br />
     <a href="https://github.com/AdamOusmer/bolota/issues/new?labels=bug">Report Bug</a>
     &middot;
     <a href="https://github.com/AdamOusmer/bolota/issues/new?labels=enhancement">Request Feature</a>
     <br />
     <br />
-  </p>
+    </p>
 
+[![Email](https://img.shields.io/badge/contact%40adam--ousmer.dev-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:contact@adam-ousmer.dev)
 [![GitHub](https://img.shields.io/badge/AdamOusmer-%23121011.svg?style=for-the-badge&logo=github&logoColor=white)](https://github.com/AdamOusmer)
 
 </div>
@@ -43,21 +54,21 @@
 <details>
   <summary>Table of Contents</summary>
   <ol>
-    <li><a href="#about-the-project">About The Project</a></li>
+    <li><a href="#about-the-project">About The Project</a>
+        <ul><li><a href="#tech-stack">Tech Stack</a></li></ul>
+    </li>
     <li><a href="#install">Install</a></li>
     <li><a href="#quick-start">Quick Start</a>
-        <ul>
-            <li><a href="#render-to-svg">Render to SVG</a></li>
-            <li><a href="#the-parts-seam">The parts seam</a></li>
-            <li><a href="#expressions">Expressions</a></li>
-            <li><a href="#eyes">Eyes</a></li>
-            <li><a href="#animation-engine">Animation Engine</a></li>
-        </ul>
+        <ul><li><a href="#render-to-svg">Render to SVG</a></li></ul>
+        <ul><li><a href="#build-your-own-component">Build your own component</a></li></ul>
+        <ul><li><a href="#hold-an-expression">Hold an expression</a></li></ul>
+        <ul><li><a href="#the-live-engine">The live engine</a></li></ul>
     </li>
-    <li><a href="#determinism-guarantees">Determinism Guarantees</a></li>
-    <li><a href="#testing--verification">Testing &amp; Verification</a></li>
-    <li><a href="#project-layout">Project Layout</a></li>
-    <li><a href="#v2-breaking-changes">v2 Breaking Changes</a></li>
+    <li><a href="#api">API</a></li>
+    <li><a href="#determinism">Determinism</a></li>
+    <li><a href="#size">Size</a></li>
+    <li><a href="#testing">Testing</a></li>
+    <li><a href="#releasing">Releasing</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
@@ -69,23 +80,35 @@
 
 ## About The Project
 
-bolota turns any string — a username, an email, a user id — into a small
-geometric creature: a shape, a hue, a pair of eyes, an expression. No
-dependencies, no network calls, no server-side rendering pipeline. The same
-input string always produces the exact same SVG, on any machine, forever.
+Every app that lets people pick a name eventually needs a face to put next to
+it. The usual answers are a gravatar lookup (a network round trip, and a
+tracking vector), a coloured circle with an initial in it (fine, forgettable),
+or an identicon made of squares (deterministic, and ugly).
 
-This fork tracks upstream [Alain00/blobatar](https://github.com/Alain00/blobatar)
-and carries it in a different direction for **v2**:
+bolota takes a string and draws a small creature. The same string always draws
+the same creature, on every machine, in every runtime, forever: the seed picks
+a silhouette out of ten, an OKLCh palette, an eye pair and where they sit. No
+network, no dependencies, no canvas.
 
-- The React adapter is gone. Instead of shipping a component wrapper, the
-  library exposes the `parts` renderer seam directly, so any framework (or no
-  framework) can build its own adapter on top of the same deterministic data.
-- A ported animation engine (from [bloub](https://github.com/jeremy-prt/bloub))
-  is being layered in alongside the static renderer — the same bolota, now
-  idling, orbiting, and reacting instead of sitting still.
+The part I actually built this for is that it does not have to hold still. The
+same seeded creature can be mounted onto a live `<svg>` and given a state
+machine: it blinks, breathes, drifts, follows the pointer, and can be told to
+be surprised, to spin, or to explode into particles and reassemble.
 
-If you only need a static avatar, nothing here changes your integration. If
-you want motion, the engine is opt-in and additive.
+It is a fork, twice over, and neither upstream is mine: the deterministic
+renderer comes from [blobatar][blobatar], the animation engine from
+[bloub][bloub]. What is mine is the merge of the two: every state now renders
+on the seed's own silhouette instead of the engine's built-in shapes, which is
+what makes a name's face recognisably itself while it moves.
+
+### Tech Stack
+
+![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
+![Bun](https://img.shields.io/badge/Bun-%23000000.svg?style=for-the-badge&logo=bun&logoColor=white)
+![SVG](https://img.shields.io/badge/SVG-%23FFB13B.svg?style=for-the-badge&logo=svg&logoColor=black)
+
+Zero runtime dependencies. TypeScript source, bundled and typed with Bun,
+shipped as ESM.
 
 ***
 
@@ -95,12 +118,12 @@ you want motion, the engine is opt-in and additive.
 bun add @luzir/bolota
 ```
 
-npm, pnpm and yarn all understand the same package name if you're not on Bun.
-Scoped packages need no extra flag to install (only to publish); a plain
-`npm install @luzir/bolota` works.
+npm, pnpm and yarn understand the same name. Scoped packages need no extra
+flag to install, only to publish, so a plain `npm install @luzir/bolota`
+works.
 
-Installing straight from this repo as a git dependency also still works, and
-tracks unreleased changes ahead of the last npm publish:
+Straight from git also works, and tracks whatever is ahead of the last
+publish:
 
 ```sh
 bun add git+https://github.com/AdamOusmer/bolota
@@ -115,12 +138,14 @@ bun add git+https://github.com/AdamOusmer/bolota
 ```ts
 import { bolota } from "@luzir/bolota";
 
-bolota("alain@example.com");
-// '<svg xmlns="..." viewBox="0 0 100 100">…</svg>'
+bolota("adam@example.com");
+// '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">…</svg>'
 ```
 
-`bolota()` is a pure function: string in, SVG markup out. Pair it with a
-`data:` URI helper for `<img src>` or CSS `background-image`:
+`bolota()` is a pure function: string in, markup out. Nothing to mount, no
+DOM required, so it works in a server render as happily as in a browser.
+
+For `<img src>` or CSS, wrap it in a `data:` URI:
 
 ```ts
 import { bolotaUri } from "@luzir/bolota/uri";
@@ -128,249 +153,247 @@ import { bolotaUri } from "@luzir/bolota/uri";
 el.style.backgroundImage = `url("${bolotaUri(user.id)}")`;
 ```
 
-### The `parts` seam
+### Build your own component
 
-v2 drops the React component and publishes the seam it was built on instead.
-`parts` returns the same shape, palette and eye/mouth geometry that
-`bolota()` renders to a string — as structured data, so you can hand it to
-your own renderer (React, Vue, Svelte, canvas, whatever) instead of taking the
-library's SVG string as-is:
+`parts()` returns the same render split into the pieces a framework wrapper
+needs, so you can own the outer element yourself:
 
 ```ts
-import { parts } from "@luzir/bolota/blob";
+import { parts } from "@luzir/bolota";
 
-const face = parts("alain@example.com");
-// { shape, hue, tone, eyes, mouth, background, ... }
-
-// Your own adapter owns the markup from here:
-function Avatar({ name }: { name: string }) {
-  const { shape, hue, eyes } = parts(name);
-  return <MyOwnSvgRenderer shape={shape} hue={hue} eyes={eyes} />;
-}
+const { cls, bg, inner, vars } = parts(user.id, { size: 64 });
 ```
 
-This is the intentional replacement for the removed `@luzir/bolota/react` export:
-one seam, framework-agnostic, instead of a component per framework.
+| Field   | What it is                                                        |
+| ------- | ----------------------------------------------------------------- |
+| `cls`   | class list for the `<svg>` element                                 |
+| `bg`    | background colour, absent when the render is transparent            |
+| `inner` | the `<svg>` children, as markup, for an innerHTML-style sink       |
+| `vars`  | CSS custom properties for the expression and motion, absent when neither is asked for |
 
-### Expressions
+The load-bearing invariant: nothing that varies with the expression appears in
+`inner`. An expression is style, not markup, so switching one changes zero
+bytes of `inner` and the browser can morph between poses instead of swapping
+elements. That is the whole reason this seam exists rather than a component
+per framework.
+
+```svelte
+<script lang="ts">
+  import { parts } from "@luzir/bolota";
+  let { name, size = 64 } = $props();
+  const { cls, bg, inner, vars } = $derived(parts(name, { size }));
+</script>
+
+<svg class={cls} style="background:{bg};{vars}" viewBox="0 0 100 100">
+  {@html inner}
+</svg>
+```
+
+### Hold an expression
+
+Static renders take an expression as a value, so a bundler only pulls in the
+poses you actually name:
 
 ```ts
 import { bolota } from "@luzir/bolota";
 import { happy } from "@luzir/bolota/expression";
 
-bolota(user.email, { expression: happy });
+bolota(user.id, { expression: happy });
 ```
 
-Expressions are imported as values, so a build only pulls in the poses it
-actually references.
+Ships: `idle`, `happy`, `sad`, `mad`, `surprised`, `wink`, `sleepy`, `smug`,
+`unsure`, `scared`, `love`, `shy`, `sick`.
 
-### Eyes
+The live engine has its own, larger expression roster addressed by id rather
+than by import (see below). The two are separate on purpose: these thirteen
+are CSS-variable poses a static render can wear with no JavaScript running,
+the engine's are eye poses interpolated frame by frame.
 
-Eyes are always the fixed bloub-style black capsule pair — no more light/dark
-polarity flip against the body color. This is a **deliberate v2 breaking
-change**: the darkest body tone (nicknamed "ink" in the source) no longer
-clears the old 4.5:1 eye-contrast guarantee against a fixed-black eye, and
-that guarantee is no longer enforced for `eye`/`head` at all. It ships
-exactly as authored rather than walked back to satisfy contrast — see
-`test/color.test.ts`'s "eye is always the fixed dark tone" for the tones that
-fall short.
-
-### Animation Engine
-
-Ported from [bloub](https://github.com/jeremy-prt/bloub), the engine mounts a
-bolota directly onto an `<svg>` element and drives it through a state
-machine instead of rendering one static frame:
+### The live engine
 
 ```ts
 import { mountEngine } from "@luzir/bolota/engine";
 
-const avatar = mountEngine(svgRoot, user.id, { hue: 210 });
+const bot = mountEngine(svgElement, user.id);
 
-avatar.play("orbit");
-// later
-avatar.play("burst");
+bot.play("wander", { loop: true }); // resting face, alive
+bot.setExpression("curious");       // hold a face on top of it
+bot.follow("window");               // eyes track the pointer
+bot.play("burst");                  // one-shot, returns to idle on its own
 
-avatar.stop();     // freeze on the current frame
-avatar.destroy();  // remove every node this call created
+bot.stop();     // freeze on the current frame
+bot.destroy();  // remove every node this call created
 ```
 
-15 states ship: `idle`, `thinking`, `wink`, `wide`, `alert`, `notify`,
-`exclaim`, `sleep`, `egg`, `hexagon`, `play`, `orbit`, `swirl`, `burst`,
-`comet` (`avatar.states` lists them at runtime). `@luzir/bolota/sequences` groups
-related states into ready-made playlists if you'd rather drive a sequence
-than call `play()` state by state.
+Fourteen states ship, listed at runtime as `bot.states`:
 
-Fast motion (spins, orbits, the comet's trail) gets a velocity-proportional
-motion blur, damped frame to frame so it eases in and out instead of
-snapping. Each `mountEngine()` call namespaces its own filter/gradient ids,
-so multiple engine instances on one page never collide — the static
-`bolota()` output stays completely id/filter-free either way.
+| State                          | What it does                                   |
+| ------------------------------ | ---------------------------------------------- |
+| `idle`                         | the still neutral base: gaze dead ahead, blink and breath only |
+| `wander`                       | the same resting face, alive: gaze drifts, body floats |
+| `thinking`, `wink`, `wide`     | short gestures                                 |
+| `alert`, `exclaim`             | the body folds into an exclamation mark's dot, bar above it |
+| `notify`                       | a badge pops in and the gaze looks away from it |
+| `snooze`                       | drifts off                                     |
+| `play`, `orbit`, `swirl`       | body choreography with rings and trails        |
+| `burst`, `comet`               | collapse into particles, reassemble            |
 
-No separate CSS file is required; the engine builds its own `<defs>` inline.
-The engine is a separate entry point (`@luzir/bolota/engine`) from the static
-renderer — importing one never pulls in the other. It respects
-`prefers-reduced-motion`: it renders one static pose and never starts the
-render loop.
+Seventeen expressions ship, listed as `bot.expressions`: `wander`,
+`attentive`, `surprised`, `excited`, `happy`, `laughing`, `angry`, `sad`,
+`scared`, `suspicious`, `confused`, `curious`, `proud`, `shy`, `unimpressed`,
+`sleepy`, `love`. An expression only shows on a state that has a face to
+put it on, and it scales with the body, so a shrunken body never wears a
+full-size pair of eyes.
 
-***
-
-## Determinism Guarantees
-
-The core promise:
-
-- **Same string, same bolota — always.** The name is hashed once; every
-  trait (shape, hue, tone, eyes, expression default) is derived from that one
-  hash. No randomness, no `Date.now()`, no environment-dependent input.
-- **Options narrow, they don't override the hash.** `traits` pins individual
-  axes (e.g. `{ shape: 0.95 }`); anything left unset still comes from the
-  name's hash, so partially-branded avatars still vary per user instead of
-  collapsing to one fixed image.
-- **Pure functions, no I/O.** `bolota()` and `parts()` take a string and
-  options and return a value — no fetch, no filesystem, no shared mutable
-  state between calls.
+Fast motion gets velocity-proportional blur, damped frame to frame so it eases
+in and out. Each `mountEngine()` call namespaces its own filter and gradient
+ids, so several engines on one page never collide. It needs no stylesheet: the
+`<defs>` are built inline at mount. It honours `prefers-reduced-motion` by
+rendering one static pose and never starting the loop.
 
 ***
 
-## Testing & Verification
+## API
 
-The library ships with a `test/` directory covering the renderer, the `parts`
-seam and the engine's state transitions. Determinism itself is checked by
-regenerating known inputs and diffing the output against committed fixtures —
-any change to the hash-to-trait mapping fails loudly instead of silently
-drifting.
+| Entry point                  | What it gives you                                              |
+| ---------------------------- | -------------------------------------------------------------- |
+| `@luzir/bolota`              | `bolota()`, `parts()`, palette and trait utilities, `VERSION`   |
+| `@luzir/bolota/blob`         | `bolota()` and `layout()` alone, without the colour utilities   |
+| `@luzir/bolota/uri`          | `bolotaUri()`, the same render as a `data:` URI                |
+| `@luzir/bolota/expression`   | the thirteen static expression values                           |
+| `@luzir/bolota/engine`       | `mountEngine()`, the live engine                               |
+| `@luzir/bolota/sequences`    | `runSequence()`, friendly names for four engine states         |
+| `@luzir/bolota/motion.css`   | the stylesheet the static renderer's `animate` mode needs       |
+
+Every render takes the same options:
+
+```ts
+bolota(name, {
+  size: 64,             // emits width/height; the viewBox is always 0 0 100 100
+  background: "circle", // true | false | "square" | "circle" | "squircle"
+  hue: 210,             // lock the hue in degrees, so the name drives shape only
+  tone: 0.8,            // lock the tone as a 0-1 position in the swatch set
+  palette: myPalette,   // or override palette entries outright
+  traits: { shape: 0.95, "eye.ratio": 0.1 }, // raw 0-1 trait positions
+  normalize: true,      // NFC + trim + lowercase the seed first (default true)
+  contrast: true,       // enforce the contrast floors (default true)
+  title: "Adam",        // <title> for screen readers
+  animate: "always",    // "hover" | "always", needs motion.css
+  expression: happy,
+});
+```
+
+`traits` is the raw seam: every key is a 0 to 1 position into the same band
+table the hash indexes, clamped rather than trusted, so a bad value renders a
+face instead of throwing. `hue` and `tone` are the same two traits in
+friendlier units and win over their `traits` equivalents.
+
+`_layout()` is exported too, and is underscored for a reason: it returns the
+raw geometry the tests assert against, and its shape is not covered by semver.
+
+***
+
+## Determinism
+
+The promise is that a seed's face is a pure function of the seed, and that it
+does not move under you:
+
+- the same string renders byte-identical markup in Bun, Node and every browser
+- no `Math.random()`, no `Date`, no locale, no platform float divergence
+- a golden fixture of 1343 renders is committed, and the suite fails on a
+  single changed byte
+- the seed to look mapping is frozen for the life of the major version
+
+Which is also why a new silhouette can only ship in a major: adding one takes
+its share of the band table from the existing ones, and everyone's face moves.
+
+***
+
+## Size
+
+Measured gzipped, per entry point, and enforced in CI:
+
+| Entry                      | gzip     |
+| -------------------------- | -------- |
+| static renderer            | ~4.5 KB  |
+| renderer + one expression  | ~4.8 KB  |
+| `data:` URI helper         | ~4.6 KB  |
+| traits only                | ~0.5 KB  |
+| live engine                | ~17 KB   |
+| `motion.css`               | ~1.4 KB  |
+
+The engine is a separate entry point from the static renderer: importing one
+never pulls in the other.
+
+***
+
+## Testing
 
 ```sh
-bun test
+bun test          # unit, geometry and determinism suites
+bun run size      # per-entry gzip budgets
+bun run build     # bundle every entry point plus its type declarations
+bun run check     # all three, the gate CI runs
 ```
 
-There is also a small test website, `test/site/`: feed it a name and it
-renders that bolota live — static and animated, every expression, every
-engine state — so "same string, same output" can be checked by hand against
-the real renderer, not only against the test suite.
-
-```sh
-cd test/site
-bun install
-bun run dev
-```
-
-***
-
-## Project Layout
-
-The library lives at the repository root — no monorepo indirection to
-install or build against:
-
-```
-src/     — library source (renderer, parts seam, engine, expressions)
-test/    — unit tests + determinism fixtures
-```
-
-Exposed entry points:
-
-| Export             | What it is                                   |
-| ------------------- | --------------------------------------------- |
-| `@luzir/bolota`          | `bolota()` — render straight to an SVG string, plus palette/trait utilities |
-| `@luzir/bolota/blob`      | `parts()` — the structured renderer seam, on its own (saves ~1 KB if that's all you use) |
-| `@luzir/bolota/uri`       | `bolotaUri()` — wraps output in a `data:` URI |
-| `@luzir/bolota/expression`| Named expression values (`happy`, `sad`, …)   |
-| `@luzir/bolota/motion.css`| Required CSS for the static renderer's `animate` mode |
-| `@luzir/bolota/engine`    | `mountEngine()` — the bloub-ported animation engine |
-| `@luzir/bolota/sequences` | Ready-made playlists across engine states     |
-| `@luzir/bolota/package.json`| The package manifest itself, resolvable as a subpath (tooling convenience) |
-
-The engine needs no separate stylesheet — its motion is built from inline
-SVG `<defs>` at mount time, not CSS keyframes.
-
-***
-
-## v2 Breaking Changes
-
-- **React adapter removed.** `@luzir/bolota/react` is gone; the `parts` seam
-  (`@luzir/bolota/blob`) is the public replacement for building your own adapter.
-- **Eyes reworked.** Always the fixed bloub-style black capsule — see
-  [Eyes](#eyes) for the contrast-guarantee tradeoff this brings.
-- **Animation engine added.** `@luzir/bolota/engine`, ported from bloub, alongside
-  (not replacing) the existing static renderer and its `animate` mode.
-- **Goldens regenerated.** The eye rework and engine port changed reference
-  output; `test/golden` was regenerated against the new renderer.
-- **Monorepo flattened.** The library now lives at the repository root
-  (`src/`, `test/`) instead of under `packages/bolota`; there is no
-  `apps/*` workspace in this fork.
-
-***
-
-## Contributing
-
-This is a personal fork tracking upstream in a different direction — issues
-and ideas are welcome, but please open an issue before sending a pull request
-so scope can be agreed on first.
+The determinism fixture is regenerated deliberately, never as a side effect:
+`bun run golden` refuses to write without `--write` and says so.
 
 ***
 
 ## Releasing
 
-Tags follow `vX.Y.Z` (e.g. `v2.0.1`), matching the `version` field in
-`package.json`.
+Tags follow `vX.Y.Z`, matching `version` in `package.json`.
 
-1. Bump `version` in `package.json` first, commit it.
+1. Bump `version`, commit it.
 2. Create a GitHub Release against that commit, tagged `vX.Y.Z`.
 3. Publishing the Release triggers `.github/workflows/release.yml`, which
-   typechecks, tests, checks size budgets, builds, verifies the tarball
-   (`bun pm pack`), confirms the tag matches `package.json`'s version, and
-   runs `npm publish --access public`.
+   typechecks, tests, checks the size budgets, builds, verifies the tarball,
+   confirms the tag matches `package.json`, and publishes.
 
-The workflow also runs on `workflow_dispatch` with a `dry-run` input, for
-exercising the same gate and tarball verification without publishing.
-
-The package is published as `@luzir/bolota` (the library itself is still
-called `bolota` — only the npm scope differs) under the `luzir` npm org. The
-`luzir` org must already exist on npmjs.com and own the `@luzir` scope before
-the first publish; the trusted publisher config below can't be created until
-it does.
+The workflow also runs on `workflow_dispatch` with a `dry-run` input, to
+exercise the same gate without publishing.
 
 Publishing uses npm's [Trusted Publishing](https://docs.npmjs.com/trusted-publishers)
-(OIDC) — no npm token is stored in this repo. Before the first release, configure
-it once on npmjs.com, on the `@luzir/bolota` package's Settings page, under "Trusted
-Publisher":
+(OIDC): no npm token is stored in this repo. It is configured once on the
+package's Settings page on npmjs.com, against this repo, the `release.yml`
+workflow, and the `npm-release` environment.
 
-- Organization or user: `AdamOusmer`
-- Repository: `bolota` (the GitHub repo name is unaffected by the npm scope)
-- Workflow filename: `release.yml` (filename only, not the full path)
-- Environment name: `npm-release` (matches the `environment:` in
-  `release.yml`; optional on npm's side, but set it if the GitHub environment
-  below is configured, so npm rejects publishes from anywhere else)
-- Allowed actions: `npm publish`
+***
 
-Optionally, create a matching `npm-release` environment under this repo's
-Settings > Environments to add protection rules (e.g. required reviewers)
-around who can trigger an actual publish. Not required for OIDC to work —
-just extra scoping.
+## Contributing
+
+This is a personal fork heading somewhere upstream is not, so please open an
+issue before sending a pull request and we can agree on scope first. Bug
+reports are welcome without ceremony.
 
 ***
 
 ## License
 
-Distributed under the MIT License — see [LICENSE](LICENSE) for details.
+MIT, see [LICENSE](LICENSE). Both upstreams are MIT too, and their notices
+are preserved there.
 
 ***
 
 ## Contact
 
-Adam Ousmer - [GitHub](https://github.com/AdamOusmer)
+Adam Ousmer - [GitHub](https://github.com/AdamOusmer) - [Email](mailto:contact@adam-ousmer.dev)
 
 ***
 
 ## Acknowledgements
 
-This project is a fork. Neither upstream author is affiliated with this fork
-or endorses it.
+This project is a fork. Neither upstream author is affiliated with it or
+endorses it.
 
-- **[blobatar](https://github.com/Alain00/blobatar)** by Alain — the original
-  deterministic blob-avatar library this fork is built on. MIT licensed.
-- **[bloub](https://github.com/jeremy-prt/bloub)** by Jérémy Perret — source
-  of the animation engine ported into this fork's `@luzir/bolota/engine`. The code
-  is MIT licensed; its visual design imitates x.ai's, and is not affiliated
-  with or endorsed by x.ai.
+- **[blobatar][blobatar]** by Alain, the deterministic blob-avatar renderer
+  this is built on. MIT licensed.
+- **[bloub][bloub]** by Jérémy Perret, the animation engine ported into
+  `@luzir/bolota/engine`. MIT licensed; its visual design imitates x.ai's and
+  is not affiliated with or endorsed by x.ai.
 
-README structure inspired by [othneildrew/Best-README-Template](https://github.com/othneildrew/Best-README-Template).
+[blobatar]: https://github.com/Alain00/blobatar
+[bloub]: https://github.com/jeremy-prt/bloub
+
+README template inspired by [othneildrew/Best-README-Template](https://github.com/othneildrew/Best-README-Template)
