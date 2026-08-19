@@ -1,25 +1,121 @@
-# blobatar
+<!-- Fork of https://github.com/Alain00/blobatar — MIT, see Acknowledgements -->
+[forks-shield]: https://img.shields.io/github/forks/AdamOusmer/blobatar.svg?style=for-the-badge
+[forks-url]: https://github.com/AdamOusmer/blobatar/network/members
+[stars-shield]: https://img.shields.io/github/stars/AdamOusmer/blobatar.svg?style=for-the-badge
+[stars-url]: https://github.com/AdamOusmer/blobatar/stargazers
+[issues-shield]: https://img.shields.io/github/issues/AdamOusmer/blobatar.svg?style=for-the-badge
+[issues-url]: https://github.com/AdamOusmer/blobatar/issues
+[license-shield]: https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge
+[license-url]: LICENSE
 
-> **Fork.** Framework-agnostic fork of
-> [Alain00/blobatar](https://github.com/Alain00/blobatar). The bundled React
-> adapter (`blobatar/react`) is removed; `parts` — the renderer seam it was
-> built on — is public instead, so an adapter for any framework (React, Vue,
-> Svelte, vanilla) can be built on top of it. Consumed as TS source, not a
-> compiled `dist`. See [Animation](#animation) below for what building on
-> `parts` looks like.
+<!-- PROJECT HEADER -->
+<div align="center">
 
-Deterministic geometric blobatars from any string. No dependencies, ~4.4 KB gzipped.
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![License: MIT][license-shield]][license-url]
+
+<h3 align="center">blobatar</h3>
+
+  <p align="center">
+    Deterministic, dependency-free SVG blob avatars from any string.
+    <br />
+    Same name in, same face out — every time, on every machine.
+    <br />
+    <br />
+    <a href="#quick-start"><strong>Explore the docs »</strong></a>
+    <br />
+    <a href="https://github.com/AdamOusmer/blobatar/issues/new?labels=bug">Report Bug</a>
+    &middot;
+    <a href="https://github.com/AdamOusmer/blobatar/issues/new?labels=enhancement">Request Feature</a>
+    <br />
+    <br />
+  </p>
+
+[![GitHub](https://img.shields.io/badge/AdamOusmer-%23121011.svg?style=for-the-badge&logo=github&logoColor=white)](https://github.com/AdamOusmer)
+
+</div>
+
+***
+
+<!-- TABLE OF CONTENTS -->
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li><a href="#about-the-project">About The Project</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="#quick-start">Quick Start</a>
+        <ul>
+            <li><a href="#render-to-svg">Render to SVG</a></li>
+            <li><a href="#the-parts-seam">The parts seam</a></li>
+            <li><a href="#expressions">Expressions</a></li>
+            <li><a href="#eyes">Eyes</a></li>
+            <li><a href="#animation-engine">Animation Engine</a></li>
+        </ul>
+    </li>
+    <li><a href="#determinism-guarantees">Determinism Guarantees</a></li>
+    <li><a href="#testing--verification">Testing &amp; Verification</a></li>
+    <li><a href="#project-layout">Project Layout</a></li>
+    <li><a href="#v2-breaking-changes">v2 Breaking Changes</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#license">License</a></li>
+    <li><a href="#contact">Contact</a></li>
+    <li><a href="#acknowledgements">Acknowledgements</a></li>
+  </ol>
+</details>
+
+***
+
+## About The Project
+
+blobatar turns any string — a username, an email, a user id — into a small
+geometric creature: a shape, a hue, a pair of eyes, an expression. No
+dependencies, no network calls, no server-side rendering pipeline. The same
+input string always produces the exact same SVG, on any machine, forever.
+
+This fork tracks upstream [Alain00/blobatar](https://github.com/Alain00/blobatar)
+and carries it in a different direction for **v2**:
+
+- The React adapter is gone. Instead of shipping a component wrapper, the
+  library exposes the `parts` renderer seam directly, so any framework (or no
+  framework) can build its own adapter on top of the same deterministic data.
+- A ported animation engine (from [bloub](https://github.com/jeremy-prt/bloub))
+  is being layered in alongside the static renderer — the same blobatar, now
+  idling, orbiting, and reacting instead of sitting still.
+
+If you only need a static avatar, nothing here changes your integration. If
+you want motion, the engine is opt-in and additive.
+
+***
+
+## Install
+
+The package is not published to a registry — install it straight from this
+repo as a git dependency:
+
+```sh
+bun add git+https://github.com/AdamOusmer/blobatar
+```
+
+npm, pnpm and yarn all understand the same `git+https://...` dependency
+syntax if you're not on Bun.
+
+***
+
+## Quick Start
+
+### Render to SVG
 
 ```ts
 import { blobatar } from "blobatar";
 
-blobatar("alain@example.com"); // => '<svg xmlns="..." viewBox="0 0 100 100">…'
+blobatar("alain@example.com");
+// '<svg xmlns="..." viewBox="0 0 100 100">…</svg>'
 ```
 
-A blobatar always stands for somebody — a user, a bot, a team, a repo — so the
-value it is generated from is that somebody's `name`: a username, a display
-name, an email, a handle, an id. Any string works and the same string always
-renders the same blobatar.
+`blobatar()` is a pure function: string in, SVG markup out. Pair it with a
+`data:` URI helper for `<img src>` or CSS `background-image`:
 
 ```ts
 import { blobatarUri } from "blobatar/uri";
@@ -27,293 +123,208 @@ import { blobatarUri } from "blobatar/uri";
 el.style.backgroundImage = `url("${blobatarUri(user.id)}")`;
 ```
 
-## Shapes
+### The `parts` seam
 
-A soft body and two capsule eyes, drawn from ten silhouettes: `round`,
-`organic`, `boxy`, `nub`, `cloud`, `sun`, `capsule`, `triangle`, `hexagon` and
-`droplet`. They are weighted so rounds and pebbles are everyday and the louder
-shapes remain a find. Transparent backdrop by default; the body is the blobatar.
-
-The main entry also carries the palette and trait utilities. If all you do is
-render, import the renderer on its own and save about a kilobyte:
+v2 drops the React component and publishes the seam it was built on instead.
+`parts` returns the same shape, palette and eye/mouth geometry that
+`blobatar()` renders to a string — as structured data, so you can hand it to
+your own renderer (React, Vue, Svelte, canvas, whatever) instead of taking the
+library's SVG string as-is:
 
 ```ts
-import { blobatar } from "blobatar/blob";
+import { parts } from "blobatar/blob";
+
+const face = parts("alain@example.com");
+// { shape, hue, tone, eyes, mouth, background, ... }
+
+// Your own adapter owns the markup from here:
+function Avatar({ name }: { name: string }) {
+  const { shape, hue, eyes } = parts(name);
+  return <MyOwnSvgRenderer shape={shape} hue={hue} eyes={eyes} />;
+}
 ```
 
-## What it guarantees
+This is the intentional replacement for the removed `blobatar/react` export:
+one seam, framework-agnostic, instead of a component per framework.
 
-**Determinism.** The same name always renders the same blobatar within a major
-version. Numeric ranges, the shape thresholds, the tone set and the expression
-roster are all part of that contract, and it is enforced rather than intended:
-`test/golden/gen2.txt` records 1312 renders and a shape histogram over 20,000
-seeds, so moving any of them fails the build.
-
-**Stability across versions.** Traits are addressed by string key rather than
-drawn from a sequential stream, so adding a trait in a later minor cannot
-disturb existing blobatars. Adding a shape or a tone _would_ — those move
-together, as a **generation**.
-
-Adding a silhouette is not additive: the shape thresholds partition [0, 1), so
-a new one has to take its share from the existing ones and every name in the
-moved region gets a different creature. New shapes therefore arrive only in a
-new package major. Upgrading `blobatar@1` → `@2` is the opt-in; applications that
-stay on v1 keep both its output and package size. A major contains one frozen
-generation, so the ordinary API remains just `blobatar(name, options)`.
-
-**Contrast.** The body clears 1.25:1 against a near-black host page at every
-hue and tone. The eye is fixed dark — no polarity flip — matching
-[bloub](https://github.com/jeremyPerret/bloub)'s own eyes (see Credits): it
-clears 4.5:1 against the body on every tone but the darkest ("ink", the
-near-black swatch), which scores ~1.6:1 by design rather than being walked
-back to contrast. Colors passed via the `palette` option bypass all of this,
-by definition.
-
-**Name normalization.** Names are NFC-normalized, trimmed and lowercased before
-hashing, so `Alain@Example.com` and `alain@example.com` agree, as do the
-precomposed and decomposed spellings of `café`. Pass `normalize: false` to hash
-the raw string. Hashing runs over UTF-8 bytes, so non-ASCII and astral-plane
-names (`日本語`, `🦊`) behave consistently across engines.
-
-**No element ids.** Nothing uses `<defs>`, gradients or filters, so rendering
-several hundred blobatars on one page cannot produce id collisions.
-
-## Options
-
-| Option       | Default     | Notes                                                                   |
-| ------------ | ----------- | ----------------------------------------------------------------------- |
-| `size`       | —           | Emits `width`/`height`. Omit to let CSS size it.                        |
-| `background` | none        | `"squircle"`, `"circle"`, `"square"`, or `false`.                       |
-| `hue`        | —           | Locks hue in degrees; the name then drives shape only.                 |
-| `tone`       | —           | Locks the swatch as a 0–1 position in the set.                          |
-| `traits`     | —           | Pins individual traits as 0–1 positions. See below.                    |
-| `palette`    | —           | Per-key hex overrides. Bypasses the contrast guarantee.                 |
-| `normalize`  | `true`      | NFC + trim + lowercase.                                                 |
-| `contrast`   | `true`      | Enforce the contrast floors.                                            |
-| `title`      | —           | Adds a `<title>` for screen readers.                                    |
-| `animate`    | —           | `"hover"` or `"always"`. See below — it changes how the blobatar renders. |
-| `expression` | `idle`      | One of thirteen poses, imported as a value. See below.                  |
-
-## Configuring
-
-Every axis of a blobatar is a named trait, and `traits` pins any of them. Values
-are the 0–1 position the hash would otherwise have produced, so they are read in
-the same units, through the same ranges, as a hashed one:
+### Expressions
 
 ```ts
-// Always a sun with wide eyes — colour and everything else still per name.
-blobatar(user.email, { traits: { shape: 0.95, "eye.ratio": 0 } });
+import { blobatar } from "blobatar";
+import { happy } from "blobatar/expression";
+
+blobatar(user.email, { expression: happy });
 ```
 
-Keys you leave out still come from the name. That is the useful middle ground:
-lock the two things that carry your brand, and every user still gets their own
-creature.
+Expressions are imported as values, so a build only pulls in the poses it
+actually references.
 
-Pin everything and the name stops mattering, which is how you build one fixed
-blobatar — pass any constant string alongside a full map.
+### Eyes
 
-Nothing is bypassed. The layout runs in full, so an eye cluster too large for
-its body is scaled to fit exactly as a hashed one would be, and no combination
-of values can put an eye outside the body or geometry outside the frame — the
-test suite sweeps the corners of the space to prove it. The flip side is that an
-extreme value can land short of where you asked; `_layout()` reports what it
-actually resolved to.
+Eyes are always the fixed bloub-style black capsule pair — no more light/dark
+polarity flip against the body color. This is a **deliberate v2 breaking
+change**: the darkest body tone (nicknamed "ink" in the source) no longer
+clears the old 4.5:1 eye-contrast guarantee against a fixed-black eye, and
+that guarantee is no longer enforced for `eye`/`head` at all. It ships
+exactly as authored rather than walked back to satisfy contrast — see
+`test/color.test.ts`'s "eye is always the fixed dark tone" for the tones that
+fall short.
 
-`hue` and `tone` state two of these traits in friendlier units — degrees and a
-swatch position — and take precedence over `traits.hue` and `traits.tone`.
+### Animation Engine
 
-Trait keys are stable across minors, like the traits themselves. The ranges they
-are read into are what a stated position is relative to, so those are frozen per
-major alongside the shape thresholds and the tone set.
-
-Trait names are not enumerated here on purpose: they follow the layout. Read the
-shared ones off `styles/compose.ts` and the per-silhouette ones off
-`styles/shapes.ts`, or let the editor write the map for you.
-
-## Animation
-
-Off by default. When on, the blobatar idles: a soft breathe, a bob, a blink, and
-the occasional glance to one side. Every timing and direction is drawn from the
-name, so a grid reads as a crowd rather than a drill team.
-
-There is no bundled component. `parts` is the seam an adapter builds on — it
-returns `{ cls, bg, inner, vars }` for a renderer that owns the outer `<svg>`
-itself:
+Ported from [bloub](https://github.com/jeremy-prt/bloub), the engine mounts a
+blobatar directly onto an `<svg>` element and drives it through a state
+machine instead of rendering one static frame:
 
 ```ts
-import { parts } from "blobatar";
-import "blobatar/motion.css"; // required — nothing animates without it
+import { mountEngine } from "blobatar/engine";
 
-const { cls, bg, vars, inner } = parts(user.email, { animate: "hover" });
-// cls, bg and vars go on real attributes; only `inner` goes through an
-// innerHTML-style sink — see `src/blobatar.ts` for why the split matters.
+const avatar = mountEngine(svgRoot, user.id, { hue: 210 });
+
+avatar.play("orbit");
+// later
+avatar.play("burst");
+
+avatar.stop();     // freeze on the current frame
+avatar.destroy();  // remove every node this call created
 ```
 
-**Turning this on changes the rendering mode, and that is not free.** A static
-blobatar is a single `<img>`; an animated one is inline SVG, roughly a dozen DOM
-nodes. Content inside an `<img>` is an isolated document that `:hover` cannot
-reach and host-page CSS cannot style, so there is no way to have both. A list of
-400 blobatars is exactly the case the `<img>` default was chosen for.
+15 states ship: `idle`, `thinking`, `wink`, `wide`, `alert`, `notify`,
+`exclaim`, `sleep`, `egg`, `hexagon`, `play`, `orbit`, `swirl`, `burst`,
+`comet` (`avatar.states` lists them at runtime). `blobatar/sequences` groups
+related states into ready-made playlists if you'd rather drive a sequence
+than call `play()` state by state.
 
-`"hover"` animates one blobatar at a time — the right default for a grid, where
-continuous ambient motion is both visual noise and 400 live animations.
-`"always"` is for the single-blobatar case: a profile header, an onboarding
-screen.
+Fast motion (spins, orbits, the comet's trail) gets a velocity-proportional
+motion blur, damped frame to frame so it eases in and out instead of
+snapping. Each `mountEngine()` call namespaces its own filter/gradient ids,
+so multiple engine instances on one page never collide — the static
+`blobatar()` output stays completely id/filter-free either way.
 
-Motion respects `prefers-reduced-motion` by going fully static, and does not
-trigger on touch, where a tap would otherwise latch hover on.
+No separate CSS file is required; the engine builds its own `<defs>` inline.
+The engine is a separate entry point (`blobatar/engine`) from the static
+renderer — importing one never pulls in the other. It respects
+`prefers-reduced-motion`: it renders one static pose and never starts the
+render loop.
 
-The glance is a large-size effect — at 40px it moves the eyes about half a
-pixel. It is worth the most on a profile header, which is what `"always"` is
-for. Eyes may cross outside the body outline on a hard glance; that is intended,
-and reads as a face turning rather than as a bug.
+***
 
-No adapter ships in this fork — bring your own, built on `parts`. The string
-API still returns static markup: supporting `animate` there means every
-consumer of `blobatar()` carries the motion code whether they animate or not,
-which is a real cost for a feature most callers will never use. It wants its
-own entry point rather than a branch inside `blobatar()`.
+## Determinism Guarantees
 
-## Expressions
+The core promise:
 
-A pose the blobatar holds until you change it. Setting one morphs from whatever
-it was wearing.
+- **Same string, same blobatar — always.** The name is hashed once; every
+  trait (shape, hue, tone, eyes, expression default) is derived from that one
+  hash. No randomness, no `Date.now()`, no environment-dependent input.
+- **Options narrow, they don't override the hash.** `traits` pins individual
+  axes (e.g. `{ shape: 0.95 }`); anything left unset still comes from the
+  name's hash, so partially-branded avatars still vary per user instead of
+  collapsing to one fixed image.
+- **Pure functions, no I/O.** `blobatar()` and `parts()` take a string and
+  options and return a value — no fetch, no filesystem, no shared mutable
+  state between calls.
 
-| pose        | reads as                                                    |
-| ----------- | ----------------------------------------------------------- |
-| `idle`      | the default — byte-identical to passing nothing              |
-| `happy`     | tall arcs, lifted, tilted in parallel                        |
-| `sad`       | small eyes dropped low, brows in                             |
-| `mad`       | wide flat bars in a `\ /`, warm-tinted, trembling            |
-| `surprised` | the only pose that grows the eyes — wide and lifted          |
-| `wink`      | one eye shut, the other open                                 |
-| `sleepy`    | level lids low over a sunk body                              |
-| `smug`      | narrow and cocked — a head tilt, not a brow                  |
-| `unsure`    | one eye squeezed, the pair barely moved                      |
-| `scared`    | small, converged, shivering                                  |
-| `love`      | narrow and drawn together, rose-tinted                       |
-| `shy`       | small, low, converged, pale blush                            |
-| `sick`      | wide bars slumped into a `/ \`, green-tinted, faint tremor   |
+***
 
-Expressions are **imported as values, not named as strings**, so you ship the
-ones you use and nothing else:
+## Testing & Verification
 
-```tsx
-import { happy, idle } from "blobatar/expression";
-
-<Blobatar name={user.email} animate="always" expression={happy} size={64} />;
-```
-
-The first expression you import costs about 340 bytes (the shared serializer and
-bake, paid once) and each untinted one after it about 35. The four tinted poses —
-`mad`, `love`, `shy`, `sick` — are the exception: the first of them pulls in the
-OKLab colour path for about 720 bytes, and each tinted one after that costs about
-60, because they share one walk with four targets. The whole roster is about 1.5
-KB over `blob` alone; a consumer who imports none carries no pose code at all,
-which is why `expression` is a value rather than a string.
-
-**A state, not an event.** Nothing returns to `idle` on its own and there are no
-timers. If you want a burst, schedule the clear yourself:
-
-```ts
-setMood(happy);
-setTimeout(() => setMood(idle), 1200);
-```
-
-**Independent of `animate`, in both directions.** Without `animate` you get the
-pose statically, which is why this works in the string API and under
-`prefers-reduced-motion`. The _morph_ needs `animate`, because that is what puts
-the blobatar in inline SVG where CSS can reach it. Setting `expression` never
-turns `animate` on for you — that would silently flip a 400-blobatar grid from 400
-`<img>` tags to 400 SVG trees.
-
-```ts
-blobatar(name, { expression: happy }); // static, posed, no morph
-```
-
-`idle` renders byte-identical markup to omitting the option, so adding this
-moved no existing blobatar.
-
-The pose moves parts the blobatar already has — eye scale, tilt, offset, a rigid
-body shift, a tremor and a tint — and never adds a mark, so a blob grows no mouth
-when it is happy. That ceiling is real and worth knowing before you reach for it.
-`happy`, `surprised` and `wink` read unmistakably, because a shape nothing else
-in the roster wears is doing the work. The rest read as clearly different from
-idle and from each other, without announcing the emotion the way a mouth would:
-`sick` is not going to read as nausea on its own, but you will never mistake it
-for `sleepy`. Two capsules and a soft body only go so far, and every pose here is
-separated from its nearest neighbour by three channels rather than one — never by
-its tint alone, so the roster still works in greyscale. See
-[docs/expression-spec.md](./docs/expression-spec.md) for what carries signal and
-what does not.
-
-Expressions are decorative and do not reach assistive technology: `title` names
-who the blobatar is and does not change with the pose. Under reduced motion the
-pose is adopted instantly at full strength — the morph is removed, the
-expression is not.
-
-## How it works
-
-**One primitive carries the symmetric shapes** — the superellipse
-`|x/a|^n + |y/b|^n = 1`. `n=2` is an ellipse, `n≈4` a squircle, `n≈5` a rounded
-bar. Each quadrant is one cubic Bézier whose control offset is solved so the
-curve passes exactly through the 45° point; at `n=2` that yields 0.5523, the
-standard circle constant. Four segments keeps a part at ~130 bytes of path data.
-
-**A closed Catmull-Rom spline carries the organic ones.** Radii sampled around a
-circle and joined into a loop, so a hash perturbing them by ±16% produces
-lopsided pebbles with no noise function. Catmull-Rom interpolates its points
-exactly, which is what makes the radii mean what they say and keeps containment
-predictable.
-
-**Overlapping fills replace boolean geometry.** Clouds, suns and nubs are just
-extra circles drawn in the same `<g fill>` behind the core. They union visually
-for free — no path arithmetic, no clip paths, no element ids.
-
-**Eye dimensions are fractions of the body radius**, not absolute units. Bodies
-range from 22 to 38 units depending on how much room the decoration needs, and
-absolute sizes would drift off a small sun while looking lost on a large round.
-The outline itself is a capsule (stadium), not a superellipse — bloub's own
-eye shape (see Credits), position and size still driven by this package's own
-seeded traits.
-
-Colors are resolved from OKLCh to hex at render time rather than emitted as
-`oklch()`, because server-side rasterizers largely do not support it and blobatars
-get rasterized server-side constantly.
-
-Whole blobatars land at 590–1060 bytes of markup.
-
-## Development
-
-A standalone library — no workspace, no build step to run these:
+The library ships with a `test/` directory covering the renderer, the `parts`
+seam and the engine's state transitions. Determinism itself is checked by
+regenerating known inputs and diffing the output against committed fixtures —
+any change to the hash-to-trait mapping fails loudly instead of silently
+drifting.
 
 ```sh
-bun install
-bun test       # the suite
-bun run size   # per-entry gzip budgets
-bun run build  # optional bundled dist (main/types fallback only — exports resolves straight to src)
-bun run check  # test + size + build
+bun test
 ```
 
-`test/geometry.test.ts` covers what eyeballing cannot: that no name anywhere in
-the space puts an eye off the body, fuses two capsules together, detaches a
-petal, or pushes geometry outside the frame.
+There is also a small test website, `test/site/`: feed it a name and it
+renders that blobatar live — static and animated, every expression, every
+engine state — so "same string, same output" can be checked by hand against
+the real renderer, not only against the test suite.
 
-This repo used to carry a landing page and a tuning grid as sibling workspace
-apps; both are gone, along with the workspace itself (see `docs/adr/`, which
-kept the ADRs that are still about the library and dropped the ones that
-were about that infrastructure). A visual testbed may return later under its
-own top-level directory.
+```sh
+cd test/site
+bun install
+bun run dev
+```
 
-## Credits
+***
 
-`src/bloub/` is a verbatim port of [bloub](https://github.com/jeremyPerret/bloub)
-(MIT License, Copyright (c) 2026 Jérémy Perret) — its 14-state animation
-catalog, decor geometry, and the DOM-free `BotEngine.sample(t)` render loop.
-`src/engine.ts` is the adaptation seam: it turns a blobatar seed into the
-radial silhouette `BotEngine` expects and mounts its output as real SVG
-elements (see `mountEngine`, exported as `blobatar/engine`); `src/sequences.ts`
-is a thin convenience layer on top of it. This package's own eye shape
-(`capsulePath` in `src/shape.ts`, used by every silhouette) is also bloub's,
-ported into this package's own positioning convention. Each file's header
-says exactly what was carried over and what was not.
+## Project Layout
+
+The library lives at the repository root — no monorepo indirection to
+install or build against:
+
+```
+src/     — library source (renderer, parts seam, engine, expressions)
+test/    — unit tests + determinism fixtures
+```
+
+Exposed entry points:
+
+| Export             | What it is                                   |
+| ------------------- | --------------------------------------------- |
+| `blobatar`          | `blobatar()` — render straight to an SVG string, plus palette/trait utilities |
+| `blobatar/blob`      | `parts()` — the structured renderer seam, on its own (saves ~1 KB if that's all you use) |
+| `blobatar/uri`       | `blobatarUri()` — wraps output in a `data:` URI |
+| `blobatar/expression`| Named expression values (`happy`, `sad`, …)   |
+| `blobatar/motion.css`| Required CSS for the static renderer's `animate` mode |
+| `blobatar/engine`    | `mountEngine()` — the bloub-ported animation engine |
+| `blobatar/sequences` | Ready-made playlists across engine states     |
+| `blobatar/package.json`| The package manifest itself, resolvable as a subpath (tooling convenience) |
+
+The engine needs no separate stylesheet — its motion is built from inline
+SVG `<defs>` at mount time, not CSS keyframes.
+
+***
+
+## v2 Breaking Changes
+
+- **React adapter removed.** `blobatar/react` is gone; the `parts` seam
+  (`blobatar/blob`) is the public replacement for building your own adapter.
+- **Eyes reworked.** Always the fixed bloub-style black capsule — see
+  [Eyes](#eyes) for the contrast-guarantee tradeoff this brings.
+- **Animation engine added.** `blobatar/engine`, ported from bloub, alongside
+  (not replacing) the existing static renderer and its `animate` mode.
+- **Goldens regenerated.** The eye rework and engine port changed reference
+  output; `test/golden` was regenerated against the new renderer.
+- **Monorepo flattened.** The library now lives at the repository root
+  (`src/`, `test/`) instead of under `packages/blobatar`; there is no
+  `apps/*` workspace in this fork.
+
+***
+
+## Contributing
+
+This is a personal fork tracking upstream in a different direction — issues
+and ideas are welcome, but please open an issue before sending a pull request
+so scope can be agreed on first.
+
+***
+
+## License
+
+Distributed under the MIT License — see [LICENSE](LICENSE) for details.
+
+***
+
+## Contact
+
+Adam Ousmer - [GitHub](https://github.com/AdamOusmer)
+
+***
+
+## Acknowledgements
+
+This project is a fork. Neither upstream author is affiliated with this fork
+or endorses it.
+
+- **[blobatar](https://github.com/Alain00/blobatar)** by Alain — the original
+  deterministic blob-avatar library this fork is built on. MIT licensed.
+- **[bloub](https://github.com/jeremy-prt/bloub)** by Jérémy Perret — source
+  of the animation engine ported into this fork's `blobatar/engine`. The code
+  is MIT licensed; its visual design imitates x.ai's, and is not affiliated
+  with or endorsed by x.ai.
+
+README structure inspired by [othneildrew/Best-README-Template](https://github.com/othneildrew/Best-README-Template).
