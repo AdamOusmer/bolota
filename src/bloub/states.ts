@@ -200,6 +200,29 @@ export interface StateDef {
    * sur la video, c'est precisement ce qu'on reproduit.
    */
   baseFace: boolean
+  /**
+   * blobatar addition (not from bloub — every other flag on this interface
+   * is verbatim): true = this state's own `pose(t)` already animates gaze
+   * and/or body position (`sil.cx/cy` via `offX/offY`) itself, so idle's
+   * background liveliness (`face.ts`'s wander/drift/breath) must contribute
+   * NOTHING while it plays — composing idle's own gaze noise or center
+   * float on top of a state that is already driving those same channels is
+   * exactly the arbitration bug `follow` vs `idle` had (`gaze.ts`), just
+   * between `idle`'s wander and a *different* active state instead of the
+   * cursor. `orbit` is the only state this applies to today (`gaze.yaw`
+   * swings +-65deg via its own `sin(t*6.5)`, `sil.cx/cy` recenters every
+   * frame) — every other state's `gaze`/`sil.cx/cy` is a constant for its
+   * whole duration and NEEDS idle's wander, or it would read as frozen
+   * apart from blinking. Blink and breathing are unaffected either way:
+   * blink is independent of `wander` already (gated on `eyeAlpha` alone,
+   * see `bloub/engine.ts`'s `sample()`), and this flag zeroes breathing
+   * too (`float`) only because `orbit`'s own silhouette scale animation
+   * (triangle collapsing to ball) already fills that role — a second,
+   * uncoordinated size wobble on top would be the same bug again.
+   * Defaults to false/absent, i.e. bloub's own unconditional-wander
+   * behavior, for every state that doesn't opt in.
+   */
+  ownsLiveliness?: boolean
   pose(local: number): Pose
 }
 
@@ -457,6 +480,11 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
+    // blobatar addition: see `StateDef.ownsLiveliness`'s own comment — this
+    // state drives gaze (+-65deg yaw sweep below) and body center (`sil.cx/cy`
+    // via `spinningTriangle`) itself, so idle's wander/drift/breath must not
+    // also compose on top of it.
+    ownsLiveliness: true,
     pose: (t) => {
       // Rotation mesuree : rampe sur 0.35 s puis 1.25 tour/s (sens antihoraire).
       const ramp = easings.easeInOutCubic(clamp(t / 0.35))

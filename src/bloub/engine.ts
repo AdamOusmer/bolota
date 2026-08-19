@@ -506,7 +506,21 @@ export class BotEngine {
     // --- vie au repos -----------------------------------------------------
     const alive = pose.eyeAlpha > 0.01
     const look = this.lookAtTime(now)
-    const life = liveliness(now, { wander: alive ? look.wander : 0, blink: alive })
+    // blobatar divergence from the bloub port: `def.ownsLiveliness` (see its
+    // own doc comment, `states.ts`) — a state that already drives gaze and/or
+    // body center itself gets ZERO idle wander/drift/breath composed on top,
+    // the same arbitration bug class as follow-vs-idle (`gaze.ts`) but between
+    // idle's own background life and a different active state. Blink stays
+    // independent (`alive` alone, unchanged) — it is not part of `wander`/
+    // `float` and this state may still want it (`orbit.blinkIn` is false, but
+    // `snooze`'s isn't and this flag never touches states other than the ones
+    // that opt in).
+    const ownsMotion = def.ownsLiveliness ?? false
+    const life = liveliness(now, {
+      wander: ownsMotion ? 0 : alive ? look.wander : 0,
+      blink: alive,
+      float: !ownsMotion
+    })
 
     const gaze = {
       // Les deux visees REMPLACENT celles de la pose au lieu de s'y ajouter (voir
@@ -544,6 +558,26 @@ export class BotEngine {
     const bodyRadius = (x: number, y: number) =>
       radiusAtAngle(pose.sil.radii, Math.atan2(y, x) - pose.sil.rot)
 
+    /**
+     * blobatar divergence from the bloub port: the body path (`sil` above, a
+     * few lines up) is drawn at `pose.sil.cx + offX, pose.sil.cy + offY` — but
+     * this eye matrix used to add only `offX/offY`, never `pose.sil.cx/cy`.
+     * Every OTHER state has `sil.cx === sil.cy === 0` (bloub's own `base()`/
+     * `circle()` default), so the omission was invisible everywhere except
+     * `orbit`: its silhouette recenters every frame (`spinningTriangle`'s
+     * `TRI_ORBIT`-scaled `cx/cy`, up to +-0.213 of ball radius, itself spinning
+     * with `rot`) while the eyes stayed pinned to world origin — the body
+     * visibly orbits its own center and the eyes do not, which is the
+     * "drifts off the face" report a nearest-contour-point check confirmed
+     * (rendered eye center measured up to 1.45x the local body radius away
+     * from the silhouette centroid, i.e. genuinely outside the body, not just
+     * a readability complaint). Adding the same `sil.cx/cy` term used for the
+     * body keeps the eyes riding the body's own center exactly like every
+     * other silhouette-attached element already does.
+     */
+    const bodyCx = pose.sil.cx * R
+    const bodyCy = pose.sil.cy * R
+
     const eyes: RenderedEye[] = []
     if (pose.eyeAlpha > 0.01) {
       const poses = eyePoses(gaze, R, pose.split)
@@ -567,7 +601,7 @@ export class BotEngine {
         const k = blinkScale(Math.min(lid, cfg.open))
         eyes.push({
           d: capsulePath(cfg.w * R, cfg.h * R),
-          matrix: `matrix(${r2(ax)},${r2(ay * k)},${r2(cx2)},${r2(cy2 * k)},${r2(e.x * fit + (offX + decalage.x) * R)},${r2(e.y * fit + (offY + decalage.y) * R)})`,
+          matrix: `matrix(${r2(ax)},${r2(ay * k)},${r2(cx2)},${r2(cy2 * k)},${r2(e.x * fit + bodyCx + (offX + decalage.x) * R)},${r2(e.y * fit + bodyCy + (offY + decalage.y) * R)})`,
           alpha: pose.eyeAlpha * clamp(e.depth / 0.12)
         })
       }
