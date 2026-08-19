@@ -774,6 +774,16 @@ export function mountEngine(
    * it. Once settled, a parked pointer holds the last target indefinitely:
    * `BotEngine` keeps whatever `Look` it was last given, so there is
    * nothing further to push until the pointer actually moves or leaves.
+   *
+   * Only engages on a `baseFace` state (bloub's own gate: `BloubBot.vue`'s
+   * `aim()` bails the same way — "`baseFace` fait porter le visage de
+   * repos, donc le suivi du curseur s'applique des cette entree [...] un
+   * etat qui aurait sa propre pose de regard [...] rendrait la main a
+   * l'etat suivant en pleine course, et les yeux sauteraient d'un coup",
+   * `bloub/states.ts`'s own doc comment on `swirl`). Only `idle`/`swirl`
+   * are `baseFace: true` in this port's `states.ts` — every other state
+   * (`orbit`, `burst`, `wink`, ...) choreographs its own `pose.gaze`, which
+   * `mix: 1` would otherwise silently override outright.
    */
   function aimGaze(now: number) {
     if (!following) return;
@@ -782,7 +792,8 @@ export function mountEngine(
     // divide by zero into a `NaN` that `engine.setLook` would then hold
     // onto forever (it keeps the last *finite* target on purpose).
     if (!box || box.width === 0 || box.height === 0) return;
-    if (!pointer) {
+    const stateOwnsGaze = !STATE_BY_ID.get(current)?.baseFace;
+    if (!pointer || stateOwnsGaze) {
       if (lastNx !== null || lastNy !== null) {
         lastNx = null;
         lastNy = null;
