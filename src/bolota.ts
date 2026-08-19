@@ -1,21 +1,21 @@
 import { motionVars, rootClass, type Animate } from "./animate";
 import type { Palette } from "./color";
 import type { Expression } from "./expression";
-import { makeBlobatar, makeParts, resolve, type BlobatarOptions } from "./render";
+import { makeBolota, makeParts, resolve, type BolotaOptions } from "./render";
 import { style } from "./styles/blob";
 import type { Layout } from "./styles/compose";
 import type { Traits } from "./traits";
 
-export type { BlobatarOptions, Animate, Expression };
+export type { BolotaOptions, Animate, Expression };
 
 /**
- * Renders a deterministic blobatar as SVG markup.
+ * Renders a deterministic bolota as SVG markup.
  *
  * The same name always produces the same output within a major version. The
  * numeric ranges in `styles/compose.ts`, the bands in `styles/blob.ts`, and the
  * tone set are all part of that contract. Changing them requires a new major.
  */
-export const blobatar = makeBlobatar(style);
+export const bolota = makeBolota(style);
 
 /**
  * Only constructed when someone actually animates, so it tree-shakes away.
@@ -46,10 +46,10 @@ const motion = (mode: Animate, e?: Expression) => (t: Traits, p: Palette) => {
       // the pose tints and identical to the markup's own attributes when it does
       // not. Emitted unconditionally rather than only for hot poses, because the
       // stylesheet's `fill` rules have to resolve to *something* correct on an
-      // blobatar wearing no expression, and a `var()` that falls back to nothing
+      // bolota wearing no expression, and a `var()` that falls back to nothing
       // makes `fill` inherit black.
       //
-      // Cost is ~30 B per animated blobatar. It buys the tint being a plain
+      // Cost is ~30 B per animated bolota. It buys the tint being a plain
       // `transition: fill` in both directions instead of a custom property that
       // disappears mid-morph on the way out.
       "--mo-head": c.head!,
@@ -71,7 +71,7 @@ const motion = (mode: Animate, e?: Expression) => (t: Traits, p: Palette) => {
  * varies with `expression` appears in `inner`. An expression is style, not
  * markup, so changing it changes zero bytes of `inner` and a morph can run.
  */
-export function parts(name: string, opts: BlobatarOptions = {}) {
+export function parts(name: string, opts: BolotaOptions = {}) {
   return makeParts(style)(
     name,
     opts,
@@ -87,7 +87,7 @@ export function parts(name: string, opts: BlobatarOptions = {}) {
  * rather than by parsing path data back out of the markup. Underscored because
  * the shape of this object is not public API.
  */
-export function _layout(name: string, opts: BlobatarOptions = {}) {
+export function _layout(name: string, opts: BolotaOptions = {}) {
   const { t, palette } = resolve(name, opts);
   // The cast is private and deliberately narrow: the package style has the
   // body/eyes shape the geometry tests inspect, while `Style` itself remains

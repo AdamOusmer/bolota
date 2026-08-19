@@ -15,7 +15,7 @@
  * value — `{ ...round, core: 0.86 }` reads better and defeats tree-shaking
  * completely, measured at ~920 B for a single shape. See ADR-0007.
  *
- * These are Blobatar 2's ten silhouettes. `test/geometry.test.ts` asserts the
+ * These are Bolota 2's ten silhouettes. `test/geometry.test.ts` asserts the
  * eye cluster stays inside the body and the body inside the frame for all of
  * them.
  */

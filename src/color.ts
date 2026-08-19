@@ -2,12 +2,12 @@
  * Palette construction.
  *
  * Hue is the only value the seed controls. Lightness and chroma are authored
- * constants, which is what makes every blobatar look like it came from the same
+ * constants, which is what makes every bolota look like it came from the same
  * designer rather than from a random number generator.
  *
  * Colors are resolved to hex rather than emitted as `oklch()`. Browsers handle
  * `oklch()` in SVG fine, but server-side rasterizers (resvg, librsvg, sharp)
- * largely do not — and blobatars get rasterized server-side constantly. Doing the
+ * largely do not — and bolotas get rasterized server-side constantly. Doing the
  * conversion here also means the contrast guarantee is enforced against real
  * sRGB luminance instead of assumed from OKLab lightness, which drifts by up to
  * ~1.4:1 between hues at equal L.
@@ -19,7 +19,7 @@ export interface Oklch {
   h: number;
 }
 
-/** Every color slot a blobatar has. */
+/** Every color slot a bolota has. */
 export type ColorKey = "bg" | "head" | "eye";
 export type Palette = Partial<Record<ColorKey, string>>;
 
@@ -135,9 +135,9 @@ export function toHex(color: Oklch): string {
  * serialized.
  *
  * It exists because the tint (§ `hot` below) has to start from the colors that
- * are actually on screen, not from the ramp that produced them: `BlobatarOptions.palette`
+ * are actually on screen, not from the ramp that produced them: `BolotaOptions.palette`
  * lets a consumer override `head` or `eye` outright, and a hot pair derived from
- * the ramp instead would tint toward a color the blobatar never wore.
+ * the ramp instead would tint toward a color the bolota never wore.
  */
 export function fromHex(hex: string): Oklch {
   const n = parseInt(hex.slice(1), 16);
@@ -197,7 +197,7 @@ export const mixHex = (a: string, b: string, t: number) =>
  *
  * Four numbers rather than an authored colour, because the endpoint has to be
  * derived per seed — see `tinted` below. A `Tint` says *which way*, and the
- * blobatar's own palette says where that lands.
+ * bolota's own palette says where that lands.
  *
  * This was three constants and a red until the roster wanted more than anger.
  * Generalising it is what makes a second tinting pose cost its numbers rather
@@ -228,7 +228,7 @@ export const HOT: Tint = { h: 27, l: 0.58, pull: 0.6, c: 0.18 };
  * there and not here would be a tint nothing verifies.
  *
  * `pull` is the dial that keeps them apart as much as `h` is. `BLUSH` travels
- * only 0.4 of the way and lands pale — a shy blobatar that goes as red as an
+ * only 0.4 of the way and lands pale — a shy bolota that goes as red as an
  * angry one is an angry one.
  */
 export const ROSE: Tint = { h: 358, l: 0.72, pull: 0.55, c: 0.16 };
@@ -264,10 +264,10 @@ const TINT_FLOOR = 4.55;
  * So the tinted body meets its target **partway** rather than landing on it.
  * Holding the body's own lightness was the first attempt and it is too quiet — a
  * pastel goes pink rather than angry, because at L 0.86 there is no red to be
- * had. Travelling the whole way is the opposite failure: every blobatar in the
+ * had. Travelling the whole way is the opposite failure: every bolota in the
  * roster converges on one red and the tone set, which is most of what makes a
  * grid look like a crowd, disappears at the exact moment the grid is loudest.
- * `pull` keeps a pale blobatar recognisably pale and an ink one recognisably
+ * `pull` keeps a pale bolota recognisably pale and an ink one recognisably
  * dark while giving both somewhere to go.
  *
  * The eye endpoint is then pushed until **every point along the mix** clears the

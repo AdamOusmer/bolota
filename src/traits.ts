@@ -4,7 +4,7 @@ import { seedState, stream } from "./hash";
  * A trait reader. Every value is addressed by a string key rather than drawn
  * from a sequential stream, so trait keys are an append-only namespace:
  * introducing `t.num("freckles.size", ...)` in a later version leaves every
- * other trait — and therefore every existing blobatar — untouched.
+ * other trait — and therefore every existing bolota — untouched.
  *
  * The one thing that is NOT free to change is the contents of a `pick` array,
  * since option index is part of the mapping. Those are frozen per major.
@@ -49,7 +49,7 @@ export interface Traits {
  * map keeps meaning what it meant. The numeric *ranges* those keys are read
  * into are what a stated position is relative to, which makes them part of the
  * same frozen-per-major contract as a `pick` array's contents — retuning
- * `t.num("eye.gap", 0.1, 0.24)` moves every blobatar, seeded or configured.
+ * `t.num("eye.gap", 0.1, 0.24)` moves every bolota, seeded or configured.
  */
 export type TraitOverrides = Record<string, number>;
 
@@ -60,7 +60,7 @@ export type TraitOverrides = Record<string, number>;
  * past the end of a `pick` array and one past `max` — `undefined` options and
  * out-of-range counts, from an input that looks entirely reasonable to whoever
  * typed it. NaN falls to 0 through the same comparison, so a bad parse renders
- * a blobatar instead of a stack of `NaN`s in the path data.
+ * a bolota instead of a stack of `NaN`s in the path data.
  */
 export function traits(
   seed: string,

@@ -1,17 +1,17 @@
 /**
- * Expressions — `blobatar/expression`. See docs/expression-spec.md.
+ * Expressions — `bolota/expression`. See docs/expression-spec.md.
  *
  * An expression is a named pose the consumer sets and the library holds. It is
  * a separate axis from the idle loop in `animate.ts`: idle motion is ambient and
- * gated on hover, an expression is triggered and gated on nothing. A blobatar can
+ * gated on hover, an expression is triggered and gated on nothing. A bolota can
  * be sad and still breathing.
  *
- * Pose-only, by definition — every channel below moves a part the blobatar already
+ * Pose-only, by definition — every channel below moves a part the bolota already
  * has. Nothing here adds a mark, so a `blob` grows no mouth when it is happy.
  * That ceiling is what the roster has to live inside: two capsule eyes and a
  * soft body, with no brows to carry anger the easy way.
  *
- * **Each expression is passed in, not named.** `blobatar()` never imports this
+ * **Each expression is passed in, not named.** `bolota()` never imports this
  * module; it calls through whatever object it is handed, so a consumer who
  * imports `happy` ships `happy` and one who imports nothing ships nothing. That
  * is the same indirection keeping `animate.ts` out of static bundles, and it is
@@ -22,7 +22,7 @@
  * function references rather than calls to a `make()` factory. A top-level
  * function call is not provably side-effect-free, so every expression would
  * survive tree-shaking whether or not it was imported — the same trap already
- * documented on `parts` in `blobatar.ts`.
+ * documented on `parts` in `bolota.ts`.
  */
 
 import {
@@ -51,7 +51,7 @@ import {
  * break the frame before they get loud enough to read; and in this variant the
  * silhouette *is* the identity. Six shapes, a seeded lopsidedness and a seeded
  * lean are what make a grid read as a crowd, and squashing that per-expression
- * is the one move that makes a blobatar stop looking like itself.
+ * is the one move that makes a bolota stop looking like itself.
  *
  * `bdy` survives because it is a rigid translate. It moves the creature without
  * distorting it, which is what `happy`'s lift and `sad`'s sink actually needed.
@@ -116,7 +116,7 @@ export interface Pose {
    * the moment the expression clears — the identity is in the idle face, not in a
    * per-seed discount on the expression. This is the same rule `esx`/`esy` already
    * follow by being factors on a shape the pose flattens nearly out of existence:
-   * every blobatar wears the same strength of a given expression.
+   * every bolota wears the same strength of a given expression.
    *
    * Interpolates like every other channel, so the lean eases out over the morph
    * rather than snapping.
@@ -702,7 +702,7 @@ export const love: Expression = {
  * closest pair in the roster: both are small eyes sitting low. They separate on
  * eye *height* (0.45 against 0.56 — squeezed rather than merely small), on how
  * far each sinks, and on the tint. `BLUSH` pulls only 0.4 of the way and lands
- * pale on purpose; a shy blobatar that goes as red as an angry one is an angry
+ * pale on purpose; a shy bolota that goes as red as an angry one is an angry
  * one.
  */
 export const shy: Expression = {

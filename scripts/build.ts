@@ -1,11 +1,12 @@
 /**
- * Optional bundled build.
+ * The publish build.
  *
- * `exports` in package.json points straight at `src` — this fork is consumed
- * as TS source, like a git dependency. This script is kept only for anyone who
- * wants a standalone compiled `dist` (npm-style consumption, a non-transpiling
- * bundler, etc.); nothing in this repo's own `exports` map or workspace apps
- * reads its output.
+ * package.json's `exports` map points at `dist`, and `files` ships `dist` +
+ * `README.md` + `LICENSE` only — no `src`. A consumer installing the package
+ * (npm/bun registry, a git dependency, `bun pm pack`'s own tarball) gets
+ * compiled JS + `.d.ts` for every subpath below, nothing else. `prepack` and
+ * `prepare` both call this script, so a git-dependency install (`prepare`,
+ * no publish step) and a registry publish (`prepack`) build the same output.
  *
  * Each entry is bundled standalone. Code splitting is the obvious way to stop
  * `blob` and the barrel carrying private copies of the same renderer, and it
@@ -22,7 +23,17 @@
 import { rmSync } from "node:fs";
 import { $ } from "bun";
 
-const ENTRIES = ["src/index.ts", "src/blob.ts", "src/uri.ts", "src/expression.ts"];
+// One per package.json `exports` subpath that resolves to `dist` (i.e. every
+// subpath except `./motion.css`, built separately below as CSS, and
+// `./package.json`, which is the manifest itself, not a source file).
+const ENTRIES = [
+  "src/index.ts",
+  "src/blob.ts",
+  "src/uri.ts",
+  "src/expression.ts",
+  "src/engine.ts",
+  "src/sequences.ts",
+];
 
 rmSync("dist", { recursive: true, force: true });
 
@@ -56,19 +67,17 @@ if (!css.success) {
 }
 
 // Types come from tsc, not from the bundler — Bun does not emit declarations.
+// Covers every file under `src`, so every `exports` subpath gets a matching
+// `dist/*.d.ts` even though only six of them are bundled as JS above.
 await $`bunx tsc -p tsconfig.build.json`;
 
-// Every map embeds a full copy of every source it covers, and the package ships
-// `src` anyway for the declaration maps to point at. Five entries duplicating
-// the same tree is 330 KB of a 380 KB tarball. The maps' `sources` are already
-// relative paths into the shipped `src`, so dropping the inline copies costs
-// nothing and a debugger still resolves them.
-for (const out of build.outputs) {
-  if (out.kind !== "sourcemap") continue;
-  const map = await Bun.file(out.path).json();
-  delete map.sourcesContent;
-  await Bun.write(out.path, JSON.stringify(map));
-}
+// Sourcemaps keep their `sourcesContent` inlined, unlike an earlier version of
+// this script: `files` in package.json ships `dist` only, no `src`, so a map
+// whose `sources` pointed at `../src/*.ts` with the content stripped would
+// dangle in a consumer's install — nothing at that path to resolve against.
+// Self-contained maps cost more per package (the six JS entries duplicate
+// their own source), but that is the only way `dist` can be both source-free
+// and debuggable at once.
 
 for (const out of build.outputs) {
   if (out.kind !== "entry-point") continue;

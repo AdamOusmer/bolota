@@ -4,7 +4,7 @@ import {
 } from "./shapes";
 
 /**
- * The ten-shape vocabulary introduced by Blobatar 2.
+ * The ten-shape vocabulary introduced by Bolota 2.
  *
  * Weighted rather than uniform: round and organic are the everyday shapes,
  * while the louder silhouettes stay finds. These bands, the layout ranges in

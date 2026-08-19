@@ -16,7 +16,7 @@ describe("engine.ts SSR safety", () => {
 
 describe("BotEngine.sample(t) determinism", () => {
   // `BotEngine` is bloub's own class (src/bloub/engine.ts), ported verbatim —
-  // "moteur sans horloge : sample(t) est une fonction pure du temps" per its
+  // "clockless engine: sample(t) is a pure function of time" per its
   // own doc comment. Asserted here on two states rather than trusted from
   // that comment: this is the property `engine.ts`'s render loop leans on to
   // never desync from wall-clock time.

@@ -1,5 +1,5 @@
 /**
- * A Blobatar style composed from silhouette definitions.
+ * A Bolota style composed from silhouette definitions.
  *
  * The band table chooses and weights silhouettes. Each silhouette owns its
  * geometry and safe face region; this module owns the shared body, eyes and SVG

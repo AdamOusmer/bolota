@@ -3,9 +3,9 @@ import type { Traits } from "./traits";
 /**
  * Idle animation for the `blob` variant. See docs/motion-spec.md.
  *
- * `"hover"` animates one blobatar at a time, which is both the aesthetic answer
+ * `"hover"` animates one bolota at a time, which is both the aesthetic answer
  * (ambient motion seen constantly is motion worth removing) and the performance
- * one. `"always"` is the escape hatch for the single-blobatar case — a profile
+ * one. `"always"` is the escape hatch for the single-bolota case — a profile
  * header, an onboarding screen — where that frequency argument does not apply.
  */
 export type Animate = "hover" | "always";
@@ -23,9 +23,9 @@ export const rootClass = (mode: Animate, expressive?: boolean) =>
   `mo-root${mode === "always" ? " mo-always" : ""}${expressive ? " mo-expr" : ""}`;
 
 /**
- * Per-blobatar timing, as custom properties for the stylesheet to read.
+ * Per-bolota timing, as custom properties for the stylesheet to read.
  *
- * A grid where every blobatar breathes in unison does not read as a crowd of
+ * A grid where every bolota breathes in unison does not read as a crowd of
  * creatures; it reads as a heartbeat. Seeded offsets are what make it a crowd,
  * and they are the single most load-bearing 40 bytes in the motion layer.
  *
@@ -35,11 +35,11 @@ export const rootClass = (mode: Animate, expressive?: boolean) =>
  * behavior, and it only shows on first paint.
  *
  * Breathe and bob get independent offsets. Sharing one preserves the drift
- * between their two periods but locks every blobatar into the *same* drift, which
+ * between their two periods but locks every bolota into the *same* drift, which
  * is the unison problem again, one level up.
  *
  * These keys cost nothing in compatibility: traits are string-addressed, so
- * adding `motion.*` cannot perturb any existing blobatar.
+ * adding `motion.*` cannot perturb any existing bolota.
  */
 export function motionVars(t: Traits): Record<string, string> {
   const ms = (v: number) => `${-Math.round(v)}ms`;
@@ -58,8 +58,8 @@ export function motionVars(t: Traits): Record<string, string> {
     "--mo-blink": `${blink}ms`,
     "--mo-blink-phase": ms(t.num("motion.blinkPhase", 0, blink)),
 
-    // Where this blobatar looks when it glances. One shared `@keyframes` visits
-    // the same *sequence* of fixations on every blobatar, so without a per-seed
+    // Where this bolota looks when it glances. One shared `@keyframes` visits
+    // the same *sequence* of fixations on every bolota, so without a per-seed
     // direction the whole grid would look left, then up, then right together —
     // the unison problem again, and more legible than the original because a
     // sequence is easier to spot than a phase.

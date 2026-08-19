@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { normalizeSeed } from "../src/hash";
 import { traits } from "../src/traits";
-import { blobatar } from "../src/blobatar";
+import { bolota } from "../src/bolota";
 
 const KEYS = [
   "hue", "head.y", "head.rx", "head.ry", "head.n", "hair", "hair.lift", "hair.pad",
@@ -13,36 +13,36 @@ const vector = (seed: string) => KEYS.map(k => traits(seed)(k));
 
 describe("determinism", () => {
   test("same seed produces identical output", () => {
-    expect(blobatar("alain")).toBe(blobatar("alain"));
+    expect(bolota("alain")).toBe(bolota("alain"));
   });
 
   test("different seeds produce different output", () => {
-    expect(blobatar("alain")).not.toBe(blobatar("bob"));
+    expect(bolota("alain")).not.toBe(bolota("bob"));
   });
 });
 
 describe("normalization", () => {
   test("case, whitespace and NFC form are equivalent", () => {
-    const base = blobatar("Alain@Example.com");
-    expect(blobatar("alain@example.com")).toBe(base);
-    expect(blobatar("  ALAIN@EXAMPLE.COM  ")).toBe(base);
+    const base = bolota("Alain@Example.com");
+    expect(bolota("alain@example.com")).toBe(base);
+    expect(bolota("  ALAIN@EXAMPLE.COM  ")).toBe(base);
   });
 
   test("decomposed and precomposed accents agree", () => {
     // "café": U+00E9 vs "e" + U+0301
-    expect(blobatar("café")).toBe(blobatar("café"));
+    expect(bolota("café")).toBe(bolota("café"));
     expect(normalizeSeed("café")).toBe("café");
   });
 
   test("normalize: false hashes the raw string", () => {
-    expect(blobatar("Alain", { normalize: false })).not.toBe(blobatar("alain", { normalize: false }));
+    expect(bolota("Alain", { normalize: false })).not.toBe(bolota("alain", { normalize: false }));
   });
 });
 
 describe("non-ascii", () => {
   test("handles multi-byte and astral-plane seeds", () => {
     for (const seed of ["日本語", "Ελλάδα", "🦊🐻", "أحمد", "🇫🇷"]) {
-      const svg = blobatar(seed);
+      const svg = bolota(seed);
       expect(svg).toStartWith("<svg");
       expect(svg).not.toContain("NaN");
     }
@@ -55,7 +55,7 @@ describe("non-ascii", () => {
   });
 
   test("astral seeds are stable across repeated calls", () => {
-    expect(blobatar("🦊🐻")).toBe(blobatar("🦊🐻"));
+    expect(bolota("🦊🐻")).toBe(bolota("🦊🐻"));
   });
 });
 

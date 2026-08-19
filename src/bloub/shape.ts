@@ -2,10 +2,11 @@
  * Ported verbatim from bloub (https://github.com/jeremyPerret/bloub),
  * MIT License, Copyright (c) 2026 Jérémy Perret.
  *
- * Silhouette sampling, blending and SVG path serialization. Not adapted — see ../engine.ts for the blobatar-specific bridge
+ * Silhouette sampling, blending and SVG path serialization. Not adapted — see ../engine.ts for the bolota-specific bridge
  * (seed-to-silhouette conversion, DOM mounting, rAF loop). This file's
- * own logic, comments and variable names (French, in the original) are
- * untouched beyond TS-strict fixes and import paths.
+ * own logic and structure are untouched beyond TS-strict fixes, import
+ * paths, and translating the original French comments/identifiers to
+ * English (see ../engine.ts's header for the provenance note).
  */
 import { TAU, lerp, r2 } from './math'
 import { PROFILES, PROFILE_SAMPLES, type ProfileName } from './profiles'
@@ -16,21 +17,21 @@ export interface Point {
 }
 
 /**
- * Une silhouette = un profil radial r(theta) plus une pose.
+ * A silhouette = a radial profile r(theta) plus a pose.
  *
- * Tout passe par des profils echantillonnes au MEME nombre d'angles : deux
- * formes quelconques ont donc des points qui se correspondent un a un, et le
- * morphing se reduit a une interpolation lineaire des rayons. C'est ce qui
- * rend les transitions propres sans librairie de morphing de path.
+ * Everything goes through profiles sampled at the SAME number of angles: any
+ * two shapes therefore have points that correspond one to one, and morphing
+ * reduces to a linear interpolation of the radii. That's what makes
+ * transitions clean without a path-morphing library.
  */
 export interface Silhouette {
   radii: number[]
-  /** rotation du profil, en radians */
+  /** rotation of the profile, in radians */
   rot: number
-  /** decalage du centre, en unites de rayon de boule */
+  /** offset of the center, in units of ball radius */
   cx: number
   cy: number
-  /** squash & stretch, applique en repere ecran (apres rotation) */
+  /** squash & stretch, applied in screen space (after rotation) */
   sx: number
   sy: number
 }
@@ -51,7 +52,7 @@ export function silhouette(name: ProfileName, pose: Partial<Silhouette> = {}): S
   }
 }
 
-/** Cercle parfait : sert de base neutre (point, bulle, cible de fondu). */
+/** Perfect circle: serves as a neutral base (point, bubble, fade target). */
 export function circle(radius: number, pose: Partial<Silhouette> = {}): Silhouette {
   return {
     radii: new Array(PROFILE_SAMPLES).fill(radius),
@@ -64,14 +65,14 @@ export function circle(radius: number, pose: Partial<Silhouette> = {}): Silhouet
   }
 }
 
-/** Interpolation de deux silhouettes. `out` est reutilise pour eviter d'allouer a 60 fps. */
+/** Interpolates two silhouettes. `out` is reused to avoid allocating at 60 fps. */
 export function blend(a: Silhouette, b: Silhouette, t: number, out?: Silhouette): Silhouette {
   const dst = out ?? { radii: new Array<number>(PROFILE_SAMPLES), rot: 0, cx: 0, cy: 0, sx: 1, sy: 1 }
   for (let i = 0; i < PROFILE_SAMPLES; i++) {
     dst.radii[i] = lerp(a.radii[i] ?? 1, b.radii[i] ?? 1, t)
   }
-  // Rotation par le chemin le plus court : evite de faire un tour complet
-  // quand on passe par exemple de +170deg a -170deg.
+  // Rotate the short way round: avoids doing a full turn when going, say,
+  // from +170deg to -170deg.
   let dRot = b.rot - a.rot
   while (dRot > Math.PI) dRot -= TAU
   while (dRot < -Math.PI) dRot += TAU
@@ -83,7 +84,7 @@ export function blend(a: Silhouette, b: Silhouette, t: number, out?: Silhouette)
   return dst
 }
 
-/** Projette la silhouette en points ecran. `scale` = rayon de la boule en unites de viewBox. */
+/** Projects the silhouette to screen points. `scale` = ball radius in viewBox units. */
 export function toPoints(s: Silhouette, scale: number, out: Point[] = []): Point[] {
   const cr = Math.cos(s.rot)
   const sr = Math.sin(s.rot)
@@ -91,7 +92,7 @@ export function toPoints(s: Silhouette, scale: number, out: Point[] = []): Point
     const r = s.radii[i] ?? 1
     const x = r * (COS[i] ?? 0)
     const y = r * (SIN[i] ?? 0)
-    // rotation puis squash en repere ecran, puis translation
+    // rotate, then squash in screen space, then translate
     const rx = x * cr - y * sr
     const ry = x * sr + y * cr
     const p = out[i] ?? { x: 0, y: 0 }
@@ -104,10 +105,10 @@ export function toPoints(s: Silhouette, scale: number, out: Point[] = []): Point
 }
 
 /**
- * Polyligne fermee -> cubiques Catmull-Rom.
+ * Closed polyline -> Catmull-Rom cubics.
  *
- * Avec 64 points les tangentes centrees suffisent largement : le contour est
- * lisse au pixel pres meme affiche en 600 px, et la chaine reste courte.
+ * With 64 points the centered tangents are plenty: the outline is smooth
+ * to the pixel even displayed at 600 px, and the string stays short.
  */
 export function closedPath(pts: Point[], tension = 1 / 6): string {
   const n = pts.length
@@ -129,11 +130,11 @@ export function closedPath(pts: Point[], tension = 1 / 6): string {
 }
 
 /**
- * Polygone quelconque -> profil radial, par lancer de rayon depuis `center`.
+ * Arbitrary polygon -> radial profile, by raycasting from `center`.
  *
- * Sert a fabriquer les formes qui ne s'expriment pas naturellement en r(theta)
- * (la barre tronconique du "!"). Calcule une seule fois au chargement, jamais
- * dans la boucle de rendu.
+ * Used to build shapes that don't naturally express as r(theta) (the
+ * tapered bar of the "!"). Computed once at load, never inside the render
+ * loop.
  */
 export function profileFromPolygon(poly: Point[], cx: number, cy: number): number[] {
   const radii = new Array<number>(PROFILE_SAMPLES).fill(0)
@@ -151,8 +152,8 @@ export function profileFromPolygon(poly: Point[], cx: number, cy: number): numbe
       if (Math.abs(den) < 1e-9) continue
       const px = a.x - cx
       const py = a.y - cy
-      const t = (px * ey - py * ex) / den // distance le long du rayon
-      const u = (px * dy - py * dx) / den // position sur le segment
+      const t = (px * ey - py * ex) / den // distance along the ray
+      const u = (px * dy - py * dx) / den // position along the segment
       if (t > best && u >= 0 && u <= 1) best = t
     }
     radii[k] = best
@@ -160,7 +161,7 @@ export function profileFromPolygon(poly: Point[], cx: number, cy: number): numbe
   return radii
 }
 
-/** Enveloppe convexe de deux cercles : la barre tronconique du "!" vertical. */
+/** Convex hull of two circles: the tapered bar of the vertical "!". */
 export function hullOfCircles(
   x1: number,
   y1: number,
@@ -173,16 +174,16 @@ export function hullOfCircles(
   const dx = x2 - x1
   const dy = y2 - y1
   const dist = Math.hypot(dx, dy) || 1e-6
-  // angle des tangentes externes communes
+  // angle of the shared external tangents
   const base = Math.atan2(dy, dx)
   const spread = Math.acos(Math.max(-1, Math.min(1, (r1 - r2v) / dist)))
   const pts: Point[] = []
-  // arc du grand cercle
+  // arc of the larger circle
   for (let i = 0; i <= steps / 2; i++) {
     const a = base + spread + ((TAU - 2 * spread) * i) / (steps / 2)
     pts.push({ x: x1 + Math.cos(a) * r1, y: y1 + Math.sin(a) * r1 })
   }
-  // arc du petit cercle
+  // arc of the smaller circle
   for (let i = 0; i <= steps / 2; i++) {
     const a = base - spread + ((2 * spread) * i) / (steps / 2)
     pts.push({ x: x2 + Math.cos(a) * r2v, y: y2 + Math.sin(a) * r2v })
@@ -191,13 +192,13 @@ export function hullOfCircles(
 }
 
 /**
- * Rayon du profil dans une direction quelconque, par interpolation entre les
- * deux echantillons voisins.
+ * Profile radius in an arbitrary direction, by interpolating between the
+ * two neighboring samples.
  *
- * Sert a recaler ce qui est pose "sur" le corps (les yeux, la pastille de
- * notification) quand la silhouette n'est plus un cercle : sans ca, un oeil
- * place a 0.62 rayon sort d'une forme dont le bord est a 0.55 dans cette
- * direction, et le masque le rogne.
+ * Used to re-anchor whatever sits "on" the body (the eyes, the notification
+ * badge) once the silhouette is no longer a circle: without this, an eye
+ * placed at 0.62 radius pokes out of a shape whose edge sits at 0.55 in
+ * that direction, and the mask crops it.
  */
 export function radiusAtAngle(radii: number[], angle: number): number {
   const n = radii.length
@@ -207,8 +208,8 @@ export function radiusAtAngle(radii: number[], angle: number): number {
 }
 
 /**
- * Superellipse : |x/sx|^n + |y/sy|^n = 1.
- * n = 2 donne une ellipse, n ~ 4 le squircle du personnalisateur.
+ * Superellipse: |x/sx|^n + |y/sy|^n = 1.
+ * n = 2 gives an ellipse, n ~ 4 the personalizer's squircle.
  */
 export function superellipseProfile(n: number, sx = 1, sy = 1): number[] {
   return ANGLES.map((_, i) => {
@@ -219,9 +220,9 @@ export function superellipseProfile(n: number, sx = 1, sy = 1): number[] {
 }
 
 /**
- * Profil radial de l'UNION de disques : r(theta) = la plus lointaine des
- * intersections rayon/cercle. Exact tant que l'origine est dans l'union — c'est
- * ce qui donne les bosses du nuage sans booleen de path.
+ * Radial profile of the UNION of disks: r(theta) = the farthest of the
+ * ray/circle intersections. Exact as long as the origin is inside the
+ * union — that's what gives the cloud its bumps without a path boolean.
  */
 export function unionOfCirclesProfile(circles: Array<{ x: number; y: number; r: number }>): number[] {
   const out = new Array<number>(PROFILE_SAMPLES).fill(0)
@@ -242,10 +243,10 @@ export function unionOfCirclesProfile(circles: Array<{ x: number; y: number; r: 
 }
 
 /**
- * Polygone a coins arrondis, par somme de Minkowski avec un disque : chaque
- * arete est poussee de `rc` vers l'exterieur, chaque sommet devient un arc de
- * rayon `rc`. Les sommets sont donc a poser au rayon voulu MOINS rc.
- * Attend un polygone en sens horaire (repere ecran, y vers le bas).
+ * Rounded-corner polygon, via a Minkowski sum with a disk: each edge is
+ * pushed outward by `rc`, and each vertex becomes an arc of radius `rc`.
+ * Vertices should therefore be placed at the desired radius MINUS rc.
+ * Expects a clockwise polygon (screen space, y pointing down).
  */
 function roundedPolygon(verts: Point[], rc: number, arcSteps = 10): Point[] {
   const n = verts.length
@@ -254,7 +255,7 @@ function roundedPolygon(verts: Point[], rc: number, arcSteps = 10): Point[] {
     const dx = b.x - a.x
     const dy = b.y - a.y
     const len = Math.hypot(dx, dy) || 1
-    // sens horaire + y vers le bas : la normale sortante est (dy, -dx)
+    // clockwise + y pointing down: the outward normal is (dy, -dx)
     return Math.atan2(-dx / len, dy / len)
   }
   for (let i = 0; i < n; i++) {
@@ -274,7 +275,7 @@ function roundedPolygon(verts: Point[], rc: number, arcSteps = 10): Point[] {
   return out
 }
 
-/** Polygone regulier a coins arrondis, inscrit dans `radius`. */
+/** Regular polygon with rounded corners, inscribed in `radius`. */
 export function regularPolygonProfile(
   sides: number,
   radius: number,
@@ -283,14 +284,14 @@ export function regularPolygonProfile(
 ): number[] {
   const rot = (rotationDeg * Math.PI) / 180
   const verts = Array.from({ length: sides }, (_, i) => {
-    // sens horaire a l'ecran : theta croissant avec y vers le bas
+    // clockwise on screen: theta increases as y points down
     const a = rot + (i / sides) * TAU
     return { x: Math.cos(a) * (radius - rc), y: Math.sin(a) * (radius - rc) }
   })
   return profileFromPolygon(roundedPolygon(verts, rc), 0, 0)
 }
 
-/** Polyligne fermee exacte : garde les segments droits (contrairement a closedPath). */
+/** Exact closed polyline: keeps straight segments (unlike closedPath). */
 export function polyPath(pts: Point[], scale = 1): string {
   if (pts.length < 3) return ''
   let d = ''
@@ -301,7 +302,7 @@ export function polyPath(pts: Point[], scale = 1): string {
   return `${d}Z`
 }
 
-/** Capsule (stade) centree sur l'origine : la forme exacte des yeux du bot. */
+/** Capsule (stadium) centered on the origin: the bot's exact eye shape. */
 export function capsulePath(w: number, h: number): string {
   const hw = Math.max(w, 0.01) / 2
   const hh = Math.max(h, 0.01) / 2

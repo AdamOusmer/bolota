@@ -1,22 +1,40 @@
 {
-  "name": "blobatar",
+  "name": "bolota",
   "version": "2.0.0",
-  "description": "Deterministic geometric blobatars from any string. No dependencies.",
+  "description": "Deterministic geometric bolotas from any string. No dependencies.",
   "type": "module",
-  "//sideEffects": "Not `false`. That would license bundlers to drop `import \"blobatar/motion.css\"` as dead weight, and animated blobatars would silently render static for everyone shipping through a bundler.",
+  "//sideEffects": "Not `false`. That would license bundlers to drop `import \"bolota/motion.css\"` as dead weight, and animated bolotas would silently render static for everyone shipping through a bundler.",
   "sideEffects": ["*.css"],
-  "files": ["dist", "src", "README.md", "CHANGELOG.md", "LICENSE"],
+  "files": ["dist", "README.md", "LICENSE"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "//exports": "Framework-agnostic JS/TS-only source library. This fork ships `src` and resolves `exports` straight at TS — no build step between a consumer and the source. `dist` (see `main`/`types` below and `scripts/build.ts`) is kept only as an optional bundled fallback for tooling that needs it.",
+  "//exports": "Compiled package: `exports` resolves every subpath to `dist` (see `scripts/build.ts`). `main`/`types` above are the pre-`exports`-map fallback for older resolvers, pointed at the same compiled entry. `src` is not part of what ships (see `files` below) — it is source for this repo, not for a consumer's install.",
   "exports": {
-    ".": "./src/index.ts",
-    "./blob": "./src/blob.ts",
-    "./uri": "./src/uri.ts",
-    "./expression": "./src/expression.ts",
-    "./motion.css": "./src/motion.css",
-    "./engine": "./src/engine.ts",
-    "./sequences": "./src/sequences.ts",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./blob": {
+      "types": "./dist/blob.d.ts",
+      "default": "./dist/blob.js"
+    },
+    "./uri": {
+      "types": "./dist/uri.d.ts",
+      "default": "./dist/uri.js"
+    },
+    "./expression": {
+      "types": "./dist/expression.d.ts",
+      "default": "./dist/expression.js"
+    },
+    "./motion.css": "./dist/motion.css",
+    "./engine": {
+      "types": "./dist/engine.d.ts",
+      "default": "./dist/engine.js"
+    },
+    "./sequences": {
+      "types": "./dist/sequences.d.ts",
+      "default": "./dist/sequences.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -29,13 +47,15 @@
     "//golden": "Regenerating is a deliberate act, so the script refuses without `--write` and says why. `check` does not call it — `bun test` already asserts against the fixture, which is the direction that matters.",
     "golden": "bun scripts/golden.ts",
     "check": "bun test && bun run size && bun run build",
-    "prepack": "bun run build"
+    "prepack": "bun run build",
+    "//prepare": "Runs on `bun add git+...`/`npm install <git-url>` for a git dependency, where there is no publish step and therefore no `prepack` — this is what gives a git-dep consumer a `dist` at all. Also fires on `bun install`/`npm install` in a clone of this repo itself (harmless: `bun test` and every other script read `src` directly, never `dist`).",
+    "prepare": "bun run build"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5"
   },
-  "keywords": ["blobatar", "avatar", "identicon", "svg", "deterministic", "no-dependencies"],
+  "keywords": ["bolota", "avatar", "identicon", "svg", "deterministic", "no-dependencies"],
   "license": "MIT",
   "author": "Alain",
   "repository": {
