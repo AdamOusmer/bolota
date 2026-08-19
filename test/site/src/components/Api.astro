@@ -4,71 +4,177 @@ import SectionHead from "./SectionHead.astro";
 const K = "tok-kw";
 const S = "tok-str";
 const C = "tok-cm";
+
+/**
+ * Redesign v2 (spec §6): a left sticky mini-list of symbols, one per code
+ * block on the right, click scrolls to it. The list is exactly the spec's
+ * own symbol set, in the order a reader hits them: the two static entry
+ * points, the engine mount call, the handle's own methods, the expression
+ * roster, then the sequence runner. `slug` doubles as the block's id and
+ * the click target, `scripts/sections/api.ts` wires the click -> scroll.
+ * Every slug is `ref-`-prefixed: two of the bare names (`expressions`,
+ * `sequences`) collide with those sections' own `id`, and a duplicate DOM
+ * id breaks `getElementById` for both the click target and the
+ * `IntersectionObserver` that keeps the mini-list's active state in sync.
+ */
+const SYMBOLS = [
+  { slug: "ref-bolota", label: "bolota" },
+  { slug: "ref-parts", label: "parts" },
+  { slug: "ref-mountEngine", label: "mountEngine" },
+  { slug: "ref-handle", label: "handle.play/loop/stop/follow/setExpression" },
+  { slug: "ref-expressions", label: "expressions" },
+  { slug: "ref-sequences", label: "sequences" },
+] as const;
 ---
 
 <section class="section wrap" id="api">
-  <SectionHead title="Reference" description="Five imports. That's the whole surface." />
+  <SectionHead kicker="Reference" title="The whole surface" description="Six imports. Nothing else to learn." />
 
-  <div class="api-grid">
-    <div class="code-block" data-reveal>
-      <div class="code-block__head">
-        <span>install</span>
-        <button class="copy-btn" data-copy="npm install bolota" aria-label="Copy">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-          <span class="copy-btn__label">copy</span>
-        </button>
-      </div>
-      <pre><code>npm install bolota</code></pre>
-    </div>
+  <div class="ref-layout">
+    <nav class="ref-nav" data-reveal aria-label="API symbols">
+      {SYMBOLS.map(({ slug, label }) => (
+        <button type="button" class="ref-nav__item" data-ref-target={slug}>{label}</button>
+      ))}
+    </nav>
 
-    <div class="code-block" data-reveal style="--reveal-i:1">
-      <div class="code-block__head">
-        <span>static render</span>
-        <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
-      </div>
-      <pre><code><span class={K}>import</span> {"{"} bolota {"}"} <span class={K}>from</span> <span class={S}>"bolota"</span>;
+    <div class="ref-blocks">
+      <div class="code-block" id="ref-bolota" data-reveal>
+        <div class="code-block__head">
+          <span>bolota — static render</span>
+          <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
+        </div>
+        <pre><code><span class={K}>import</span> {"{"} bolota {"}"} <span class={K}>from</span> <span class={S}>"bolota"</span>;
 
 <span class={C}>// deterministic: same seed, same bytes, always</span>
 <span class={K}>const</span> svg = bolota(<span class={S}>"any-string"</span>, {"{"} size: <span class={S}>64</span> {"}"});
 container.innerHTML = svg;</code></pre>
-    </div>
-
-    <div class="code-block" data-reveal style="--reveal-i:2">
-      <div class="code-block__head">
-        <span>bloub engine</span>
-        <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
       </div>
-      <pre><code><span class={K}>import</span> {"{"} mountEngine {"}"} <span class={K}>from</span> <span class={S}>"bolota/engine"</span>;
 
-<span class={K}>const</span> handle = mountEngine(svgEl, <span class={S}>"any-string"</span>);
-handle.play(<span class={S}>"burst"</span>);       <span class={C}>// one-shot, auto-returns to idle</span>
-handle.play(<span class={S}>"orbit"</span>, {"{"} loop: <span class={K}>true</span> {"}"});
-handle.setExpression(<span class={S}>"heureux"</span>);
-handle.stop();      <span class={C}>// freezes the current frame</span>
-handle.destroy();   <span class={C}>// unmounts</span></code></pre>
-    </div>
-
-    <div class="code-block" data-reveal style="--reveal-i:3">
-      <div class="code-block__head">
-        <span>sequences</span>
-        <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
-      </div>
-      <pre><code><span class={K}>import</span> {"{"} runSequence {"}"} <span class={K}>from</span> <span class={S}>"bolota/sequences"</span>;
-
-<span class={C}>// "entrance" | "burst" | "orbit" | "comet"</span>
-runSequence(handle, <span class={S}>"entrance"</span>);</code></pre>
-    </div>
-
-    <div class="code-block" data-reveal style="--reveal-i:4">
-      <div class="code-block__head">
-        <span>framework adapter</span>
-        <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
-      </div>
-      <pre><code><span class={K}>import</span> {"{"} parts {"}"} <span class={K}>from</span> <span class={S}>"bolota"</span>;
+      <div class="code-block" id="ref-parts" data-reveal style="--reveal-i:1">
+        <div class="code-block__head">
+          <span>parts — framework adapter</span>
+          <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
+        </div>
+        <pre><code><span class={K}>import</span> {"{"} parts {"}"} <span class={K}>from</span> <span class={S}>"bolota"</span>;
 
 <span class={C}>// {"{"} cls, bg, inner, vars {"}"}: build your own element,</span>
 <span class={C}>// wire `inner` through an innerHTML-style sink</span>
-<span class={K}>const</span> {"{"} cls, inner, vars {"}"} = parts(seed, opts);</code></pre>
+<span class={K}>const</span> {"{"} cls, inner, vars {"}"} = parts(<span class={S}>"any-string"</span>, opts);</code></pre>
+      </div>
+
+      <div class="code-block" id="ref-mountEngine" data-reveal style="--reveal-i:2">
+        <div class="code-block__head">
+          <span>mountEngine — bloub engine</span>
+          <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
+        </div>
+        <pre><code><span class={K}>import</span> {"{"} mountEngine {"}"} <span class={K}>from</span> <span class={S}>"bolota/engine"</span>;
+
+<span class={K}>const</span> handle = mountEngine(svgEl, <span class={S}>"any-string"</span>);
+<span class={C}>// starts on "idle"; handle.destroy() unmounts</span></code></pre>
+      </div>
+
+      <div class="code-block" id="ref-handle" data-reveal style="--reveal-i:3">
+        <div class="code-block__head">
+          <span>handle — play / loop / stop / follow / setExpression</span>
+          <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
+        </div>
+        <pre><code>handle.play(<span class={S}>"burst"</span>);       <span class={C}>// one-shot, auto-returns to idle</span>
+handle.loop(<span class={S}>"orbit"</span>);       <span class={C}>// sugar for play(id, {"{"} loop: <span class={K}>true</span> {"}"})</span>
+handle.stop();               <span class={C}>// freezes the current frame</span>
+handle.follow(<span class={S}>"window"</span>);    <span class={C}>// eyes track the pointer; false disables</span>
+handle.setExpression(<span class={S}>"heureux"</span>);</code></pre>
+      </div>
+
+      <div class="code-block" id="ref-expressions" data-reveal style="--reveal-i:4">
+        <div class="code-block__head">
+          <span>expressions</span>
+          <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
+        </div>
+        <pre><code>handle.expressions;            <span class={C}>// every id, stable order</span>
+handle.setExpression(<span class={S}>"heureux"</span>); <span class={C}>// held pose, only while idle/swirl</span>
+handle.setExpression(<span class={K}>null</span>);      <span class={C}>// clears back to the playing state</span></code></pre>
+      </div>
+
+      <div class="code-block" id="ref-sequences" data-reveal style="--reveal-i:5">
+        <div class="code-block__head">
+          <span>sequences</span>
+          <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
+        </div>
+        <pre><code><span class={K}>import</span> {"{"} runSequence {"}"} <span class={K}>from</span> <span class={S}>"bolota/sequences"</span>;
+
+<span class={C}>// "entrance" | "burst" | "orbit" | "comet"</span>
+runSequence(handle, <span class={S}>"entrance"</span>);</code></pre>
+      </div>
     </div>
   </div>
 </section>
+
+<style>
+  .ref-layout {
+    display: grid;
+    grid-template-columns: minmax(180px, 220px) 1fr;
+    gap: clamp(28px, 5vw, 64px);
+    align-items: start;
+    margin-top: 3rem;
+  }
+
+  .ref-nav {
+    position: sticky;
+    top: calc(var(--nav-h) + 32px);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ref-nav__item {
+    text-align: left;
+    padding: 8px 0 8px 14px;
+    border-left: 2px solid transparent;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    transition: color 200ms ease, border-color 200ms ease;
+  }
+
+  .ref-nav__item:hover {
+    color: var(--text-main);
+  }
+
+  .ref-nav__item.is-active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+  }
+
+  .ref-blocks {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(18px, 3vw, 28px);
+    min-width: 0;
+  }
+
+  .ref-blocks .code-block {
+    scroll-margin-top: calc(var(--nav-h) + 24px);
+  }
+
+  @media (max-width: 760px) {
+    .ref-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .ref-nav {
+      position: static;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 4px 18px;
+    }
+
+    .ref-nav__item {
+      padding-left: 0;
+      border-left: none;
+      border-bottom: 2px solid transparent;
+    }
+
+    .ref-nav__item.is-active {
+      border-bottom-color: var(--accent);
+    }
+  }
+</style>
