@@ -82,7 +82,7 @@ const pair = (w: number, h: number): [EyeCfg, EyeCfg] => [
  * Dead-ahead gaze: yaw/pitch/roll all zero. `base()`'s own default gaze is
  * `REST_GAZE` instead (bloub's measured resting pose, a sideways glance —
  * see `../bloub/expressions.ts`'s header comment), which is correct for
- * `wander` and `aside` but NOT for `idle` — see `idle`'s own doc comment
+ * `wander` and `wander` but NOT for `idle` — see `idle`'s own doc comment
  * below for why it overrides to this instead of taking `base()`'s default.
  */
 const NEUTRAL_GAZE: HeadGaze = { yaw: 0, pitch: 0, roll: 0 }
@@ -334,7 +334,7 @@ export const STATES: StateDef[] = [
     // default, is what makes an idle-frame sample reproduce exactly what
     // the static renderer draws for the same seed (`test/eye-static-parity
     // .test.ts` pins this). `base()`'s default stayed `REST_GAZE` — it's
-    // still correct for `wander` right below and for the `aside`
+    // still correct for `wander` right below and for the `wander`
     // expression (`../bloub/expressions.ts`) — only `idle` diverges from
     // it, and only on this one field.
     //

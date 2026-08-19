@@ -98,10 +98,10 @@ function eyeD(svg: FakeElement): string | null {
 }
 
 describe("expressions on the engine handle", () => {
-  test("all 16 bloub expression ids are present, bloub's own array order with `neutre` split to `aside`", () => {
+  test("all 16 bloub expression ids are present, bloub's own array order with `neutre` split to `wander`", () => {
     const { handle } = mount();
     expect(handle.expressions).toEqual([
-      "aside", "attentive", "surprised", "excited", "happy", "laughing",
+      "wander", "attentive", "surprised", "excited", "happy", "laughing",
       "angry", "sad", "scared", "suspicious", "confused", "curious",
       "proud", "shy", "unimpressed", "sleepy",
     ]);
@@ -236,9 +236,9 @@ describe("`idle` (no expression set) is the true straight-ahead resting face", (
     expect(outer!.y).toBeCloseTo(0, 10);
   });
 
-  test("`aside` (bloub's original off-center `neutre` pose) is NOT mirrored around x=0 -- that's the bug `idle`'s own gaze fixes", () => {
-    const aside = EXPRESSION_BY_ID.get("aside")!;
-    const [inner, outer] = eyePoses(aside.gaze, 1, aside.split);
+  test("`wander` (bloub's original off-center `neutre` pose) is NOT mirrored around x=0 -- that's the bug `idle`'s own gaze fixes", () => {
+    const wander = EXPRESSION_BY_ID.get("wander")!;
+    const [inner, outer] = eyePoses(wander.gaze, 1, wander.split);
     // both eyes land on the same side of the axis, proving the drift
     expect(Math.sign(inner!.x)).toBe(Math.sign(outer!.x));
     expect(inner!.x).not.toBeCloseTo(-outer!.x, 1);
