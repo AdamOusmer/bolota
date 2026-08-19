@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 import { bolota, parts, normalizeSeed, type BolotaOptions } from "bolota";
 import {
   idle,

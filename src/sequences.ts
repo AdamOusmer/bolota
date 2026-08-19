@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * Friendly names for four of `mountEngine`'s bloub states, kept from the
  * (now-removed) CSS-keyframe version of this file for anyone already calling

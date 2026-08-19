@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 import { describe, expect, test } from "bun:test";
 import { BotEngine } from "../src/bloub/engine";
 import { EXPRESSION_BY_ID, EXPRESSIONS } from "../src/bloub/expressions";

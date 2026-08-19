@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * What Bolota 2's golden fixture covers.
  *

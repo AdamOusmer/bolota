@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 import { describe, expect, test } from "bun:test";
 import { BotEngine, type Look } from "../src/bloub/engine";
 import { eyePoses, REST_GAZE } from "../src/bloub/face";
