@@ -10,7 +10,9 @@
     "./blob": "./packages/blobatar/src/blob.ts",
     "./uri": "./packages/blobatar/src/uri.ts",
     "./expression": "./packages/blobatar/src/expression.ts",
-    "./motion.css": "./packages/blobatar/src/motion.css"
+    "./motion.css": "./packages/blobatar/src/motion.css",
+    "./engine": "./packages/blobatar/src/engine.ts",
+    "./sequences": "./packages/blobatar/src/sequences.ts"
   },
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {

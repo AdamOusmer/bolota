@@ -166,6 +166,37 @@ const ENTRIES: {
     ext: "css",
     source: `@import "../../src/motion.css";`,
   },
+  {
+    // The decorative counterpart to `motion css` above: burst/orbit/comet,
+    // ported from bloub (see the file's header). Paid once per app, same
+    // reasoning as `motion css` — nobody wants these keyframes duplicated
+    // per blobatar.
+    name: "frames css",
+    budget: 780,
+    external: [],
+    ext: "css",
+    source: `@import "../../src/frames.css";`,
+  },
+  {
+    // The sequence runner: no DOM assumptions beyond `Element.classList`, no
+    // dependency on the renderer, so importing it costs nothing beyond its
+    // own body and the four `FrameSeq` constants.
+    name: "sequences",
+    budget: 320,
+    external: [],
+    source: `import { runSequence, burst } from "../../src/sequences";
+             globalThis.x = runSequence;
+             globalThis.y = burst;`,
+  },
+  {
+    // Static markup only — no renderer import, so this must not drag in
+    // `blob`/`blobatar` for a consumer who only wants the decor fragments.
+    name: "decor",
+    budget: 420,
+    external: [],
+    source: `import { decorMarkup } from "../../src/decor";
+             globalThis.x = decorMarkup("orbit");`,
+  },
 ];
 
 rmSync(DIR, { recursive: true, force: true });

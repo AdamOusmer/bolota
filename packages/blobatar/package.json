@@ -15,6 +15,8 @@
     "./uri": "./src/uri.ts",
     "./expression": "./src/expression.ts",
     "./motion.css": "./src/motion.css",
+    "./engine": "./src/engine.ts",
+    "./sequences": "./src/sequences.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
