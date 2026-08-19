@@ -1,7 +1,0 @@
-# Everything, to everyone. This is a public site about an MIT library.
-User-agent: *
-Allow: /
-
-# No Sitemap line: a sitemap helps a crawler find URLs it would not reach by
-# following links, and there are two here — the landing page and /editor, which
-# link to each other from the body text.

@@ -5,9 +5,10 @@
     "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",
-    "jsx": "react-jsx",
-    "allowJs": true,
-    "types": ["bun", "react"],
+    // Framework-agnostic library: no JSX anywhere in this repo, so no
+    // `react` type entry point to resolve (this used to be a workspace
+    // member sharing a root config with JSX-using apps; those are gone).
+    "types": ["bun"],
 
     // Bundler mode
     "moduleResolution": "bundler",
@@ -25,8 +26,10 @@
     // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
-  },
+    "noPropertyAccessFromIndexSignature": false,
 
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "test", "scripts"],
   "exclude": ["dist", "node_modules"]
 }
