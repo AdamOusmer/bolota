@@ -10,6 +10,26 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.1.3
+
+### Added
+
+- **`play(state, { for })`: repeat a state until a deadline.** `hold` freezes a
+  finished pose for a beat; this replays the state until the time asked for is
+  filled, which is what a caller wants when a gesture has to cover a slot it is
+  shorter than. A 1.3s `swirl` asked for four seconds swirls three times rather
+  than swirling once and sitting there.
+
+  The deadline is a floor, never a cut: the hand-back waits for the cycle that
+  crosses it, so the state always finishes what it started. Repeats restart on
+  the same `duration + morph` boundary a looping state uses, past the transient
+  particle and ribbon windows, so a repeat is as clean as a loop. `loop` still
+  wins over `for`, since it never ends.
+
+- `runSequence()` takes `play`'s options, so a sequence can be given `for`,
+  `hold` or `rest` without the caller having to know which state the name maps
+  to.
+
 ## 0.1.2
 
 ### Changed

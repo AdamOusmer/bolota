@@ -763,3 +763,84 @@ describe("one-shot states dwell, then morph back to the face they left", () => {
   });
 });
 
+
+describe("play({ for }) — repeat a state until a deadline, then hand back", () => {
+  // Owner's ask, and the distinction that matters: `hold` freezes the finished
+  // pose for a beat, `for` REPLAYS the state until the time is filled. A 1.3s
+  // swirl asked to cover 4s should swirl three times, not swirl once and sit
+  // there.
+  const decorCount = (svg: FakeElement) =>
+    parts(svg).front.children.flatMap((g) => g.children).length;
+
+  test("the state keeps replaying inside the window, then settles after it", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 500);
+
+    // exclaim is 2s and draws the mark as decor, so decor presence is a
+    // direct read on "is the state still playing".
+    handle.play("exclaim", { for: 5, hold: 0 });
+
+    run(doc, 2500); // past one full pass: a plain one-shot would be done
+    expect(decorCount(svg as unknown as FakeElement)).toBeGreaterThan(0);
+
+    run(doc, 2000); // still inside the 5s window, on a later pass
+    expect(decorCount(svg as unknown as FakeElement)).toBeGreaterThan(0);
+
+    run(doc, 3000); // past the window and the hand-back
+    expect(decorCount(svg as unknown as FakeElement)).toBe(0);
+  });
+
+  test("the hand-back waits for the cycle that crosses the deadline, never cuts one short", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 500);
+
+    // Deadline lands mid-pass (2.5s into a 2s state, so during pass two).
+    handle.play("exclaim", { for: 2.5, hold: 0 });
+    run(doc, 2600);
+    // Pass two is under way and must be allowed to finish.
+    expect(decorCount(svg as unknown as FakeElement)).toBeGreaterThan(0);
+
+    run(doc, 2200);
+    expect(decorCount(svg as unknown as FakeElement)).toBe(0);
+  });
+
+  test("for and loop do not fight: loop wins and never ends", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("exclaim", { loop: true, for: 1 });
+    run(doc, 6000);
+    expect(decorCount(svg as unknown as FakeElement)).toBeGreaterThan(0);
+  });
+
+  test("no jumps across a repeat boundary either", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 500);
+    handle.play("swirl", { for: 4, hold: 0 });
+
+    const mid = () => {
+      const eyes = parts(svg as unknown as FakeElement).eyes.children;
+      const pts = eyes.map((e) => {
+        const m = /matrix\(([^,]+),([^,]+),([^,]+),([^,]+),(-?[\d.]+),(-?[\d.]+)\)/.exec(
+          e.getAttribute("transform") ?? "",
+        );
+        return m ? { x: Number(m[5]), y: Number(m[6]) } : { x: 0, y: 0 };
+      });
+      return {
+        x: pts.reduce((a, p) => a + p.x, 0) / (pts.length || 1),
+        y: pts.reduce((a, p) => a + p.y, 0) / (pts.length || 1),
+      };
+    };
+
+    let worst = 0;
+    let prev = mid();
+    for (let i = 0; i < 350; i++) {
+      run(doc, 16);
+      const now = mid();
+      worst = Math.max(worst, Math.hypot(now.x - prev.x, now.y - prev.y));
+      prev = now;
+    }
+    expect(worst).toBeLessThan(6);
+  });
+});

@@ -429,6 +429,16 @@ export interface EngineHandle {
        * different resting face than the one it left.
        */
       rest?: string;
+      /**
+       * Keep replaying the state until at least this many seconds have
+       * passed, then hand back at the end of the cycle that crosses the
+       * mark (never mid-cycle, so the state always finishes what it
+       * started). This is how a 1.3s swirl fills a 4s slot: it repeats,
+       * rather than freezing on its last frame the way `hold` does.
+       *
+       * Ignored while `loop` is set, which already never ends.
+       */
+      for?: number;
     },
   ): void;
   /** Sugar for `play(state, { loop: true })`. */
@@ -623,6 +633,10 @@ export function mountEngine(
   // bot returns to the face it was wearing rather than a hard-coded `idle`.
   let restState: StateId = "idle";
   let hold = STATE_HOLD;
+  // Wall-clock deadline for a `for:` run, and when that run began. The
+  // deadline is a floor, not a cut: the state finishes its current cycle.
+  let repeatUntil = 0;
+  let repeatStart = 0;
 
   // --- cursor-follow gaze (bloub port, src/bloub/gaze.ts) ------------------
   // Math (`followLook`) and the pointer-tracking constants below it are
@@ -826,7 +840,26 @@ export function mountEngine(
         engine.reset(current, clock);
         stateStart = clock;
       }
-    } else if (!loop && current !== restState && clock - stateStart >= def.duration + hold) {
+    } else if (
+      repeatUntil > 0 &&
+      clock - repeatStart < repeatUntil &&
+      clock - stateStart >= def.duration + def.morph
+    ) {
+      // A `for:` run still inside its window: restart the state on the same
+      // boundary the looping branch above uses (`duration + morph`, past the
+      // transient windows), so a repeat is the same clean restart a loop is.
+      engine.reset(current, clock);
+      stateStart = clock;
+    } else if (
+      !loop &&
+      // A `for:` run holds the floor until its window closes. Without this the
+      // hand-back below fires between `duration` and `duration + morph`, the
+      // gap the repeat branch above waits through, and the state ends after
+      // one pass no matter what window was asked for.
+      (repeatUntil === 0 || clock - repeatStart >= repeatUntil) &&
+      current !== restState &&
+      clock - stateStart >= def.duration + hold
+    ) {
       // This is the bug this whole block used to have, the other way
       // around: previously the loop branch above called `reset()` without
       // ever advancing `stateStart`, so once a looping state's `duration`
@@ -838,6 +871,7 @@ export function mountEngine(
       // static tiles: all of it was one missing assignment.
       current = restState;
       stateStart = clock;
+      repeatUntil = 0;
       // `setState` cross-fades from the outgoing state over its own `morph`,
       // so this hand-back is a blend, never a cut.
       engine.setState(restState, clock);
@@ -876,6 +910,8 @@ export function mountEngine(
       stateStart = clock;
       loop = !!o?.loop;
       hold = Math.max(0, o?.hold ?? STATE_HOLD);
+      repeatStart = clock;
+      repeatUntil = loop ? 0 : Math.max(0, o?.for ?? 0);
       // A looped state IS the resting face from here on; a one-shot settles
       // back into whatever was resting before it, unless told otherwise.
       restState = (rest as StateId) ?? (loop ? id : restState);
