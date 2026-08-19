@@ -8,7 +8,7 @@
  * its lifecycle.
  */
 import type { Palette } from "../color";
-import { superellipse } from "../shape";
+import { capsulePath, superellipse } from "../shape";
 import type { Traits } from "../traits";
 import type { Body, Deco, Ellipse, Shape } from "./shapes";
 
@@ -21,7 +21,12 @@ export type Fit = (t: Traits, b: Body, face: Ellipse) => Eye[];
 /** Fits the eye cluster against the silhouette's face region on both axes. */
 export const faceFit: Fit = (t, b, face) => {
   const rx = b.rx;
-  const er0 = t.num("eye.rx", 0.075, 0.105) * rx;
+  // Raised from 0.075-0.105 — bloub's own eyes (whose capsule shape
+  // `capsulePath` now draws, see `../shape`) read generous relative to the
+  // body; the smallest seed should still read clearly at 30px. `fit` below
+  // (the `need > 0.9` clamp) still shrinks a cluster that would not fit the
+  // face region, so containment/fusion holds regardless of this floor.
+  const er0 = t.num("eye.rx", 0.085, 0.115) * rx;
   const ratio = t.num("eye.ratio", 1.9, 3.2);
   const scale = t.num("eye.scale", 0.78, 1.24);
   const stretch = t.num("eye.stretch", 0.85, 1.18);
@@ -99,8 +104,14 @@ export function compose(bands: Band[], fit: Fit) {
 
   function render(l: ReturnType<typeof layout>, p: Palette, mo?: boolean): string {
     const r2 = (v: number) => Math.round(v * 100) / 100;
+    // Capsule, not superellipse — bloub's own measured eye shape (see
+    // `capsulePath` in `../shape`), positioned the same way `superellipse`
+    // is: `cx`/`cy`/`rot` baked into the path's own points, not a separate
+    // `transform` — that's what keeps `--mo-lean` below finding the right
+    // axis for the blink squash without knowing which one drew the shape,
+    // and what the geometry tests assume when they regex `d` for numbers.
     const eye = (e: Eye, i: number) => {
-      const path = `<path d="${superellipse(e)}"/>`;
+      const path = `<path d="${capsulePath(e.cx, e.cy, e.rx * 2, e.ry * 2, e.rot)}"/>`;
       return mo
         ? `<g class="mo-eye" style="--mo-wrap:${i ? 1 : -1};--mo-lean:${r2(e.rot)};transform-origin:${r2(e.cx)}px ${r2(e.cy)}px">${path}</g>`
         : path;
