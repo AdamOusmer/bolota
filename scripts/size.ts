@@ -185,8 +185,14 @@ const ENTRIES: {
     // Raised from 15200 by ~600 B for velocity-scaled motion blur: three
     // `feGaussianBlur` filters (body/rings/particles), the damped speed
     // tracking that drives them, and the tightened rAF delta clamp.
+    //
+    // Raised from 15850 with ~150 B of headroom for cross-platform gzip
+    // variance: `Bun.gzipSync` on CI's linux/x64 runners lands ~100 B above
+    // the same bundle gzipped on macOS/arm64 for identical input bytes (the
+    // bundler output itself is unchanged) — this row sat at 100% on a mac and
+    // failed on the GitHub Actions runner with no source change.
     name: "engine",
-    budget: 15850,
+    budget: 16000,
     external: [],
     source: `import { mountEngine } from "../../src/engine";
              globalThis.x = mountEngine;`,
