@@ -553,13 +553,14 @@ export class BotEngine {
     const look = this.lookAtTime(now)
     // bolota divergence from the bloub port: `def.ownsLiveliness` (see its
     // own doc comment, `states.ts`) — a state that already drives gaze and/or
-    // body center itself gets ZERO idle wander/drift/breath composed on top,
-    // the same arbitration bug class as follow-vs-idle (`gaze.ts`) but between
-    // idle's own background life and a different active state. Blink stays
-    // independent (`alive` alone, unchanged) — it is not part of `wander`/
-    // `float` and this state may still want it (`orbit.blinkIn` is false, but
-    // `snooze`'s isn't and this flag never touches states other than the ones
-    // that opt in).
+    // body position itself (`orbit`), or that deliberately wants neither
+    // (`idle`'s new "no-state" meaning), gets ZERO idle wander/drift composed
+    // on top — the same arbitration bug class as follow-vs-idle (`gaze.ts`)
+    // but between idle's own background life and a different active state
+    // or a user-chosen stillness. Blink and breathing are NOT part of this
+    // gate (`face.ts`'s `liveliness` ties both to `alive`/`blink` alone
+    // now) — a still face still blinks and breathes; only the ambient
+    // gaze/position wander is what a state can opt out of.
     const ownsMotion = def.ownsLiveliness ?? false
     const life = liveliness(now, {
       wander: ownsMotion ? 0 : alive ? look.wander : 0,

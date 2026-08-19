@@ -234,8 +234,15 @@ export function liveliness(t: number, opt: LivelinessOptions = {}): Liveliness {
     // is kept here to avoid a fully frozen image.
     driftX: float ? loopNoise(t, 7.9, 1.9) * 0.006 : 0,
     driftY: float ? loopNoise(t, 5.3, 0.3) * 0.007 : 0,
+    // bolota divergence: breathing now tracks `blink`, not `float`. Both are
+    // baseline life signs (per the user's own pairing: "blink + breathe
+    // still alive") independent of ambient WANDER/drift, which a state can
+    // legitimately suppress (`idle`'s new "no-state" meaning, `orbit`
+    // driving its own position) without going lifeless — a still face still
+    // breathes and blinks. Gated on the same thing `blink` already is
+    // (`alive`, the caller's own eyeAlpha check), not a new flag.
     // The width stays constant; only the height breathes very slightly.
-    breath: float ? 1 + Math.sin((t / 3.4) * Math.PI * 2) * 0.005 : 1
+    breath: blink ? 1 + Math.sin((t / 3.4) * Math.PI * 2) * 0.005 : 1
   }
 }
 
