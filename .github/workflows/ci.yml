@@ -20,9 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned, not `latest`: bun's minifier output size shifts between
+      # patch releases and `scripts/size.ts` enforces byte-exact gzip
+      # budgets, so a bun bump can fail this job without any source change.
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.10
 
       - run: bun install --frozen-lockfile
 
@@ -46,7 +49,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.10
 
       - run: bun install
 
