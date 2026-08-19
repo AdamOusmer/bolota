@@ -349,8 +349,11 @@ export function engineStates(): StateId[] {
   return [...STATE_BY_ID.keys()];
 }
 
-/** All 16 named eye expressions bloub's face customizer exposes — a separate
- * axis from `states` above (see `bloub/expressions.ts`): a state is a
+/** All 17 named eye expressions -- bloub's own 16 plus bolota's `love`
+ * (ported from `./expression.ts`'s own `love`, this fork's separate
+ * pre-bloub expression system, still live there today -- see
+ * `bloub/expressions.ts`'s entry for `love`'s full provenance) -- a
+ * separate axis from `states` above (see `bloub/expressions.ts`): a state is a
  * time-bounded animation, an expression is a held pose that only shows on a
  * state that accepts one — `baseFace` (`idle`, `wander`, `swirl`: the
  * "resting face" states) or the bolota-added `acceptsExpression` (`play`,

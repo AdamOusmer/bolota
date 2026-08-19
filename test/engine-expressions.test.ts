@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BotEngine } from "../src/bloub/engine";
-import { EXPRESSION_BY_ID } from "../src/bloub/expressions";
+import { EXPRESSION_BY_ID, EXPRESSIONS } from "../src/bloub/expressions";
 import { eyePoses } from "../src/bloub/face";
 import { STATE_BY_ID } from "../src/bloub/states";
 import { mountEngine } from "../src/engine";
@@ -98,14 +98,14 @@ function eyeD(svg: FakeElement): string | null {
 }
 
 describe("expressions on the engine handle", () => {
-  test("all 16 bloub expression ids are present, bloub's own array order with `neutre` split to `wander`", () => {
+  test("all 17 expression ids are present: bloub's own 16 (array order, `neutre` split to `wander`) plus bolota's own `love`", () => {
     const { handle } = mount();
     expect(handle.expressions).toEqual([
       "wander", "attentive", "surprised", "excited", "happy", "laughing",
       "angry", "sad", "scared", "suspicious", "confused", "curious",
-      "proud", "shy", "unimpressed", "sleepy",
+      "proud", "shy", "unimpressed", "sleepy", "love",
     ]);
-    expect(handle.expressions).toHaveLength(16);
+    expect(handle.expressions).toHaveLength(17);
   });
 
   test("setExpression throws on an unknown id", () => {
@@ -242,5 +242,102 @@ describe("`idle` (no expression set) is the true straight-ahead resting face", (
     // both eyes land on the same side of the axis, proving the drift
     expect(Math.sign(inner!.x)).toBe(Math.sign(outer!.x));
     expect(inner!.x).not.toBeCloseTo(-outer!.x, 1);
+  });
+
+  test("wander id collision: the `wander` EXPRESSION and the `wander` STATE are separate namespaces", () => {
+    const R = 100;
+
+    // Both ids exist, and each resolves to its own namespace's shape --
+    // `EXPRESSION_BY_ID` and `STATE_BY_ID` are two separate `Map`s, so
+    // looking up "wander" in each gets that map's own kind of value, never
+    // the other's.
+    expect(EXPRESSION_BY_ID.has("wander")).toBe(true);
+    expect(STATE_BY_ID.has("wander")).toBe(true);
+    const wanderExpr = EXPRESSION_BY_ID.get("wander")!;
+    const wanderState = STATE_BY_ID.get("wander")!;
+    expect(wanderExpr).toHaveProperty("gaze");
+    expect(wanderExpr).toHaveProperty("eyes");
+    expect(wanderState).toHaveProperty("pose");
+    expect(wanderState).toHaveProperty("duration");
+    // Also resolves through the engine handle's own catalogs (mountEngine's
+    // bridge over the same two maps).
+    const { handle } = mount();
+    expect(handle.expressions).toContain("wander");
+    expect(handle.states).toContain("wander");
+    expect(() => handle.setExpression("wander")).not.toThrow();
+    expect(() => handle.play("wander", { loop: true })).not.toThrow();
+
+    // Setting the expression does not change the state: holding the
+    // `wander` EXPRESSION while playing `idle` (a state whose gaze is
+    // deterministic -- `ownsLiveliness` means no ambient drift added) must
+    // render idle's own bodyPath untouched, with the eyes reading the
+    // expression's REST_GAZE-based pose instead of idle's dead-ahead one --
+    // proof the call landed on the eyes only and never flipped which STATE
+    // is playing (a naive id-keyed implementation could easily switch
+    // states here, since the string is the same).
+    const plainIdle = new BotEngine(R, "idle");
+    const idleWithWanderExpr = new BotEngine(R, "idle");
+    idleWithWanderExpr.setExpression(wanderExpr, 0);
+    for (const t of [0, 1, 2]) {
+      const plain = plainIdle.sample(t);
+      const expressed = idleWithWanderExpr.sample(t);
+      expect(expressed.bodyPath).toBe(plain.bodyPath);
+      expect(expressed.eyes[0]!.matrix).not.toBe(plain.eyes[0]!.matrix);
+    }
+
+    // Playing the state does not change the held expression: holding an
+    // unrelated expression ("happy"), actually PLAYING the `wander` STATE
+    // for a while, then returning to `idle` must still show `happy`'s pose
+    // -- not idle's own dead-ahead gaze, and not wander's REST_GAZE either
+    // -- proving the trip through the `wander` STATE never touched the
+    // held expression. Compared against a reference engine that held
+    // "happy" on `idle` the whole time and never visited `wander` at all:
+    // once both are well past every morph, `sample` is a pure function of
+    // the CURRENT state/expression/time, so the two must read identically
+    // regardless of the different state history behind them.
+    const engine = new BotEngine(R, "idle");
+    const happy = EXPRESSION_BY_ID.get("happy")!;
+    engine.setExpression(happy, 0);
+    engine.setState("wander", 10, true); // actually plays the WANDER STATE
+    engine.setState("idle", 20, false); // back to idle
+    const frame = engine.sample(21); // 1s past idle's own 0.45s morph
+
+    const reference = new BotEngine(R, "idle");
+    reference.setExpression(happy, 0);
+    const referenceFrame = reference.sample(21);
+
+    expect(frame.eyes[0]!.matrix).toBe(referenceFrame.eyes[0]!.matrix);
+  });
+
+  test("`love` (ported from `../src/expression.ts`'s own pre-bloub pose) differs from its nearest neighbours on more than one channel", () => {
+    const love = EXPRESSION_BY_ID.get("love")!;
+    const happy = EXPRESSION_BY_ID.get("happy")!;
+    const surprised = EXPRESSION_BY_ID.get("surprised")!;
+
+    for (const neighbour of [happy, surprised]) {
+      let differingChannels = 0;
+      if (love.eyes[0]!.w !== neighbour.eyes[0]!.w) differingChannels++;
+      if (love.eyes[0]!.h !== neighbour.eyes[0]!.h) differingChannels++;
+      if ((love.eyes[0]!.tilt ?? 0) !== (neighbour.eyes[0]!.tilt ?? 0)) differingChannels++;
+      if (love.split !== neighbour.split) differingChannels++;
+      if (love.gaze.pitch !== neighbour.gaze.pitch) differingChannels++;
+      expect(differingChannels, `love vs ${neighbour.id}`).toBeGreaterThan(1);
+    }
+
+    // The distinguishing property the upstream pose was tuned for (its own
+    // doc comment: "the first cut... rendered in greyscale beside
+    // `surprised`, it was the same face"): love pairs a narrower width with
+    // a taller height than EVERY other entry in the roster, `surprised`
+    // included -- the shape alone reads as different, not just the tint
+    // gap noted in `expressions.ts`.
+    expect(love.eyes[0]!.w).toBeLessThan(surprised.eyes[0]!.w);
+    expect(love.eyes[0]!.h).toBeGreaterThan(surprised.eyes[0]!.h * 0.9);
+    for (const other of EXPRESSIONS) {
+      if (other.id === "love") continue;
+      expect(
+        other.eyes[0]!.w < 0.2 && other.eyes[0]!.h > 0.5,
+        `${other.id} should not share love's narrow+tall combination`
+      ).toBe(false);
+    }
   });
 });

@@ -54,9 +54,10 @@ export interface BotFrame {
  *   expression's orientation would read its arrival value while the morph is
  *   still running, and the eyes would jump on every mood change;
  * - and it has to be absolute on BOTH axes. As a relative value, eye height
- *   used to follow each expression's own — "wander" looks at +28.6deg while
- *   the others sit between -9 and +9 — so the eyes would drop all at once on
- *   the first mood change. What gives an expression its character during
+ *   used to follow each expression's own — the `wander` expression
+ *   (`./expressions.ts`) looks at +28.6deg while the others sit between -9
+ *   and +9 — so the eyes would drop all at once on the first mood change.
+ *   What gives an expression its character during
  *   follow is the SHAPE of its eyes (squinted, round, asymmetric), not where
  *   it looks: that part, the cursor decides.
  *
