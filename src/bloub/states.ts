@@ -164,7 +164,7 @@ export type StateId =
   | 'alert'
   | 'notify'
   | 'exclaim'
-  | 'sleep'
+  | 'snooze'
   | 'egg'
   | 'hexagon'
   | 'play'
@@ -386,7 +386,14 @@ export const STATES: StateDef[] = [
   },
 
   {
-    id: 'sleep',
+    // Renamed from bloub's original id `sleep` to `snooze` (user-sanctioned
+    // divergence from verbatim): this package also has an eye EXPRESSION
+    // named `sleepy` (unrelated, untouched), and the two names side by side
+    // read as the same concept when they are not — this is a body-morph
+    // STATE, not a face expression. Original bloub keeps `sleep`; see
+    // github.com/AdamOusmer/bloub for the unrenamed fork this was ported
+    // from.
+    id: 'snooze',
     duration: 2.4,
     morph: 0.5,
     baseFace: false,
@@ -490,7 +497,22 @@ export const STATES: StateDef[] = [
         sx: 1,
         sy: 1
       }
-      const fade = clamp(t / 0.8) * clamp((3.6 - t) / 0.9)
+      // DIVERGENCE FROM VERBATIM BLOUB (user-sanctioned, see src/engine.ts's
+      // header): bloub's own player never loops one state in place — it
+      // always advances a sequence, so this fade was authored as a one-shot
+      // 0-3.6s window and never needed to repeat. This package's engine does
+      // loop a single state (`play(id, { loop: true })`), and `rot` above
+      // has no such window — it is unclamped, so the body keeps spinning
+      // correctly forever on its own. The rings did not: past t=3.6 this
+      // fade clamped to 0 permanently, so a looping orbit spun a bare,
+      // featureless circle (imperceptible rotation) with its rings gone for
+      // good — which is what the "orbit doesn't look like it's looping"
+      // report was. Wrapping just the fade's own input re-plays the
+      // in/hold/out envelope every 3.6s while `rot` and the per-ring
+      // entrance stagger below (`t - i * 0.13`, intentionally NOT wrapped —
+      // it should only ever happen once) are untouched. Original bloub
+      // (single-shot `t`, no wrap) lives on at github.com/AdamOusmer/bloub.
+      const fade = clamp((t % 3.6) / 0.8) * clamp((3.6 - (t % 3.6)) / 0.9)
       return base({
         sil,
         // les yeux filent autour de la sphere ~3x plus vite que la silhouette
@@ -643,7 +665,7 @@ export const POSES: Record<StateId, number> = {
   alert: 0.75,
   notify: 0.9,
   exclaim: 0.8,
-  sleep: 0.45,
+  snooze: 0.45,
   egg: 0.8,
   hexagon: 0.8,
   play: 0.9,
@@ -661,7 +683,7 @@ export const SEQUENCE: StateId[] = [
   'alert',
   'notify',
   'exclaim',
-  'sleep',
+  'snooze',
   'egg',
   'hexagon',
   'play',

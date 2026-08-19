@@ -39,42 +39,145 @@ import { BotEngine, type BotFrame } from "./bloub/engine";
 import { EXPRESSIONS, EXPRESSION_BY_ID } from "./bloub/expressions";
 import { PROFILE_SAMPLES } from "./bloub/profiles";
 import { POSES, STATE_BY_ID, type StateId } from "./bloub/states";
+import { superellipse } from "./shape";
 import type { Body } from "./styles/shapes";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 /**
- * Polar radius of a superellipse `|x/rx|^n + |y/ry|^n = 1` at angle `theta`
- * (radians, bloub's convention: 0 = +x, increasing clockwise in SVG's
- * y-down space — see `bloub/shape.ts`'s `ANGLES`). Exact for the "round"
- * silhouette; for the shapes with a custom `path` override (capsule's
- * stadium, droplet's taper, organic/cloud's spline, hexagon/triangle's
- * polygon — see `styles/shapes.ts`) it is the bounding superellipse those
- * shapes are still fit inside, not their exact rendered outline. Good
- * enough to seed bloub's morph-target profile with the right proportions;
- * not pixel-identical to `blobatar()`'s own path for those five shapes.
+ * Flattens an SVG path `d` into one polyline per subpath. Covers exactly
+ * the command vocabulary every body-drawing function in `styles/shapes.ts`
+ * emits — `superellipse`/`spline` (M/C), `box` (M/H/V/Z), `polygon` (M/Q) —
+ * nothing here needs `A` (arcs): that command only ever appeared in eye
+ * paths, and those are drawn separately (`capsulePath` in `shape.ts`).
+ * Curves are subdivided into `steps` straight segments so the result can be
+ * ray-cast against directly.
  */
-function radiusAt(theta: number, body: Pick<Body, "rx" | "ry" | "n" | "rot">): number {
-  const t = theta - (body.rot * Math.PI) / 180;
-  const c = Math.abs(Math.cos(t));
-  const s = Math.abs(Math.sin(t));
-  const n = body.n;
-  return (c ** n / body.rx ** n + s ** n / body.ry ** n) ** (-1 / n);
+function flattenPath(d: string, steps = 12): [number, number][][] {
+  const cmds = d.match(/[MLHVCQZ][^MLHVCQZ]*/gi) ?? [];
+  const nums = (s: string) => (s.match(/-?\d+\.?\d*/g) ?? []).map(Number);
+  const polys: [number, number][][] = [];
+  let poly: [number, number][] = [];
+  let x = 0, y = 0, sx = 0, sy = 0;
+  for (const raw of cmds) {
+    const args = nums(raw.slice(1));
+    switch (raw[0]!.toUpperCase()) {
+      case "M":
+        if (poly.length > 1) polys.push(poly);
+        x = args[0]!; y = args[1]!; sx = x; sy = y;
+        poly = [[x, y]];
+        break;
+      case "L":
+        x = args[0]!; y = args[1]!;
+        poly.push([x, y]);
+        break;
+      case "H":
+        x = args[0]!;
+        poly.push([x, y]);
+        break;
+      case "V":
+        y = args[0]!;
+        poly.push([x, y]);
+        break;
+      case "C": {
+        const [x1, y1, x2, y2, x3, y3] = args as [number, number, number, number, number, number];
+        for (let i = 1; i <= steps; i++) {
+          const s = i / steps, m = 1 - s;
+          poly.push([
+            m ** 3 * x + 3 * m ** 2 * s * x1 + 3 * m * s ** 2 * x2 + s ** 3 * x3,
+            m ** 3 * y + 3 * m ** 2 * s * y1 + 3 * m * s ** 2 * y2 + s ** 3 * y3,
+          ]);
+        }
+        x = x3; y = y3;
+        break;
+      }
+      case "Q": {
+        const [x1, y1, x2, y2] = args as [number, number, number, number];
+        for (let i = 1; i <= steps; i++) {
+          const s = i / steps, m = 1 - s;
+          poly.push([m ** 2 * x + 2 * m * s * x1 + s ** 2 * x2, m ** 2 * y + 2 * m * s * y1 + s ** 2 * y2]);
+        }
+        x = x2; y = y2;
+        break;
+      }
+      case "Z":
+        x = sx; y = sy;
+        poly.push([sx, sy]);
+        break;
+    }
+  }
+  if (poly.length > 1) polys.push(poly);
+  return polys;
+}
+
+function circlePolygon(cx: number, cy: number, r: number, steps = 32): [number, number][] {
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+  }
+  return pts;
 }
 
 /**
- * Samples `body` at bloub's `PROFILE_SAMPLES` (64) fixed angles and
- * normalizes by `body.rx` — the seed's own resting radius — so the result
- * lands in bloub's "1.0 = resting ball radius" unit convention, the same
- * one `bloub/profiles.ts`'s hand-measured arrays use. This becomes the
- * `shape` argument to `BotEngine`, which only substitutes it in on states
- * flagged `baseBody` (idle, wink, wide, notify, swirl) — every other state
- * keeps bloub's own profile, by design (see `bloub/states.ts`).
+ * Farthest distance from `(ox, oy)` to any edge of any polygon in `polys`
+ * along the ray at angle `theta` — the union envelope of every shape in the
+ * set, which is exactly what overlapping filled circles/paths compose to
+ * visually. 0 if the ray hits nothing (the caller falls back to `body.rx`
+ * for that angle).
  */
-function seededSilhouette(body: Body): number[] {
+function rayFarthest(ox: number, oy: number, theta: number, polys: [number, number][][]): number {
+  const dx = Math.cos(theta), dy = Math.sin(theta);
+  let best = 0;
+  for (const poly of polys) {
+    for (let i = 0; i < poly.length - 1; i++) {
+      const [x1, y1] = poly[i]!;
+      const [x2, y2] = poly[i + 1]!;
+      const ex = x2 - x1, ey = y2 - y1;
+      const det = ex * dy - ey * dx;
+      if (Math.abs(det) < 1e-9) continue;
+      const t = (ex * (y1 - oy) - ey * (x1 - ox)) / det;
+      const u = (dx * (y1 - oy) - dy * (x1 - ox)) / det;
+      if (t > best && u >= 0 && u <= 1) best = t;
+    }
+  }
+  return best;
+}
+
+/**
+ * Samples the seed's *actual rendered body* — core outline plus petals plus
+ * any extra unioned shapes, exactly what `styles/compose.ts`'s `render()`
+ * draws — at bloub's `PROFILE_SAMPLES` (64) fixed angles, and normalizes by
+ * `body.rx` so the result lands in bloub's "1.0 = resting ball radius" unit
+ * convention, the same one `bloub/profiles.ts`'s hand-measured arrays use.
+ *
+ * This used to be the *analytic* superellipse formula alone — exact for
+ * "round" and "boxy" (no `path` override), wrong for the other eight
+ * styles, most visibly capsule: its body is a rectangle-plus-two-circles
+ * stadium (`styles/shapes.ts`'s `capsule.path`), and approximating that
+ * with a smooth superellipse curve is indistinguishable from a squashed
+ * ellipse — which is exactly the bug report this replaced. Geometric
+ * ray-casting against the real outline is exact for every style instead.
+ *
+ * This becomes the `shape` argument to `BotEngine`, which only substitutes
+ * it in on states flagged `baseBody` (idle, wink, wide, notify, swirl) —
+ * every other state keeps bloub's own profile, by design (`bloub/states.ts`).
+ */
+function seededSilhouette(
+  body: Body,
+  draw: ((b: Body) => string) | undefined,
+  petals: { cx: number; cy: number; r: number }[],
+  extra: string[],
+): number[] {
+  const polys = flattenPath(draw ? draw(body) : superellipse(body));
+  for (const p of petals) polys.push(circlePolygon(p.cx, p.cy, p.r));
+  for (const e of extra) polys.push(...flattenPath(e));
+
   const radii = new Array<number>(PROFILE_SAMPLES);
   for (let i = 0; i < PROFILE_SAMPLES; i++) {
-    radii[i] = radiusAt((i / PROFILE_SAMPLES) * Math.PI * 2, body) / body.rx;
+    const theta = (i / PROFILE_SAMPLES) * Math.PI * 2;
+    const r = rayFarthest(body.cx, body.cy, theta, polys);
+    radii[i] = (r > 0 ? r : body.rx) / body.rx;
   }
   return radii;
 }
@@ -177,11 +280,11 @@ export function mountEngine(
   opts?: BlobatarOptions,
 ): EngineHandle {
   const doc = svgRoot.ownerDocument;
-  const { palette, body } = _layout(name, opts);
+  const { palette, body, draw, petals, extra } = _layout(name, opts);
   const head = palette.head ?? "#000";
   const eye = palette.eye ?? "#fff";
 
-  const engine = new BotEngine(body.rx, "idle", seededSilhouette(body), null);
+  const engine = new BotEngine(body.rx, "idle", seededSilhouette(body, draw, petals, extra), null);
   const uid = Math.random().toString(36).slice(2, 8);
 
   // Three independent blur filters — body, rings, particles — each a single
@@ -428,7 +531,7 @@ export function mountEngine(
       // `reset()` fired every frame, pinning `now - tCur` at ~0 forever.
       // That reads as the state frozen at its very first instant, which is
       // this file's root cause for burst never exploding, orbit/comet never
-      // looping, and thinking/alert/sleep/exclaim/notify/swirl reading as
+      // looping, and thinking/alert/snooze/exclaim/notify/swirl reading as
       // static tiles: all of it was one missing assignment.
       current = "idle";
       stateStart = clock;
@@ -464,6 +567,15 @@ export function mountEngine(
       stateStart = clock;
       loop = !!o?.loop;
       engine.setState(id, clock);
+      // A state switch can jump the body's/arcs'/dots' leading reference
+      // point discontinuously (e.g. orbit's spinning-triangle point to
+      // idle's resting seeded-body point) — invalidating the velocity
+      // trackers here means that jump is never read as one frame of
+      // enormous speed, which would otherwise spike the damped blur high
+      // right as the state settles down, the opposite of what it should do.
+      bodyPtValid = false;
+      arcPtValid = false;
+      dotPtValid = false;
       ensureRunning();
     },
     setExpression(name) {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { _layout, blobatar } from "../src/blobatar";
 import { engineStates, mountEngine, type EngineHandle } from "../src/engine";
 import { runSequence } from "../src/sequences";
 
@@ -126,7 +127,7 @@ describe("shared root cause: loop never re-armed stateStart", () => {
   // *every* subsequent frame, `reset()` fired every frame, and `now - tCur`
   // stayed pinned near 0 forever. That single missing assignment explained
   // the whole reported grid: burst never exploding, orbit/comet never
-  // looping, and thinking/alert/sleep/exclaim/notify/swirl reading as
+  // looping, and thinking/alert/snooze/exclaim/notify/swirl reading as
   // static tiles — none of those states needed an individual fix.
 
   test("two independently mounted engines advance independently", () => {
@@ -151,7 +152,7 @@ describe("shared root cause: loop never re-armed stateStart", () => {
     expect(a.doc.defaultView).not.toBe(b.doc.defaultView);
   });
 
-  for (const state of ["thinking", "alert", "sleep", "exclaim"] as const) {
+  for (const state of ["thinking", "alert", "snooze", "exclaim"] as const) {
     test(`"${state}" actually moves once looping (t=0.5s vs t=1.5s differ)`, () => {
       const { doc, svg, handle } = mount();
       handle.play(state, { loop: true });
@@ -258,11 +259,11 @@ describe("entrance handoff", () => {
 // clock rather than merely holding its last frame.
 
 describe("every state moves — full 15-state sweep", () => {
-  // engine-core's own sweep above already pins thinking/alert/sleep/exclaim
+  // engine-core's own sweep above already pins thinking/alert/snooze/exclaim
   // as the root-cause regression test; this closes the rest of the catalog
   // (`engineStates()`, `bun test`-stable order per `bloub/states.ts`) so no
   // state can regress back to a static tile unnoticed.
-  const alreadyCovered = new Set(["thinking", "alert", "sleep", "exclaim"]);
+  const alreadyCovered = new Set(["thinking", "alert", "snooze", "exclaim"]);
   for (const state of engineStates()) {
     if (alreadyCovered.has(state)) continue;
     test(`"${state}" actually moves once looping (t=0.5s vs t=1.5s differ)`, () => {
@@ -339,5 +340,131 @@ describe("loop:true genuinely restarts, it does not clamp on the last frame", ()
     const afterRestart = bbox(parts(svg as unknown as FakeElement).bodyPath.getAttribute("d")!);
 
     expect(afterRestart.w).toBeLessThan(plateaued.w * 0.85);
+  });
+});
+
+/** Body/eye/decor group `d`/`circle` numbers only — matches `bbox()` above
+ * but for the *static* renderer's markup, which also emits `<circle>`
+ * petals (cloud/nub/sun/capsule) that a plain `d="..."` sweep would miss. */
+function staticBbox(svg: string) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const m of svg.matchAll(/<path d="([^"]+)"/g)) {
+    const nums = m[1]!.match(/-?\d+\.?\d*/g)?.map(Number) ?? [];
+    for (let i = 0; i + 1 < nums.length; i += 2) {
+      const x = nums[i]!, y = nums[i + 1]!;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  for (const m of svg.matchAll(/<circle cx="([^"]+)" cy="([^"]+)" r="([^"]+)"/g)) {
+    const cx = +m[1]!, cy = +m[2]!, r = +m[3]!;
+    if (cx - r < minX) minX = cx - r;
+    if (cx + r > maxX) maxX = cx + r;
+    if (cy - r < minY) minY = cy - r;
+    if (cy + r > maxY) maxY = cy + r;
+  }
+  return { w: maxX - minX, h: maxY - minY };
+}
+
+describe("states completeness: nothing bloub ships can silently drop out", () => {
+  test("every catalog state is on the handle", () => {
+    const { handle } = mount();
+    // Locks the count and the exact ids so a future rename or a state
+    // dropped from `STATE_BY_ID` fails here first, not in a screenshot.
+    expect(handle.states.sort()).toEqual(
+      [
+        "idle", "thinking", "wink", "wide", "alert", "notify", "exclaim",
+        "snooze", "egg", "hexagon", "play", "orbit", "swirl", "burst", "comet",
+      ].sort(),
+    );
+  });
+
+  for (const state of [
+    "idle", "thinking", "wink", "wide", "alert", "notify", "exclaim",
+    "snooze", "egg", "hexagon", "play", "orbit", "swirl", "burst", "comet",
+  ] as const) {
+    test(`"${state}" renders a non-empty body and animates under the fixed clock`, () => {
+      const { doc, svg, handle } = mount();
+      handle.play(state, { loop: true });
+      run(doc, 200);
+      const d0 = parts(svg as unknown as FakeElement).bodyPath.getAttribute("d");
+      expect(d0, state).toBeTruthy();
+      expect(d0!.length, state).toBeGreaterThan(10);
+      run(doc, 1500);
+      const d1 = parts(svg as unknown as FakeElement).bodyPath.getAttribute("d");
+      expect(d1, state).not.toBe(d0);
+    });
+  }
+});
+
+describe("engine idle silhouette matches the static renderer, every shape family", () => {
+  // Root cause (see `seededSilhouette` in `engine.ts`): the seeded profile
+  // used to come from the *analytic* superellipse formula alone, which is
+  // exact only for "round"/"boxy" (no custom `path`). The other eight
+  // families draw something else entirely — capsule a rectangle-plus-two-
+  // circles stadium, cloud/organic a jittered spline, hexagon/triangle a
+  // polygon — and approximating any of those with a smooth superellipse
+  // reads as a wrong, often "squashed ellipse" aspect. `seededSilhouette`
+  // now ray-casts the real rendered outline (core path + petals + extra)
+  // instead, so this must hold for every family, not just the one that
+  // happened to be in a screenshot.
+  const SEEDS: [string, string][] = [
+    ["round-family-seed-1", "round"],
+    ["organic-family-seed-7", "organic"],
+    ["boxy-family-seed-3", "boxy"],
+    ["nub-family-seed-2", "nub"],
+    ["cloud-family-seed-9", "cloud"],
+    ["sun-family-seed-4", "sun"],
+  ];
+
+  for (const [seed] of SEEDS) {
+    test(`"${seed}": engine idle bbox matches the static render's aspect and size`, () => {
+      const { shape } = _layout(seed);
+      const { doc, svg } = mount(seed);
+      run(doc, 50); // a couple of idle frames, well inside one breath cycle
+      const engine = bbox(parts(svg as unknown as FakeElement).bodyPath.getAttribute("d")!);
+      const stat = staticBbox(blobatar(seed, { background: false }));
+
+      // Tight on purpose: this is the exact bug that shipped. A tolerance
+      // loose enough to hide a wrong-aspect reconstruction defeats the
+      // point of the assertion — see the round-2 report for why the
+      // previous version of this file's tolerance passed on a bug.
+      expect(engine.w, `${seed} (${shape}) width`).toBeGreaterThan(stat.w * 0.9);
+      expect(engine.w, `${seed} (${shape}) width`).toBeLessThan(stat.w * 1.1);
+      expect(engine.h, `${seed} (${shape}) height`).toBeGreaterThan(stat.h * 0.9);
+      expect(engine.h, `${seed} (${shape}) height`).toBeLessThan(stat.h * 1.1);
+    });
+  }
+});
+
+describe("motion blur decays when velocity drops", () => {
+  function bodyStdDev(svg: FakeElement): number {
+    const filterDefs = svg.children[0]!.children[0]!;
+    const bodyFilter = filterDefs.children[0]!;
+    const fe = bodyFilter.children[0]!;
+    return Number(fe.getAttribute("stdDeviation") ?? "0");
+  }
+
+  test("orbit's body blur ramps up while spinning, then decays to ~0 once velocity is actually low", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("orbit", { loop: true });
+    run(doc, 600); // several fast frames — enough for the damper to climb
+    const spinning = bodyStdDev(svg as unknown as FakeElement);
+    expect(spinning).toBeGreaterThan(0.3);
+
+    handle.play("idle"); // velocity drops hard: breathing/blinking only —
+    // but not instantly. `setState` crossfades over idle's own `morph`
+    // (0.45s), and the body is still blending *from* orbit's fast pose for
+    // that whole window, which is genuine motion, not the bug — the 300ms
+    // budget applies from the point velocity is actually low, so this
+    // clears the morph window first.
+    run(doc, 500);
+    const midway = bodyStdDev(svg as unknown as FakeElement);
+    run(doc, 300);
+    const settled = bodyStdDev(svg as unknown as FakeElement);
+    expect(settled).toBeLessThan(0.05);
+    expect(settled).toBeLessThanOrEqual(midway);
   });
 });
