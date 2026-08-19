@@ -310,6 +310,26 @@ export interface StateDef {
    * its rotation's own period so the wrap is exact, not approximate.
    */
   period?: number
+  /**
+   * How this state should cover a window longer than itself, when a caller
+   * asks for one (`play({ for })`, ../engine.ts).
+   *
+   * Default, and the default for anything not listed: `stretch`, its own
+   * timeline slowed so one pass fills the slot. That is the only filler that
+   * keeps continuity for a state whose decor enters and leaves once — swirl's
+   * rings, play's, orbit's; repeating them makes the rings vanish and reappear
+   * on every pass, which is what a repeat-based filler was reported doing.
+   *
+   * `hold` is for a state that reads as a single physical event: burst's
+   * collapse and regrow cannot be slowed without becoming a different, wrong
+   * gesture (an explosion in slow motion), and cannot repeat without exploding
+   * twice. It plays once at its own speed and then keeps its settled pose for
+   * the rest of the window.
+   *
+   * A state with a `period` needs neither: its timeline already wraps, so it
+   * simply keeps running.
+   */
+  fill?: 'stretch' | 'hold'
   pose(local: number): Pose
 }
 
@@ -836,6 +856,8 @@ export const STATES: StateDef[] = [
 
   {
     id: 'burst',
+    // A single physical event: neither slowable nor repeatable, see `fill`.
+    fill: 'hold',
     duration: 2.6,
     // the body is recomposed at 1.7 + 0.7
     minDuration: 2.4,
@@ -895,6 +917,8 @@ export const STATES: StateDef[] = [
 
   {
     id: 'comet',
+    // A single physical event: neither slowable nor repeatable, see `fill`.
+    fill: 'hold',
     duration: 2.4,
     // the dot recomposes at 1.85 + 0.6 = 2.45, 0.05s after the video's cut:
     // this remainder finishes during the next cross-fade, as in the

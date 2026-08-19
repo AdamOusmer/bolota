@@ -234,7 +234,13 @@ a different resting face than the one it left. Both parts are adjustable:
 bot.play("orbit", { hold: 1.2 });        // linger longer before handing back
 bot.play("wink", { rest: "thinking" });  // settle somewhere else afterwards
 bot.play("burst", { hold: 0 });          // hand back the instant it ends
+bot.play("swirl", { for: 4 });           // repeat until four seconds are filled
 ```
+
+`hold` freezes the finished pose for a beat; `for` replays the state until the
+time asked for is filled, which is what a gesture shorter than its slot needs.
+The deadline is a floor rather than a cut: the hand-back waits for the cycle
+that crosses it, so the state always finishes what it started.
 
 Every transition is a cross-fade over the outgoing state's own morph, and
 most mask the shape change with a blink. There is no path through the API

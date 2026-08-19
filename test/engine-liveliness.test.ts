@@ -763,3 +763,148 @@ describe("one-shot states dwell, then morph back to the face they left", () => {
   });
 });
 
+
+describe("play({ for }) — the state owns a window, and fills it its own way", () => {
+  // Owner's correction, and the reason this is not one rule: filling a window
+  // by REPEATING breaks continuity for any state whose decor enters and leaves
+  // once. swirl's rings vanished and came back on every pass. So the filler is
+  // the state's own business now (`fill` in bloub/states.ts): periodic states
+  // keep running, most stretch their own timeline over the window, and burst
+  // holds its settled pose because an explosion can neither be slowed nor
+  // repeated without becoming a different gesture.
+  // Decor is drawn into the back and front layers, sometimes as bare paths
+  // (swirl's rings, burst's particles), sometimes wrapped in a group (the
+  // exclamation mark's bar), so count every node either layer holds.
+  // A resting face still keeps one node in these layers, so every check below
+  // is against the resting baseline rather than against zero.
+  const decorAt = (svg: FakeElement) => {
+    const count = (el: FakeElement): number =>
+      el.children.length + el.children.reduce((sum, c) => sum + count(c), 0);
+    const p = parts(svg);
+    return count(p.back) + count(p.front);
+  };
+
+  test("swirl: the rings stay up for the whole window instead of blinking per pass", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 400);
+
+    const baseline = decorAt(svg as unknown as FakeElement);
+
+    // swirl is 1.3s; ask it to cover 4s.
+    handle.play("swirl", { for: 4, hold: 0 });
+
+    // Sample right through the window. A repeating filler shows up here as a
+    // ring count that returns to zero mid-window and climbs again; a stretched
+    // one never does.
+    let sawRings = false;
+    let dropouts = 0;
+    let wasUp = false;
+    const ringTrace: number[] = [];
+    for (let t = 0; t < 3600; t += 100) {
+      run(doc, 100);
+      const rings = decorAt(svg as unknown as FakeElement) - baseline;
+      ringTrace.push(rings);
+      if (rings > 0) {
+        sawRings = true;
+        wasUp = true;
+      } else if (wasUp) {
+        dropouts++;
+        wasUp = false;
+      }
+    }
+    expect(sawRings).toBe(true);
+    expect(dropouts).toBe(0);
+
+    // and it does end
+    run(doc, 1200);
+    expect(decorAt(svg as unknown as FakeElement)).toBe(baseline);
+  });
+
+  test("orbit: a periodic state keeps running, rings up nearly the whole window", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 400);
+
+    const baseline = decorAt(svg as unknown as FakeElement);
+    handle.play("orbit", { for: 7, hold: 0 });
+
+    // orbit's own rings fade at its period boundary by design (that is its
+    // choreography, not a filler artifact), so this asks for presence across
+    // the window rather than absolute continuity: a repeat-based filler, which
+    // restarts the state from zero, drops well under this.
+    let up = 0;
+    const samples = 60;
+    for (let i = 0; i < samples; i++) {
+      run(doc, 100);
+      if (decorAt(svg as unknown as FakeElement) - baseline > 0) up++;
+    }
+    expect(up / samples).toBeGreaterThan(0.8);
+  });
+
+  test("burst: one explosion, held afterwards, never a second one", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 400);
+
+    const baseline = decorAt(svg as unknown as FakeElement);
+    handle.play("burst", { for: 6, hold: 0 });
+    // Particle count over the window: a repeat would show a second rise.
+    const counts: number[] = [];
+    for (let t = 0; t < 6000; t += 200) {
+      run(doc, 200);
+      counts.push(decorAt(svg as unknown as FakeElement) - baseline);
+    }
+    let rises = 0;
+    let prev = 0; // the run starts with no decor on screen
+    for (const c of counts) {
+      if (c > 0 && prev === 0) rises++;
+      prev = c;
+    }
+    expect(rises).toBe(1);
+  });
+
+  test("a window shorter than the state is a floor, not a truncation", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 400);
+
+    const baseline = decorAt(svg as unknown as FakeElement);
+    // exclaim is 2s: asking for 0.5s must still play the whole thing.
+    handle.play("exclaim", { for: 0.5, hold: 0 });
+    run(doc, 1500);
+    expect(decorAt(svg as unknown as FakeElement)).toBeGreaterThan(baseline);
+  });
+
+  test("no jumps anywhere across a windowed run", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 400);
+    handle.play("swirl", { for: 4, hold: 0 });
+
+    const mid = () => {
+      const eyes = parts(svg as unknown as FakeElement).eyes.children;
+      const pts = eyes.map((e) => {
+        const m = /matrix\(([^,]+),([^,]+),([^,]+),([^,]+),(-?[\d.]+),(-?[\d.]+)\)/.exec(
+          e.getAttribute("transform") ?? "",
+        );
+        return m ? { x: Number(m[5]), y: Number(m[6]) } : { x: 0, y: 0 };
+      });
+      return {
+        x: pts.reduce((a, p) => a + p.x, 0) / (pts.length || 1),
+        y: pts.reduce((a, p) => a + p.y, 0) / (pts.length || 1),
+      };
+    };
+
+    let worst = 0;
+    let prev = mid();
+    for (let i = 0; i < 350; i++) {
+      run(doc, 16);
+      const now = mid();
+      worst = Math.max(worst, Math.hypot(now.x - prev.x, now.y - prev.y));
+      prev = now;
+    }
+    expect(worst).toBeLessThan(6);
+  });
+});
+

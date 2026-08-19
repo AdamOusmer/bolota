@@ -193,8 +193,11 @@ const ENTRIES: {
     // cross-platform gzip variance: `Bun.gzipSync` on CI's linux/x64 runners
     // lands ~100 B above the same bundle gzipped on macOS/arm64 for identical
     // input bytes, which once failed this row on CI with no source change.
+    // Raised from 17400 (2026-08-20) for the per-seed gaze solve: the window
+    // fillers, and `_safeGaze` walking a real silhouette with the eye's own
+    // extent at mount. Measured 17618, so this keeps the usual ~3% of room.
     name: "engine",
-    budget: 17400,
+    budget: 18200,
     external: [],
     source: `import { mountEngine } from "../../src/engine";
              globalThis.x = mountEngine;`,

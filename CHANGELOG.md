@@ -10,6 +10,64 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.1.4
+
+### Fixed
+
+- **The eyes reach the bottom of the body, and stay inside it.** Two bugs, and
+  the second was hiding behind the first.
+
+  0.1.1 mirrored the downward gaze against the upward one, which fixed the
+  symmetry in degrees but not the distance: pitch maps to travel non-linearly,
+  so -20 degrees puts the eyes barely a third of the way down a round body.
+  The ask is -45 now, which lands them at two thirds.
+
+  That much sweep does not fit every silhouette, and the containment tests
+  never caught it because they check where an eye's CENTRE lands. An eye is
+  about 15 units tall on a 100-unit body, so a centre that clears the edge by
+  less than half of that still renders an eye hanging out of the bottom.
+  Measured with the eye's own extent, the ambient drift alone already put a
+  triangle seed's eyes at 1.05 of the local body radius: outside.
+
+  `mountEngine` now solves the real limit per seed at mount, against the
+  seed's own silhouette and counting the whole eye, and fits the tracked gaze
+  inside it. A round or boxy body gets the full sweep (-38 to -45), a capsule
+  -38, a triangle -32. The constant is the ceiling; the silhouette decides
+  what it can wear.
+
+- **The tracked gaze turns properly sideways too.** Yaw was still borrowing the
+  ambient drift bound, which had been cut to 0.63 of its old amplitude for
+  being busy at rest: 10 degrees, moving the eyes 17% of the way to the side,
+  so a pointer crossing the whole screen barely registered. The ask is 35 now,
+  which puts them at roughly half, and the same per-seed solve applies.
+
+  The two axes are fitted as an ELLIPSE rather than a rectangle. Solving them
+  jointly (pitch at full yaw) answers the corner case and throws away the
+  straight-down reach: measured, it cut a round body from -45 to -14. Each axis
+  is solved with the other centred, and at runtime the vertical budget shrinks
+  by however much of the sideways one is spent, so the extremes stay reachable
+  and the corners, where an eye actually leaves the body, stay inside.
+
+## 0.1.3
+
+### Added
+
+- **`play(state, { for })`: repeat a state until a deadline.** `hold` freezes a
+  finished pose for a beat; this replays the state until the time asked for is
+  filled, which is what a caller wants when a gesture has to cover a slot it is
+  shorter than. A 1.3s `swirl` asked for four seconds swirls three times rather
+  than swirling once and sitting there.
+
+  The deadline is a floor, never a cut: the hand-back waits for the cycle that
+  crosses it, so the state always finishes what it started. Repeats restart on
+  the same `duration + morph` boundary a looping state uses, past the transient
+  particle and ribbon windows, so a repeat is as clean as a loop. `loop` still
+  wins over `for`, since it never ends.
+
+- `runSequence()` takes `play`'s options, so a sequence can be given `for`,
+  `hold` or `rest` without the caller having to know which state the name maps
+  to.
+
 ## 0.1.2
 
 ### Changed

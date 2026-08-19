@@ -22,7 +22,17 @@ export const SEQUENCES = {
 
 export type SequenceName = keyof typeof SEQUENCES;
 
-/** Plays a named sequence once on an engine mounted by `mountEngine`. */
-export function runSequence(handle: EngineHandle, name: SequenceName): void {
-  handle.play(SEQUENCES[name]);
+/**
+ * Plays a named sequence on an engine mounted by `mountEngine`.
+ *
+ * Takes `play`'s own options, so a sequence can fill a slot (`for`), linger on
+ * its finished pose (`hold`), or settle somewhere specific (`rest`) without a
+ * caller having to know which state the name maps to.
+ */
+export function runSequence(
+  handle: EngineHandle,
+  name: SequenceName,
+  opts?: Parameters<EngineHandle["play"]>[1],
+): void {
+  handle.play(SEQUENCES[name], opts);
 }
