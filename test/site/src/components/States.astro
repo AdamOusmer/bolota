@@ -3,7 +3,82 @@ import SectionHead from "./SectionHead.astro";
 ---
 
 <section class="section wrap" id="states">
-  <SectionHead title="States" description="Every state, live, looping." />
+  <SectionHead kicker="Specimens" title="States" description="Every state, live, looping, side by side." />
 
-  <div class="tile-grid" data-states-grid style="--tile-min:128px" data-reveal></div>
+  <div class="specimens" data-states-grid data-reveal style="--reveal-i:1"></div>
 </section>
+
+<style is:global>
+  /* Boxless specimen collection (spec §4): no tile chrome, no card, no
+     border around each entry. Separation comes from generous spacing and a
+     hairline rule between rows only, drawn with the fixed column counts
+     below so `:nth-child` can tell which items sit in row one at each
+     breakpoint. `is:global` because scripts/sections/states.ts builds this
+     markup client-side, past Astro's scoping hash. */
+  .specimens {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    column-gap: clamp(24px, 5vw, 56px);
+  }
+
+  .specimen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding-block: clamp(28px, 4vw, 44px);
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+  }
+
+  .specimens > .specimen:nth-child(-n + 2) {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .specimen__avatar {
+    width: var(--avatar-size, 64px);
+    height: var(--avatar-size, 64px);
+  }
+
+  .specimen__label {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-variant: all-small-caps;
+    letter-spacing: 0.04em;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+
+  @media (min-width: 620px) {
+    .specimens {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .specimens > .specimen:nth-child(-n + 2) {
+      border-top: 1px solid var(--border-color);
+      padding-top: clamp(28px, 4vw, 44px);
+    }
+
+    .specimens > .specimen:nth-child(-n + 3) {
+      border-top: none;
+      padding-top: 0;
+    }
+  }
+
+  @media (min-width: 960px) {
+    .specimens {
+      grid-template-columns: repeat(5, 1fr);
+    }
+
+    .specimens > .specimen:nth-child(-n + 3) {
+      border-top: 1px solid var(--border-color);
+      padding-top: clamp(28px, 4vw, 44px);
+    }
+
+    .specimens > .specimen:nth-child(-n + 5) {
+      border-top: none;
+      padding-top: 0;
+    }
+  }
+</style>
