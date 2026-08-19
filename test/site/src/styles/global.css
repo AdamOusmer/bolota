@@ -1,0 +1,1098 @@
+/*
+ * bolota showcase, shared component styles.
+ *
+ * Spacing, radii, motion timing and the section heading pattern are lifted
+ * from itsmavey.com (source: ~/WebstormProjects/Portfolio, src/styles/
+ * style.css, src/layouts/layout.astro, src/components/SectionHeading.astro,
+ * ui/buttons/Button.astro, ui/ProjectCard.astro), not invented here. Fonts
+ * are a later, deliberate departure from that mirror: body/UI keeps the
+ * Portfolio's Space Mono, but headline type is Bricolage Grotesque, not
+ * Space Grotesk, for the marketing pass (see the --font-display token
+ * below). Both are self-hosted through @fontsource, imported in
+ * src/layouts/Base.astro.
+ *
+ * Every color is a `var(--token)` defined in ./tokens.css, imported first;
+ * see Base.astro, never a literal here. That file's own header explains the
+ * naming and the two structural exceptions (the data: URI favicon, and the
+ * library's own seed-computed avatar palettes).
+ */
+
+:root {
+  /* Display: Bricolage Grotesque, a proper display-weight variable
+     grotesk (200-800, imported at 600/800), swapped in for the marketing
+     pass, replacing the Portfolio-mirrored Space Grotesk for headline type
+     only. Body/UI stays Space Mono; see global.css's header comment. */
+  --font-display: "Bricolage Grotesque", sans-serif;
+  --font-mono: "Space Mono", monospace;
+
+  --ease-smooth: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-elastic: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --radius-card: 12px;
+  --radius-sm: 8px;
+  --radius-pill: 999px;
+
+  --content-max: 1100px;
+  --space-section: clamp(48px, 7vw, 88px);
+
+  --nav-h: 64px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+}
+
+html {
+  background: var(--bg-color);
+  color-scheme: dark;
+}
+
+html.lenis {
+  scroll-behavior: auto !important;
+}
+
+body {
+  background: var(--bg-color);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+  overflow-x: clip;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+}
+
+::selection {
+  background: rgb(var(--light-rgb) / 0.25);
+  color: var(--text-main);
+}
+
+/* ── light field (background) ──
+   Restored verbatim (visually) to the site's first-iteration background per
+   an explicit user decision to revert later "simplify the lights" edits:
+   two large blurred two-tone (warm + cool) radial gradients that slowly
+   drift, a canvas of small warm/cool motes, a noise grain overlay, and a
+   pointer-pinned torch spotlight. The warm tone reuses --light-rgb (the
+   site's one accent); the cool tone and the torch's warm-white are their
+   own tokens (--glow-cool-rgb, --torch-rgb in tokens.css) since nothing
+   else on the page needs that exact hue, still tokens, not literals, per
+   the no-raw-colors-outside-tokens.css rule. */
+
+.lightfield {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.lightfield__rays {
+  position: absolute;
+  inset: -10%;
+  background:
+    radial-gradient(38vw 38vw at var(--rx, 22%) var(--ry, 14%), rgb(var(--light-rgb) / 0.16), transparent 62%),
+    radial-gradient(46vw 46vw at var(--rx2, 82%) var(--ry2, 62%), rgb(var(--glow-cool-rgb) / 0.16), transparent 65%),
+    radial-gradient(60vw 60vw at 50% 100%, rgb(var(--light-rgb) / 0.06), transparent 70%);
+  filter: blur(4px);
+  animation: driftRays 34s ease-in-out infinite alternate;
+}
+
+@keyframes driftRays {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(-1.5%, 2%, 0) scale(1.04);
+  }
+}
+
+.lightfield__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.lightfield__motes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.lightfield__torch {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(260px circle at var(--px, 50%) var(--py, 50%), rgb(var(--torch-rgb) / 0.09), transparent 60%);
+  opacity: 0;
+  transition: opacity 500ms var(--ease-smooth);
+}
+
+.lightfield__torch.is-active {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lightfield__rays {
+    animation: none;
+  }
+}
+
+/* ── layout shell ── */
+
+main {
+  position: relative;
+  z-index: 1;
+}
+
+.wrap {
+  max-width: var(--content-max);
+  margin-inline: auto;
+  padding-inline: 2rem;
+}
+
+.section {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-block: var(--space-section);
+  scroll-margin-top: calc(var(--nav-h) + 16px);
+}
+
+.section + .section {
+  border-top: 1px solid var(--border-color);
+}
+
+/* ── scroll reveal ──
+   Ported verbatim from the Portfolio's src/styles/style.css: a scroll-driven
+   native CSS animation (`animation-timeline: view()`), not an
+   IntersectionObserver. Progressive enhancement: browsers without
+   scroll-driven animations just show the content at rest (no opacity: 0
+   base state outside the @supports block), which is also what happens under
+   reduced motion once the query below strips the animation. `--reveal-i`
+   staggers neighbours exactly like the Portfolio's `--index`. */
+
+[data-reveal] {
+  opacity: 1;
+  transform: none;
+}
+
+@supports (animation-timeline: view()) {
+  [data-reveal] {
+    animation: scrollReveal linear both;
+    animation-timeline: view();
+    animation-range: entry calc(0% + (var(--reveal-i, 0) * 4%)) cover calc(22% + (var(--reveal-i, 0) * 3%));
+  }
+}
+
+@keyframes scrollReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(40px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── section heading (title + animated underline + subtitle) ──
+   Ported from the Portfolio's SectionHeading.astro: no eyebrow label, just
+   an h2 with a short accent bar under it that draws in on scroll, and an
+   optional one-line subtitle. */
+
+.section-head {
+  margin-bottom: 3rem;
+  max-width: 640px;
+}
+
+.section-head h2 {
+  font-size: 2.5rem;
+  color: var(--text-main);
+  position: relative;
+  display: inline-block;
+}
+
+.section-head h2::after {
+  content: "";
+  position: absolute;
+  bottom: -5px;
+  left: 0;
+  width: 60px;
+  height: 4px;
+  background: var(--light);
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+@supports (animation-timeline: view()) {
+  .section-head h2::after {
+    animation: headingLine linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 30%;
+  }
+}
+
+@keyframes headingLine {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+.section-head p {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  margin-top: 1rem;
+  max-width: 600px;
+  line-height: 1.7;
+}
+
+.subhead {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--text-main);
+  margin: 3rem 0 1rem;
+}
+
+@media (max-width: 768px) {
+  .section-head h2 {
+    font-size: 2rem;
+  }
+}
+
+/* ── nav ── */
+
+.nav {
+  position: fixed;
+  top: 0;
+  inset-inline: 0;
+  height: var(--nav-h);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--bg-color) 70%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid transparent;
+  transition: border-color 300ms var(--ease-smooth), background 300ms var(--ease-smooth);
+}
+
+/* Scrolled state is a fully opaque solid, not another alpha step: content
+   sliding underneath a fixed header must never read through it, and that
+   guarantee can't depend on backdrop-filter support. The blur above is
+   layered on top only as a nicety for the sliver of transition frames. */
+.nav.is-scrolled {
+  border-color: var(--border-color);
+  background: var(--bg-color);
+}
+
+.nav__row {
+  width: 100%;
+  max-width: var(--content-max);
+  margin-inline: auto;
+  padding-inline: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.nav__brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text-main);
+  user-select: none;
+}
+
+.nav__links {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 2vw, 24px);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.nav__links a {
+  position: relative;
+  padding-block: 4px;
+  transition: color 240ms var(--ease-smooth);
+}
+
+.nav__links a:hover,
+.nav__links a.is-active {
+  color: var(--text-main);
+}
+
+.nav__links a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 100%;
+  bottom: 0;
+  height: 1px;
+  background: var(--light);
+  transition: right 320ms var(--ease-smooth);
+}
+
+.nav__links a:hover::after,
+.nav__links a.is-active::after {
+  right: 0;
+}
+
+.nav__gh {
+  color: var(--text-muted);
+  display: inline-flex;
+  transition: color 200ms ease;
+}
+
+.nav__gh:hover {
+  color: var(--text-main);
+}
+
+@media (max-width: 760px) {
+  .nav__links {
+    display: none;
+  }
+}
+
+/* ── magnetic ──
+   No CSS transition here on purpose: the pull and the spring-back are both
+   driven by the `motion` package (src/scripts/lib/motion.ts), same as the
+   Portfolio's ui/Magnetic.astro. */
+
+[data-magnetic] {
+  display: inline-flex;
+}
+
+/* ── buttons (ported from ui/buttons/Button.astro) ── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0.7rem 1.75rem;
+  border-radius: var(--radius-pill);
+  font-size: 15px;
+  font-weight: 500;
+  position: relative;
+  overflow: hidden;
+  transition: color 0.25s, transform 80ms ease;
+}
+
+.btn span {
+  position: relative;
+  z-index: 1;
+}
+
+.btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 0;
+}
+
+.btn:hover::before {
+  transform: translateY(0);
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn.primary {
+  color: var(--bg-color);
+  background: var(--light);
+}
+
+.btn.primary::before {
+  background: var(--light-deep);
+}
+
+.btn.primary:hover {
+  color: var(--text-main);
+}
+
+.btn.secondary {
+  color: var(--text-main);
+  background: transparent;
+  outline: 1.5px solid var(--border-color);
+}
+
+.btn.secondary::before {
+  background: var(--surface-color);
+}
+
+.btn.secondary:hover {
+  outline-color: var(--light);
+}
+
+/* ── hero entrance ──
+   Staggered fade-up on page load, driven by the `motion` package
+   (src/scripts/sections/hero.ts), same pattern as the Portfolio's
+   ui/PageEntrance.astro `.page-stagger` elements. Base state here is the
+   pre-animation one; hero.ts animates to visible and also handles the
+   reduced-motion case (sets these to their end state directly, no
+   animation) so this never depends on JS running under `@media
+   (prefers-reduced-motion: reduce)`. */
+
+[data-hero-stagger] {
+  opacity: 0;
+  transform: translateY(25px);
+}
+
+/* ── hero ── */
+
+.hero {
+  padding-top: calc(var(--nav-h) + clamp(32px, 6vw, 64px));
+  padding-bottom: var(--space-section);
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: clamp(32px, 6vw, 64px);
+  align-items: center;
+}
+
+.hero__title {
+  font-size: clamp(3.5rem, 9vw, 6rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-bottom: 0.75rem;
+  color: var(--text-main);
+}
+
+.hero__subhead {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.15rem, 2vw, 1.5rem);
+  color: var(--light);
+  margin-bottom: 1rem;
+}
+
+.hero__tagline {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 42ch;
+  margin-bottom: 2rem;
+}
+
+.hero__stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  width: min(380px, 100%);
+  margin-inline: auto;
+}
+
+.hero__avatar-wrap {
+  position: relative;
+  width: 76%;
+  aspect-ratio: 1;
+  transition: transform 420ms var(--ease-smooth);
+  will-change: transform;
+}
+
+.hero__avatar-wrap svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 20px 45px rgb(var(--light-rgb) / 0.16));
+}
+
+/* ── seed control + install snippet ── */
+
+.seed-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 18px;
+  background: color-mix(in srgb, var(--surface-color) 50%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  max-width: 100%;
+}
+
+.seed-control__prefix {
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+.seed-control input {
+  flex: 1 1 140px;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-size: 0.94rem;
+  padding-block: 8px;
+}
+
+.seed-control input::placeholder {
+  color: var(--text-faint);
+}
+
+.seed-control__dice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  transition: color 240ms ease, background 240ms ease;
+  flex: none;
+}
+
+.seed-control__dice:hover {
+  color: var(--light);
+  background: rgb(var(--white-rgb) / 0.06);
+}
+
+.seed-hint {
+  margin-top: 12px;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.seed-hint strong {
+  color: var(--light);
+  font-weight: 700;
+}
+
+.install-snip {
+  margin-top: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px 10px 16px;
+  background: color-mix(in srgb, var(--surface-color) 50%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  font-size: 0.88rem;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.install-snip code {
+  color: var(--light);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* ── tile grid / cards (ported from ui/ProjectCard.astro) ── */
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-min, 150px), 1fr));
+  gap: 1rem;
+}
+
+.tile {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 1.5rem 0.9rem;
+  background: color-mix(in srgb, var(--surface-color) 40%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  transition: border-color 0.25s, box-shadow 0.25s, transform 80ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tile:hover {
+    border-color: rgb(var(--light-rgb) / 0.4);
+    box-shadow: 0 15px 35px -15px rgb(var(--light-rgb) / 0.3);
+  }
+}
+
+.tile__avatar {
+  position: relative;
+  width: var(--avatar-size, 56px);
+  height: var(--avatar-size, 56px);
+}
+
+.tile__avatar svg {
+  width: 100%;
+  height: 100%;
+}
+
+.tile__label {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+/* ── expression picker ── */
+
+.picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 1rem;
+}
+
+.picker__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.picker__circle {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--surface-color) 40%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.25s, box-shadow 0.25s, transform 80ms ease;
+}
+
+.picker__circle span {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.picker__item:hover .picker__circle {
+  border-color: rgb(var(--light-rgb) / 0.4);
+}
+
+.picker__item.is-active .picker__circle {
+  border-color: var(--light);
+  box-shadow: 0 0 0 1px var(--light);
+}
+
+.picker__item.is-active .picker__label {
+  color: var(--light);
+}
+
+.picker__label {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  transition: color 200ms ease;
+}
+
+.picker-stage {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-bottom: 3rem;
+  padding: 1.5rem;
+  background: color-mix(in srgb, var(--surface-color) 40%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+}
+
+.picker-stage__avatar {
+  width: 100px;
+  height: 100px;
+  flex: none;
+}
+
+.picker-stage__meta {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.picker-stage__meta strong {
+  display: block;
+  color: var(--text-main);
+  font-family: var(--font-display);
+  font-size: 1.02rem;
+  margin-bottom: 4px;
+}
+
+/* ── determinism panel ── */
+
+.det-grid {
+  --tile-min: 200px;
+  margin-bottom: 18px;
+}
+
+.det-status-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.det-status {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.det-status.is-ok {
+  color: var(--ok);
+}
+
+.det-status.is-bad {
+  color: var(--bad);
+}
+
+/* ── sequences ── */
+
+.seq-grid {
+  --tile-min: 170px;
+}
+
+.timeline {
+  margin-top: 3rem;
+  padding: clamp(20px, 4vw, 32px);
+  background: color-mix(in srgb, var(--surface-color) 40%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: clamp(20px, 4vw, 36px);
+  align-items: center;
+}
+
+.timeline__avatar {
+  width: 104px;
+  height: 104px;
+}
+
+.timeline__meta {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.timeline__label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text-main);
+  margin-bottom: 10px;
+  text-transform: capitalize;
+}
+
+.timeline__track {
+  position: relative;
+  height: 3px;
+  background: var(--border-color);
+  border-radius: var(--radius-pill);
+  margin-top: 16px;
+  overflow: hidden;
+}
+
+.timeline__track span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--progress, 0%);
+  background: var(--light);
+  transition: width 260ms var(--ease-smooth);
+}
+
+@media (max-width: 640px) {
+  .timeline {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .timeline__avatar {
+    margin-inline: auto;
+  }
+}
+
+/* ── API reference ── */
+
+.api-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.code-block {
+  position: relative;
+  background: color-mix(in srgb, var(--surface-color) 40%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.code-block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 16px 18px 18px;
+  overflow-x: auto;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  color: var(--text-main);
+}
+
+.code-block .tok-kw {
+  color: var(--code-keyword);
+}
+
+.code-block .tok-str {
+  color: var(--light);
+}
+
+.code-block .tok-cm {
+  color: var(--text-faint);
+}
+
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  transition: color 220ms ease;
+}
+
+.copy-btn:hover {
+  color: var(--light);
+}
+
+.copy-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.copy-btn.is-copied {
+  color: var(--ok);
+}
+
+/* ── footer (ported from components/layout/Footer.astro) ── */
+
+.footer {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-top: 1px solid var(--border-color);
+  padding: 3rem 2rem 2rem;
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+
+.footer__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.footer__brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text-main);
+  margin-bottom: 0.25rem;
+}
+
+.footer__tag {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  max-width: 34ch;
+  line-height: 1.6;
+}
+
+.footer__credits {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  line-height: 1.9;
+}
+
+.footer__credits a {
+  color: var(--text-muted);
+  border-bottom: 1px dotted var(--border-color);
+}
+
+.footer__credits a:hover {
+  color: var(--light);
+}
+
+.footer__links {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.footer__links a {
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+  display: inline-flex;
+}
+
+.footer__links a:hover {
+  color: var(--text-main);
+}
+
+.footer hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 2rem 0 1.5rem;
+}
+
+.footer small {
+  display: block;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-faint);
+}
+
+@media (max-width: 600px) {
+  .footer__row {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+}
+
+/* ── bagel easter egg ──
+   Triggered by typing "bagel" anywhere on the page, or five clicks on the
+   nav wordmark. See src/scripts/lib/easter-egg.ts. Undocumented in the UI
+   on purpose. */
+
+.bagel-cursor,
+.bagel-cursor * {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ctext y='24' font-size='24'%3E%F0%9F%A5%AF%3C/text%3E%3C/svg%3E")
+      16 16,
+    auto !important;
+}
+
+.bagel-drop {
+  position: fixed;
+  top: -100px;
+  z-index: 9999;
+  user-select: none;
+  pointer-events: none;
+  animation: bagelDrop linear forwards;
+}
+
+@keyframes bagelDrop {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  100% {
+    transform: translateY(110vh) rotate(360deg);
+  }
+}
+
+.sesame-seed {
+  position: fixed;
+  width: 4px;
+  height: 6px;
+  background: var(--light);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9998;
+  animation: sesameFade 1s forwards;
+  transform: translate(-50%, -50%) rotate(var(--rot));
+}
+
+@keyframes sesameFade {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(var(--rot));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 20px)) scale(0.5) rotate(var(--rot));
+  }
+}
+
+/* ── responsive ── */
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .hero__copy {
+    order: 2;
+  }
+
+  .hero__stage {
+    order: 1;
+  }
+
+  .seed-control,
+  .install-snip {
+    margin-inline: auto;
+  }
+}

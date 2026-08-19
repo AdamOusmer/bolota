@@ -32,3 +32,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# astro build cache
+test/site/.astro
+
+# packed local lib artifact (test/site consumes the compiled dist tarball)
+test/site/.lib
