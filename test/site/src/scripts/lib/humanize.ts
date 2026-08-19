@@ -12,30 +12,17 @@ export function humanizeId(id: string): string {
 }
 
 /**
- * bloub's face expressions carry French ids (its own doc comments and video
- * are French-first). This is a label lookup, not a positional zip against
- * `handle.expressions`, safe even if the engine's own array order changes.
- * Unknown ids still render (via humanizeId) instead of disappearing.
+ * bloub's face expressions used to carry French ids, which is what this
+ * used to be a lookup table for. `src/bloub/expressions.ts` translates its
+ * whole catalog to English now (`neutral`, `attentive`, `unimpressed`, ...,
+ * see that file's own port note), so every id `handle.expressions` can
+ * actually produce today already round-trips through `humanizeId` correctly
+ * and the table had gone dead: no id in the current roster hit it, every
+ * lookup fell through to the `humanizeId` fallback anyway. Kept as its own
+ * named export, not inlined at call sites, so a future bespoke label (or a
+ * reintroduced non-English id) has somewhere to go without touching
+ * scripts/sections/expressions.ts.
  */
-const EXPRESSION_LABELS: Record<string, string> = {
-  neutre: "Neutral",
-  attentif: "Attentive",
-  surpris: "Surprised",
-  excite: "Excited",
-  heureux: "Happy",
-  hilare: "Laughing",
-  colere: "Angry",
-  triste: "Sad",
-  effraye: "Scared",
-  mefiant: "Suspicious",
-  confus: "Confused",
-  curieux: "Curious",
-  fier: "Proud",
-  timide: "Shy",
-  blase: "Unimpressed",
-  somnolent: "Sleepy",
-};
-
 export function humanizeExpression(id: string): string {
-  return EXPRESSION_LABELS[id] ?? humanizeId(id);
+  return humanizeId(id);
 }

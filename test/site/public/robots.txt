@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://bolota.adam-ousmer.dev/sitemap-index.xml

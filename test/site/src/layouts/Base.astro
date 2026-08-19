@@ -1,10 +1,7 @@
 ---
 import "../styles/tokens.css";
+import "../styles/fonts.css";
 import "../styles/global.css";
-import "@fontsource/bricolage-grotesque/700.css";
-import "@fontsource/bricolage-grotesque/800.css";
-import "@fontsource/space-mono/400.css";
-import "@fontsource/space-mono/700.css";
 
 interface Props {
   title?: string;
@@ -15,6 +12,8 @@ const {
   title = "bolota, one string, one face, forever",
   description = "Deterministic SVG avatars from any string, with a motion engine for when they need to move. A Luzir project.",
 } = Astro.props;
+
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 
 // The one deliberate exception to "every color is a var(--token) from
 // tokens.css": a `data:` URI favicon is resolved by the browser before the
@@ -34,12 +33,26 @@ const favicon = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' vi
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     <title>{title}</title>
+    <link rel="canonical" href={canonicalURL} />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:site_name" content="@luzir/bolota" />
     <link rel="icon" href={favicon} />
+    <!-- [data-reveal]'s resting state is opacity: 0 until src/scripts/lib/
+         motion.ts's setupReveal() (or, under prefers-reduced-motion, its
+         own reduced-motion branch) runs; this is the fallback for when JS
+         never runs at all, so content never gets stuck invisible. -->
+    <noscript>
+      <style>
+        [data-reveal] {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+      </style>
+    </noscript>
   </head>
   <body>
     <div data-nav-sentinel aria-hidden="true" style="position:absolute; top:0; left:0; width:1px; height:1px;"></div>
     <div class="lightfield" data-lightfield aria-hidden="true">
-      <div class="lightfield__rays"></div>
       <canvas class="lightfield__motes" data-motes></canvas>
       <div class="lightfield__torch"></div>
       <div class="lightfield__grain"></div>

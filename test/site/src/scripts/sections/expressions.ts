@@ -1,8 +1,10 @@
-import { mountEngine, type EngineHandle } from "@luzir/bolota/engine";
+import type { EngineHandle } from "@luzir/bolota/engine";
+import { ensureEngine } from "../lib/live-engine";
 import { onSeedChange, getSeed } from "../lib/seed-store";
 import { DEFAULT_SEED } from "../lib/curated-seeds";
 import { humanizeExpression } from "../lib/humanize";
 import { onVisible } from "../lib/visibility";
+import { observeReveals } from "../lib/motion";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const AUTO_CYCLE_MS = 3200;
@@ -30,6 +32,10 @@ export function setupExpressions() {
   let autoTimer: ReturnType<typeof setInterval> | null = null;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let index = 0;
+  // See hero.ts/live-engine.ts's own copies of this pattern: guards a
+  // stale mount() (superseded by a newer seed change before its
+  // ensureEngine() await resolved) from clobbering a newer one.
+  let gen = 0;
 
   function select(i: number, id: string, byUser: boolean) {
     index = i;
@@ -73,10 +79,19 @@ export function setupExpressions() {
       picker!.appendChild(item);
       return item;
     });
+    // The picker itself is `[data-reveal]` in the Astro markup so it's
+    // already tracked, but its contents mount async here; re-running this
+    // is a cheap no-op for an already-observed node (see motion.ts's
+    // observeReveals doc comment) and a real fix if a future picker layout
+    // moves `data-reveal` onto these items instead of the container.
+    observeReveals(picker!);
   }
 
-  function mount(nextSeed: string) {
+  async function mount(nextSeed: string) {
+    const myGen = ++gen;
     seed = nextSeed;
+    const { mountEngine } = await ensureEngine();
+    if (myGen !== gen) return; // a newer mount() call already won the race
     handle?.destroy();
     handle = mountEngine(svg, seed);
     handle.play("idle", { loop: true });

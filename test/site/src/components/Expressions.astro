@@ -2,16 +2,125 @@
 import SectionHead from "./SectionHead.astro";
 ---
 
-<section class="section wrap" id="expressions" data-expressions>
-  <SectionHead title="Expressions" description="Sixteen faces. Pick one, or let it wander." />
+<section class="section wrap expr" id="expressions" data-expressions>
+  <SectionHead kicker="Faces" title="Expressions" description="Sixteen faces, one held pose at a time." />
 
-  <div class="picker-stage" data-reveal style="--reveal-i:1">
-    <div class="picker-stage__avatar" data-expr-stage></div>
-    <div class="picker-stage__meta">
-      <strong data-expr-label>Neutral</strong>
-      <span>setExpression(), a held pose, not a state</span>
+  <div class="expr__layout">
+    <div class="expr__stage" data-reveal style="--reveal-i:1">
+      <div class="light-pool" aria-hidden="true"></div>
+      <div class="expr__avatar" data-expr-stage></div>
+      <p class="expr__current" data-expr-label>Neutral</p>
     </div>
-  </div>
 
-  <div class="picker" data-expr-picker data-reveal style="--reveal-i:2"></div>
+    <div class="expr__picker" data-expr-picker data-reveal style="--reveal-i:2"></div>
+  </div>
 </section>
+
+<style>
+  /* Two-column stage: a big held-pose blob standing in its own light pool on
+     the left, the 4x4 round-tile picker on the right (spec §3). Stacks on
+     narrow viewports since a 4x4 grid next to a full-size blob has nowhere
+     to go at phone widths. */
+  .expr__layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 340px) 1fr;
+    align-items: center;
+    gap: clamp(32px, 6vw, 72px);
+  }
+
+  .expr__stage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .expr__avatar {
+    width: clamp(180px, 22vw, 300px);
+    aspect-ratio: 1;
+  }
+
+  .expr__current {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.1rem;
+    color: var(--text-main);
+  }
+
+  /* 4x4 round-tile picker. Fixed four columns per spec, easing to two on
+     phones so a tile never drops below a comfortable tap size. */
+  .expr__picker {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: clamp(20px, 3vw, 32px) clamp(12px, 2vw, 20px);
+    justify-items: center;
+  }
+
+  @media (max-width: 640px) {
+    .expr__layout {
+      grid-template-columns: 1fr;
+      justify-items: center;
+      text-align: center;
+    }
+
+    .expr__picker {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+</style>
+
+<style is:global>
+  /* Picker item chrome: kept global (not `.expr__` scoped) since the class
+     names are built in scripts/sections/expressions.ts, which has no Astro
+     scope hash to target. Sized to the spec's 65-70px round tile, ring +
+     lift for the selected state, small-caps label underneath. */
+  .picker__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .picker__circle {
+    position: relative;
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-color);
+    box-shadow: inset 0 0 0 1px rgb(var(--white-rgb) / 0.06);
+    transition: box-shadow 220ms var(--ease-smooth), transform 220ms var(--ease-smooth);
+  }
+
+  .picker__circle span {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    color: var(--text-faint);
+  }
+
+  .picker__item:hover .picker__circle {
+    box-shadow: inset 0 0 0 1px rgb(var(--white-rgb) / 0.06), 0 0 0 1px rgb(var(--light-rgb) / 0.4);
+  }
+
+  .picker__item.is-active .picker__circle {
+    box-shadow: 0 0 0 2px var(--accent);
+    transform: translateY(-3px);
+  }
+
+  .picker__item.is-active .picker__label {
+    color: var(--accent);
+  }
+
+  .picker__label {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-variant: all-small-caps;
+    letter-spacing: 0.04em;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    transition: color 200ms ease;
+  }
+</style>

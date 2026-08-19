@@ -3,23 +3,32 @@
  * light, so the whole page sits on a drifting field of it instead of a flat
  * color. Three cheap layers, all GPU/canvas-friendly, no dependency:
  *
- *  1. `.lightfield__rays` (src/styles/global.css), two large blurred radial
- *     gradients (warm + cool) that drift via a single CSS `transform`
- *     keyframe.
+ *  1. `.lightfield__grain` (src/styles/global.css), a static noise overlay.
  *  2. A canvas of small drifting motes (this file), warm/cool mixed, that
- *     gently brighten and lean toward the pointer within a small radius:
- *     "light responds to you" without any per-frame DOM writes.
+ *     lean toward and brighten near the pointer: "light responds to you"
+ *     without any per-frame DOM writes.
  *  3. `.lightfield__torch`, a radial-gradient spotlight pinned to the
  *     pointer via two CSS custom properties, same spotlight technique the
  *     tile/card hover glow uses, just page-wide and much dimmer.
  *
- * Restored verbatim (visually) to this first-iteration version per an
- * explicit later user decision: a simplified single-hue, particle-free pass
- * was tried and rejected in favor of this one. The mote hues are still
- * tokens, not literals, `--mote-warm-rgb`/`--glow-cool-rgb` in
- * src/styles/tokens.css, read once via `getComputedStyle` below since a
- * `<canvas>` 2D context has no way to resolve `var()` itself the way CSS
- * `fillStyle` strings elsewhere on the page do.
+ * This is the restored, liked baseline. History, oldest to newest: v2
+ * originally had a fourth layer here too, two large blurred warm/cool orb
+ * gradients (`.lightfield__rays`); killed on user feedback ("too AI") and
+ * never coming back. A later 2026-08-19 spec amendment then replaced that
+ * gap with three light shafts plus ember particles on the mote canvas;
+ * user verdict was "looks weird, no reaction, brings nothing new, just
+ * noise", reverted in full one commit later, back down to the three layers
+ * above. What DID change from the original baseline: the mote/pointer
+ * interaction below (`RADIUS`, `PULL_STRENGTH`, `DISPLACE`,
+ * `BRIGHTEN_BOOST`) is amplified from its original values, since "no
+ * reaction" was specifically about the existing motes' pointer response
+ * being too subtle to read, not about anything missing. The torch is
+ * deliberately untouched (explicit user instruction: no tuning there). The
+ * mote hues are still tokens, not literals, `--mote-warm-rgb`/
+ * `--glow-cool-rgb` in src/styles/tokens.css, read once via
+ * `getComputedStyle` below since a `<canvas>` 2D context has no way to
+ * resolve `var()` itself the way CSS `fillStyle` strings elsewhere on the
+ * page do.
  */
 
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -63,7 +72,21 @@ export function setupLightfield(root: HTMLElement) {
   let motes: Mote[] = [];
 
   const pointer = { x: -9999, y: -9999, active: false };
-  const RADIUS = 160;
+
+  // Pointer interaction, amplified from the original baseline: user
+  // feedback on the shafts/embers experiment was "no reaction", meaning
+  // THIS interaction (the only one the page had) was too subtle to read,
+  // not that anything was missing. RADIUS was 160 (interaction zone),
+  // PULL_STRENGTH was 0.05 (how hard a mote gets pulled at zero distance,
+  // 0-1), DISPLACE was 0.02 (how much of that pull actually moves the mote
+  // each frame), BRIGHTEN_BOOST was 0.55 (max extra alpha near the
+  // pointer). All four raised so the lean and brighten are clearly
+  // perceptible on a single pointer move, not just as a cumulative drift
+  // over many frames.
+  const RADIUS = 220;
+  const PULL_STRENGTH = 0.16;
+  const DISPLACE = 0.05;
+  const BRIGHTEN_BOOST = 0.85;
 
   function build() {
     w = canvas!.clientWidth;
@@ -93,9 +116,9 @@ export function setupLightfield(root: HTMLElement) {
       const distSq = dx * dx + dy * dy;
       if (distSq < RADIUS * RADIUS && distSq > 1) {
         const dist = Math.sqrt(distSq);
-        const pull = (1 - dist / RADIUS) * 0.05;
-        m.x += (dx / dist) * pull * RADIUS * 0.02;
-        m.y += (dy / dist) * pull * RADIUS * 0.02;
+        const pull = (1 - dist / RADIUS) * PULL_STRENGTH;
+        m.x += (dx / dist) * pull * RADIUS * DISPLACE;
+        m.y += (dy / dist) * pull * RADIUS * DISPLACE;
       }
     }
 
@@ -113,7 +136,7 @@ export function setupLightfield(root: HTMLElement) {
       const dx = pointer.x - m.x;
       const dy = pointer.y - m.y;
       const distSq = dx * dx + dy * dy;
-      if (distSq < RADIUS * RADIUS) alpha = Math.min(1, alpha + (1 - distSq / (RADIUS * RADIUS)) * 0.55);
+      if (distSq < RADIUS * RADIUS) alpha = Math.min(1, alpha + (1 - distSq / (RADIUS * RADIUS)) * BRIGHTEN_BOOST);
     }
     const rgb = m.warm ? moteWarmRgb : moteCoolRgb;
     ctx!.beginPath();
