@@ -764,59 +764,122 @@ describe("one-shot states dwell, then morph back to the face they left", () => {
 });
 
 
-describe("play({ for }) — repeat a state until a deadline, then hand back", () => {
-  // Owner's ask, and the distinction that matters: `hold` freezes the finished
-  // pose for a beat, `for` REPLAYS the state until the time is filled. A 1.3s
-  // swirl asked to cover 4s should swirl three times, not swirl once and sit
-  // there.
-  const decorCount = (svg: FakeElement) =>
-    parts(svg).front.children.flatMap((g) => g.children).length;
+describe("play({ for }) — the state owns a window, and fills it its own way", () => {
+  // Owner's correction, and the reason this is not one rule: filling a window
+  // by REPEATING breaks continuity for any state whose decor enters and leaves
+  // once. swirl's rings vanished and came back on every pass. So the filler is
+  // the state's own business now (`fill` in bloub/states.ts): periodic states
+  // keep running, most stretch their own timeline over the window, and burst
+  // holds its settled pose because an explosion can neither be slowed nor
+  // repeated without becoming a different gesture.
+  // Decor is drawn into the back and front layers, sometimes as bare paths
+  // (swirl's rings, burst's particles), sometimes wrapped in a group (the
+  // exclamation mark's bar), so count every node either layer holds.
+  // A resting face still keeps one node in these layers, so every check below
+  // is against the resting baseline rather than against zero.
+  const decorAt = (svg: FakeElement) => {
+    const count = (el: FakeElement): number =>
+      el.children.length + el.children.reduce((sum, c) => sum + count(c), 0);
+    const p = parts(svg);
+    return count(p.back) + count(p.front);
+  };
 
-  test("the state keeps replaying inside the window, then settles after it", () => {
+  test("swirl: the rings stay up for the whole window instead of blinking per pass", () => {
     const { doc, svg, handle } = mount();
     handle.play("wander", { loop: true });
-    run(doc, 500);
+    run(doc, 400);
 
-    // exclaim is 2s and draws the mark as decor, so decor presence is a
-    // direct read on "is the state still playing".
-    handle.play("exclaim", { for: 5, hold: 0 });
+    const baseline = decorAt(svg as unknown as FakeElement);
 
-    run(doc, 2500); // past one full pass: a plain one-shot would be done
-    expect(decorCount(svg as unknown as FakeElement)).toBeGreaterThan(0);
+    // swirl is 1.3s; ask it to cover 4s.
+    handle.play("swirl", { for: 4, hold: 0 });
 
-    run(doc, 2000); // still inside the 5s window, on a later pass
-    expect(decorCount(svg as unknown as FakeElement)).toBeGreaterThan(0);
+    // Sample right through the window. A repeating filler shows up here as a
+    // ring count that returns to zero mid-window and climbs again; a stretched
+    // one never does.
+    let sawRings = false;
+    let dropouts = 0;
+    let wasUp = false;
+    const ringTrace: number[] = [];
+    for (let t = 0; t < 3600; t += 100) {
+      run(doc, 100);
+      const rings = decorAt(svg as unknown as FakeElement) - baseline;
+      ringTrace.push(rings);
+      if (rings > 0) {
+        sawRings = true;
+        wasUp = true;
+      } else if (wasUp) {
+        dropouts++;
+        wasUp = false;
+      }
+    }
+    expect(sawRings).toBe(true);
+    expect(dropouts).toBe(0);
 
-    run(doc, 3000); // past the window and the hand-back
-    expect(decorCount(svg as unknown as FakeElement)).toBe(0);
+    // and it does end
+    run(doc, 1200);
+    expect(decorAt(svg as unknown as FakeElement)).toBe(baseline);
   });
 
-  test("the hand-back waits for the cycle that crosses the deadline, never cuts one short", () => {
+  test("orbit: a periodic state keeps running, rings up nearly the whole window", () => {
     const { doc, svg, handle } = mount();
     handle.play("wander", { loop: true });
-    run(doc, 500);
+    run(doc, 400);
 
-    // Deadline lands mid-pass (2.5s into a 2s state, so during pass two).
-    handle.play("exclaim", { for: 2.5, hold: 0 });
-    run(doc, 2600);
-    // Pass two is under way and must be allowed to finish.
-    expect(decorCount(svg as unknown as FakeElement)).toBeGreaterThan(0);
+    const baseline = decorAt(svg as unknown as FakeElement);
+    handle.play("orbit", { for: 7, hold: 0 });
 
-    run(doc, 2200);
-    expect(decorCount(svg as unknown as FakeElement)).toBe(0);
+    // orbit's own rings fade at its period boundary by design (that is its
+    // choreography, not a filler artifact), so this asks for presence across
+    // the window rather than absolute continuity: a repeat-based filler, which
+    // restarts the state from zero, drops well under this.
+    let up = 0;
+    const samples = 60;
+    for (let i = 0; i < samples; i++) {
+      run(doc, 100);
+      if (decorAt(svg as unknown as FakeElement) - baseline > 0) up++;
+    }
+    expect(up / samples).toBeGreaterThan(0.8);
   });
 
-  test("for and loop do not fight: loop wins and never ends", () => {
-    const { doc, svg, handle } = mount();
-    handle.play("exclaim", { loop: true, for: 1 });
-    run(doc, 6000);
-    expect(decorCount(svg as unknown as FakeElement)).toBeGreaterThan(0);
-  });
-
-  test("no jumps across a repeat boundary either", () => {
+  test("burst: one explosion, held afterwards, never a second one", () => {
     const { doc, svg, handle } = mount();
     handle.play("wander", { loop: true });
-    run(doc, 500);
+    run(doc, 400);
+
+    const baseline = decorAt(svg as unknown as FakeElement);
+    handle.play("burst", { for: 6, hold: 0 });
+    // Particle count over the window: a repeat would show a second rise.
+    const counts: number[] = [];
+    for (let t = 0; t < 6000; t += 200) {
+      run(doc, 200);
+      counts.push(decorAt(svg as unknown as FakeElement) - baseline);
+    }
+    let rises = 0;
+    let prev = 0; // the run starts with no decor on screen
+    for (const c of counts) {
+      if (c > 0 && prev === 0) rises++;
+      prev = c;
+    }
+    expect(rises).toBe(1);
+  });
+
+  test("a window shorter than the state is a floor, not a truncation", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 400);
+
+    const baseline = decorAt(svg as unknown as FakeElement);
+    // exclaim is 2s: asking for 0.5s must still play the whole thing.
+    handle.play("exclaim", { for: 0.5, hold: 0 });
+    run(doc, 1500);
+    expect(decorAt(svg as unknown as FakeElement)).toBeGreaterThan(baseline);
+  });
+
+  test("no jumps anywhere across a windowed run", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 400);
     handle.play("swirl", { for: 4, hold: 0 });
 
     const mid = () => {
@@ -844,3 +907,4 @@ describe("play({ for }) — repeat a state until a deadline, then hand back", ()
     expect(worst).toBeLessThan(6);
   });
 });
+

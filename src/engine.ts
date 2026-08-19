@@ -50,6 +50,7 @@ import { HALF_VIEWBOX, RADIUS } from "./bloub/frame";
 import { PITCH } from "./bloub/gaze";
 import { clamp, lerp } from "./bloub/math";
 import { PROFILE_SAMPLES } from "./bloub/profiles";
+import { radiusAtAngle } from "./bloub/shape";
 import { POSES, STATE_BY_ID, type StateId } from "./bloub/states";
 import { superellipse } from "./shape";
 import type { Body } from "./styles/shapes";
@@ -175,7 +176,7 @@ function rayFarthest(ox: number, oy: number, theta: number, polys: [number, numb
  * it in on states flagged `baseBody` (idle, wink, wide, notify, swirl) —
  * every other state keeps bloub's own profile, by design (`bloub/states.ts`).
  */
-function seededSilhouette(
+export function _seededSilhouette(
   body: Body,
   draw: ((b: Body) => string) | undefined,
   petals: { cx: number; cy: number; r: number }[],
@@ -243,7 +244,23 @@ export const FOLLOW_MAX_PITCH = MAX_PITCH_DRIFT;
  * Up is unchanged at +26deg; down reaches its mirror at -26deg.
  */
 export const FOLLOW_PITCH_UP = PITCH + FOLLOW_MAX_PITCH;
-export const FOLLOW_PITCH_DOWN = -FOLLOW_PITCH_UP;
+/**
+ * Down reaches further than up, and asks for more than the drift bound.
+ *
+ * The mirrored `-FOLLOW_PITCH_UP` this used to be put the eyes barely a third
+ * of the way to the bottom of the body, reported as "it stops at half the
+ * bolota". Pitch maps to travel non-linearly, so matching the numbers does not
+ * match the distance: on a round body -20 lands the eyes at 0.40 of the
+ * radius, while -45 lands them at 0.68 of it, which is what looking at a page
+ * below the avatar actually reads as. Measured, not guessed: -60 would reach
+ * 0.84 but puts the eye's own edge at 0.95 of the body's, and the eyes need
+ * somewhere to blink and breathe.
+ *
+ * Asking for more than every body can wear is deliberate: `_safeGaze` solves
+ * the real limit per seed at mount, so a round bolota gets the full sweep and
+ * a flat one gets what fits. The constant is the ceiling, not the promise.
+ */
+export const FOLLOW_PITCH_DOWN = -45;
 
 /**
  * Pure pointer-position -> gaze-target math, no DOM: `nx`/`ny` are already
@@ -265,6 +282,79 @@ export function followLook(nx: number, ny: number): Look {
     spin: 0,
     wander: 0,
   };
+}
+
+/**
+ * The largest deflection this particular body can wear without its eyes
+ * leaving it, solved against the seed's own silhouette at mount.
+ *
+ * `followLook`'s range is a constant, and a constant is wrong here: the engine
+ * models a body by its `rx`, while a seeded silhouette can be far flatter than
+ * it is wide (a capsule seed measures rx 36.6 against ry 20.3, nearly two to
+ * one). Bought that constant a wider downward sweep in 0.1.1 and a pill-shaped
+ * bolota drove its eyes straight out of the bottom of itself.
+ *
+ * Solved rather than derived from the aspect ratio: `eyefit`'s own containment
+ * correction is already in play, the eye pair is offset and split, and the
+ * silhouette is an arbitrary polygon, so the honest answer is to render the
+ * extremes and look. ~40 samples once per mount.
+ */
+export function _safeGaze(scale: number, shape: number[]): { up: number; down: number } {
+  const probe = new BotEngine(scale, "idle", shape, null);
+  // Room to spare: the solve runs on the resting face, and idle wander, blink
+  // and breath all move the eyes a little on top of whatever it returns.
+  const MARGIN = 0.9;
+  // The EYE'S OWN EXTENT, not just where its centre sits: an eye is a capsule
+  // roughly 15 units tall on a 100-unit body, and a centre that clears the
+  // silhouette by less than half of that still renders an eye hanging out of
+  // the bottom. Checking centres alone is what made the first version of this
+  // solve pass every shape and ship the bug it was written to catch.
+  const corners = (d: string, matrix: string) => {
+    const [a, b, c, dd, e, f] = matrix.slice(7, -1).split(",").map(Number) as number[];
+    const nums = d.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i + 1 < nums.length; i += 2) {
+      minX = Math.min(minX, nums[i]!);
+      maxX = Math.max(maxX, nums[i]!);
+      minY = Math.min(minY, nums[i + 1]!);
+      maxY = Math.max(maxY, nums[i + 1]!);
+    }
+    if (!Number.isFinite(minX)) return [];
+    return [
+      [minX, minY],
+      [maxX, minY],
+      [minX, maxY],
+      [maxX, maxY],
+    ].map(([x, y]) => [a! * x! + c! * y! + e!, b! * x! + dd! * y! + f!] as const);
+  };
+
+  const fits = (pitch: number) => {
+    for (const yaw of [-FOLLOW_MAX_YAW, 0, FOLLOW_MAX_YAW]) {
+      probe.setLook({ yaw, pitch, mix: 1, spin: 0, wander: 0 }, 0, 0);
+      // Spread across breath and blink phases, whose periods do not divide
+      // each other: a three-sample check passed shapes that visibly failed a
+      // long sweep, which is how the first version of this shipped too wide.
+      for (const t of [0.2, 1.4, 3.1, 5.7, 9.3, 14.6, 23.2, 37.5]) {
+        for (const { d, matrix } of probe.sample(t).eyes) {
+          for (const [x, y] of corners(d, matrix)) {
+            const edge = radiusAtAngle(shape, Math.atan2(y, x)) * scale;
+            if (edge > 0 && Math.hypot(x, y) / edge > MARGIN) return false;
+          }
+        }
+      }
+    }
+    return true;
+  };
+  const solve = (limit: number) => {
+    // Coarse walk inward from the constant: the answer only needs to be right
+    // to a degree or so, and a bisection would cost more samples for less.
+    for (let p = limit; Math.abs(p) > 1; p *= 0.85) if (fits(p)) return p;
+    return 0;
+  };
+  return { up: solve(FOLLOW_PITCH_UP), down: solve(FOLLOW_PITCH_DOWN) };
 }
 
 /**
@@ -430,11 +520,21 @@ export interface EngineHandle {
        */
       rest?: string;
       /**
-       * Keep replaying the state until at least this many seconds have
-       * passed, then hand back at the end of the cycle that crosses the
-       * mark (never mid-cycle, so the state always finishes what it
-       * started). This is how a 1.3s swirl fills a 4s slot: it repeats,
-       * rather than freezing on its last frame the way `hold` does.
+       * Seconds this state should own before handing back. How it covers a
+       * window longer than itself is the state's own business, declared by
+       * `fill` in `bloub/states.ts`, because the right answer differs:
+       *
+       * - a state with a `period` (orbit, wink) simply keeps running: its
+       *   timeline already wraps, so the rings never blink out;
+       * - `stretch` (the default: swirl, play, everything else) slows its own
+       *   timeline so ONE pass fills the slot, decor entering and leaving
+       *   exactly once;
+       * - `hold` (burst, comet) plays once at natural speed and keeps the
+       *   settled pose for the remainder, since an explosion can neither be
+       *   slowed nor repeated without becoming a different gesture.
+       *
+       * Nothing repeats. A window shorter than the state is simply ignored,
+       * so `for` is a floor and never truncates a gesture.
        *
        * Ignored while `loop` is set, which already never ends.
        */
@@ -497,7 +597,11 @@ export function mountEngine(
   const head = palette.head ?? "#000";
   const eye = palette.eye ?? "#fff";
 
-  const engine = new BotEngine(body.rx, "idle", seededSilhouette(body, draw, petals, extra), null);
+  const silhouette = _seededSilhouette(body, draw, petals, extra);
+  const engine = new BotEngine(body.rx, "idle", silhouette, null);
+  // Per-seed deflection limits: see `safeGaze`. A round body lands on the
+  // constants; a flat one gets less, which is the whole point.
+  const gazeLimit = _safeGaze(body.rx, silhouette);
   const uid = Math.random().toString(36).slice(2, 8);
 
   // bolota divergence found by rendering, not by reading `sample()`'s numbers
@@ -633,10 +737,11 @@ export function mountEngine(
   // bot returns to the face it was wearing rather than a hard-coded `idle`.
   let restState: StateId = "idle";
   let hold = STATE_HOLD;
-  // Wall-clock deadline for a `for:` run, and when that run began. The
-  // deadline is a floor, not a cut: the state finishes its current cycle.
-  let repeatUntil = 0;
-  let repeatStart = 0;
+  // The window a `for:` run owns, and when it started. `windowFor` is 0 when no
+  // window was asked for.
+  let windowFor = 0;
+  let windowStart = 0;
+  let windowLoop = false;
 
   // --- cursor-follow gaze (bloub port, src/bloub/gaze.ts) ------------------
   // Math (`followLook`) and the pointer-tracking constants below it are
@@ -780,7 +885,10 @@ export function mountEngine(
       fromPitch = cur.pitch;
       const target = followLook(nx, ny);
       toYaw = target.yaw;
-      toPitch = target.pitch;
+      // Clamped to what this body can actually wear (see `safeGaze`): the
+      // constant range assumes a round bolota, and a pill-shaped one runs out
+      // of room vertically long before it does horizontally.
+      toPitch = clamp(target.pitch, gazeLimit.down, gazeLimit.up);
       retargetAt = now;
       lastNx = nx;
       lastNy = ny;
@@ -827,7 +935,7 @@ export function mountEngine(
     // wrapped in `clamp(...)`, not periodic), so it needs the periodic
     // restart below to keep animating at all once it settles.
     const structuralLoop = !!def.period;
-    if (loop && !structuralLoop) {
+    if ((loop || windowLoop) && !structuralLoop) {
       // Restart `duration + def.morph` in, not at `duration` itself: bloub's
       // own transient elements (particle windows, ribbon fades, eyeAlpha
       // ramps) finish inside that extra margin, so by the time `reset()`
@@ -841,22 +949,12 @@ export function mountEngine(
         stateStart = clock;
       }
     } else if (
-      repeatUntil > 0 &&
-      clock - repeatStart < repeatUntil &&
-      clock - stateStart >= def.duration + def.morph
-    ) {
-      // A `for:` run still inside its window: restart the state on the same
-      // boundary the looping branch above uses (`duration + morph`, past the
-      // transient windows), so a repeat is the same clean restart a loop is.
-      engine.reset(current, clock);
-      stateStart = clock;
-    } else if (
-      !loop &&
-      // A `for:` run holds the floor until its window closes. Without this the
-      // hand-back below fires between `duration` and `duration + morph`, the
-      // gap the repeat branch above waits through, and the state ends after
-      // one pass no matter what window was asked for.
-      (repeatUntil === 0 || clock - repeatStart >= repeatUntil) &&
+      (!loop || windowLoop) &&
+      // A `for:` run owns the floor until its window closes, however it chose
+      // to fill it. A stretched state reaches its own `duration` exactly then;
+      // a `hold` state reached it long before and has been sitting on its
+      // settled pose since.
+      (windowFor === 0 || clock - windowStart >= windowFor) &&
       current !== restState &&
       clock - stateStart >= def.duration + hold
     ) {
@@ -871,7 +969,9 @@ export function mountEngine(
       // static tiles: all of it was one missing assignment.
       current = restState;
       stateStart = clock;
-      repeatUntil = 0;
+      windowFor = 0;
+      windowLoop = false;
+      engine.stretch(null);
       // `setState` cross-fades from the outgoing state over its own `morph`,
       // so this hand-back is a blend, never a cut.
       engine.setState(restState, clock);
@@ -910,12 +1010,28 @@ export function mountEngine(
       stateStart = clock;
       loop = !!o?.loop;
       hold = Math.max(0, o?.hold ?? STATE_HOLD);
-      repeatStart = clock;
-      repeatUntil = loop ? 0 : Math.max(0, o?.for ?? 0);
+      windowStart = clock;
+      const def = STATE_BY_ID.get(id)!;
+      const asked = loop ? 0 : Math.max(0, o?.for ?? 0);
+      // A window shorter than the state itself is a floor already met.
+      windowFor = asked > def.duration ? asked : 0;
+      // How the state fills it, decided by the state, not by the caller:
+      // periodic states keep running (their own wrap is seamless), `hold`
+      // states play once and keep the settled pose, everything else stretches
+      // so a single pass covers the slot with its decor entering once.
+      const stretching = windowFor > 0 && !def.period && def.fill !== "hold";
+      engine.stretch(stretching ? id : null, stretching ? def.duration / windowFor : 1);
+      // A periodic state fills its window by simply continuing, which needs
+      // `looping` for its own phase wrap to engage. Unlike a caller's
+      // `loop: true` it still hands back, so the two are tracked apart, and it
+      // hands back on a whole number of periods where the wrap is exact rather
+      // than mid-revolution.
+      windowLoop = windowFor > 0 && !!def.period;
+      if (windowLoop) windowFor = Math.ceil(windowFor / def.period!) * def.period!;
       // A looped state IS the resting face from here on; a one-shot settles
       // back into whatever was resting before it, unless told otherwise.
       restState = (rest as StateId) ?? (loop ? id : restState);
-      engine.setState(id, clock, loop);
+      engine.setState(id, clock, loop || windowLoop);
       ensureRunning();
     },
     loop(state) {

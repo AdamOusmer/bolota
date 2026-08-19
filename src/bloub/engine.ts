@@ -163,6 +163,8 @@ export class BotEngine {
    * sequence, or forever, phase-wrapped, from the demo's `loop: true`.
    */
   private looping = false
+  private stretchOf: StateId | null = null
+  private stretchBy = 1
   private pts: Point[] = []
   private shape: number[] | null = null
   private shapePrev: number[] | null = null
@@ -462,7 +464,27 @@ export class BotEngine {
    * `StateDef.period`'s own doc comment for the full mechanism.
    */
   private wrapped(def: StateDef, elapsed: number): number {
-    return this.looping && def.period ? elapsed % def.period : elapsed
+    // bolota addition: `stretch()` slows a state's OWN timeline so one pass
+    // fills a longer window (see `play({ for })` in ../engine.ts). It is
+    // applied here, the single choke point every read of a state's local time
+    // goes through, and only for the state it was set on: a cross-fade's
+    // outgoing state keeps its own pace, or the blend would rubber-band.
+    const local = def.id === this.stretchOf ? elapsed * this.stretchBy : elapsed
+    return this.looping && def.period ? local % def.period : local
+  }
+
+  /**
+   * Scales a state's own clock. `1` is natural speed; `0.5` makes its
+   * choreography take twice as long, which is how a 1.3s gesture covers a 2.6s
+   * slot without repeating and without its decor blinking out and back.
+   *
+   * Deliberately not a global time scale: morph and blink stay on wall-clock
+   * time, so a stretched state still hands over at the same speed it always
+   * did.
+   */
+  stretch(id: StateId | null, scale = 1) {
+    this.stretchOf = id
+    this.stretchBy = scale > 0 ? scale : 1
   }
 
   /**

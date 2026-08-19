@@ -10,6 +10,31 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.1.4
+
+### Fixed
+
+- **The eyes reach the bottom of the body, and stay inside it.** Two bugs, and
+  the second was hiding behind the first.
+
+  0.1.1 mirrored the downward gaze against the upward one, which fixed the
+  symmetry in degrees but not the distance: pitch maps to travel non-linearly,
+  so -20 degrees puts the eyes barely a third of the way down a round body.
+  The ask is -45 now, which lands them at two thirds.
+
+  That much sweep does not fit every silhouette, and the containment tests
+  never caught it because they check where an eye's CENTRE lands. An eye is
+  about 15 units tall on a 100-unit body, so a centre that clears the edge by
+  less than half of that still renders an eye hanging out of the bottom.
+  Measured with the eye's own extent, the ambient drift alone already put a
+  triangle seed's eyes at 1.05 of the local body radius: outside.
+
+  `mountEngine` now solves the real limit per seed at mount, against the
+  seed's own silhouette and counting the whole eye, and clamps the tracked
+  gaze to it. A round or boxy body gets the full sweep (-38 to -45), a capsule
+  gets -32, a triangle -23. The constant is the ceiling; the silhouette
+  decides what it can wear.
+
 ## 0.1.3
 
 ### Added

@@ -554,8 +554,16 @@ describe("handle.follow — premium tuning: wide deflection, low latency", () =>
    * pitch number the containment solve then claws back would pass a
    * pitch-only assertion and still look broken.
    */
-  test("the gaze reaches as far down as it reaches up, in degrees and on screen", () => {
-    expect(FOLLOW_PITCH_DOWN).toBe(-FOLLOW_PITCH_UP);
+  test("the gaze reaches far enough down to read as looking down", () => {
+    // History, in two corrections. The rest bias used to be the CENTRE of one
+    // symmetric deflection, so the bottom of the viewport reached -0.1 degrees:
+    // the eyes barely left their resting height. Mirroring it fixed the
+    // symmetry but not the distance, because pitch maps to travel
+    // non-linearly, and -20 puts the eyes a third of the way down the body
+    // ("it stops at half the bolota"). The ask is now deeper than the drift
+    // bound, and `_safeGaze` clamps it per seed at mount, so this pins the
+    // ceiling rather than what any one body ends up wearing.
+    expect(FOLLOW_PITCH_DOWN).toBeLessThan(-FOLLOW_PITCH_UP);
     expect(FOLLOW_PITCH_UP).toBeGreaterThan(PITCH);
 
     const shape = superellipseProfile(1, 1, 4);
@@ -572,12 +580,10 @@ describe("handle.follow — premium tuning: wide deflection, low latency", () =>
     const top = eyeY(followLook(0, -1));
     const bottom = eyeY(followLook(0, 1));
     // screen y grows downward: bottom of the viewport puts the eyes low
-    expect(bottom).toBeGreaterThan(0);
     expect(top).toBeLessThan(0);
-    // mirror images about the body centre, within a pixel of each other
-    expect(Math.abs(bottom + top)).toBeLessThan(1);
-    // and it is a real excursion, not a token one (it was ~0.1px before)
-    expect(bottom).toBeGreaterThan(30);
+    // Two thirds of the way to the edge of a round body, where -20 managed a
+    // third and the original mapping managed a tenth of a pixel.
+    expect(bottom).toBeGreaterThan(60);
   });
 
   test("FOLLOW_MORPH is a short, dedicated pointer-tracking constant, not bloub's ambient LOOK_MORPH (0.24s)", () => {
