@@ -14,17 +14,22 @@ generation change ships as a major, never as a patch.
 
 ### Added
 
-- **`play(state, { for })`: repeat a state until a deadline.** `hold` freezes a
-  finished pose for a beat; this replays the state until the time asked for is
-  filled, which is what a caller wants when a gesture has to cover a slot it is
-  shorter than. A 1.3s `swirl` asked for four seconds swirls three times rather
-  than swirling once and sitting there.
+- **`play(state, { for })`: give a state a window to cover.** `hold` freezes a
+  finished pose for a beat; `for` hands the state a slot and lets it fill that
+  slot the way its own choreography allows, which is not one rule:
 
-  The deadline is a floor, never a cut: the hand-back waits for the cycle that
-  crosses it, so the state always finishes what it started. Repeats restart on
-  the same `duration + morph` boundary a looping state uses, past the transient
-  particle and ribbon windows, so a repeat is as clean as a loop. `loop` still
-  wins over `for`, since it never ends.
+  - a state with a `period` (orbit, wink) simply keeps running, since its
+    timeline already wraps seamlessly;
+  - most states (swirl, play, the rest) **stretch** their own timeline so a
+    single pass covers the window, with their decor entering and leaving
+    exactly once;
+  - burst and comet **hold**: a collapse and regrow cannot be slowed without
+    becoming a different gesture, or repeated without exploding twice, so they
+    play at their own speed and keep the settled pose for the remainder.
+
+  Nothing repeats, which was the first attempt and the wrong one: repeating
+  made swirl's rings vanish and reappear on every pass. A window shorter than
+  the state is a floor, never a truncation.
 
 - `runSequence()` takes `play`'s options, so a sequence can be given `for`,
   `hold` or `rest` without the caller having to know which state the name maps
