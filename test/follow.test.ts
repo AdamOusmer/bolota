@@ -3,6 +3,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   FOLLOW_MAX_PITCH,
+  FOLLOW_PITCH_DOWN,
+  FOLLOW_PITCH_UP,
   FOLLOW_MAX_YAW,
   FOLLOW_MORPH,
   followEase,
@@ -11,6 +13,8 @@ import {
 } from "../src/engine";
 import { MAX_PITCH_DRIFT, MAX_YAW_DRIFT } from "../src/bloub/face";
 import { PITCH } from "../src/bloub/gaze";
+import { BotEngine } from "../src/bloub/engine";
+import { superellipseProfile } from "../src/bloub/shape";
 
 /**
  * Fake DOM for `handle.follow()` — extends the same minimal-surface idea as
@@ -520,8 +524,9 @@ describe("handle.follow — premium tuning: wide deflection, low latency", () =>
 
     const corner = followLook(1, 1);
     expect(Math.abs(corner.yaw)).toBeGreaterThanOrEqual(0.8 * MAX_YAW_DRIFT);
-    // pitch is PITCH - ny * FOLLOW_MAX_PITCH; the *deflection* from the
-    // rest bias is what must clear 80%, not the raw pitch value itself.
+    // The *deflection* from the rest bias is what must clear 80%, not the raw
+    // pitch value. Downward now deflects further than upward, since it travels
+    // from the bias all the way to its mirror (see FOLLOW_PITCH_DOWN).
     expect(Math.abs(corner.pitch - PITCH)).toBeGreaterThanOrEqual(0.8 * MAX_PITCH_DRIFT);
 
     const oppositeCorner = followLook(-1, -1);
@@ -535,7 +540,44 @@ describe("handle.follow — premium tuning: wide deflection, low latency", () =>
   test("full deflection is reachable, not accidentally clamped short of the bound", () => {
     const corner = followLook(1, 1);
     expect(Math.abs(corner.yaw)).toBe(MAX_YAW_DRIFT);
-    expect(Math.abs(corner.pitch - PITCH)).toBe(MAX_PITCH_DRIFT);
+    expect(corner.pitch).toBe(FOLLOW_PITCH_DOWN);
+    expect(followLook(-1, -1).pitch).toBe(FOLLOW_PITCH_UP);
+  });
+
+  /**
+   * The bug this pins: the rest bias used to be the CENTRE of one symmetric
+   * deflection, so the top of the viewport drove the gaze to `PITCH +
+   * MAX_PITCH_DRIFT` while the bottom only reached `PITCH - MAX_PITCH_DRIFT`,
+   * a hair under the equator. Reported as "the eyes have difficulty going
+   * down". The two extremes are mirror images now, and the eyes actually
+   * render that far down: the rendered check is the one that matters, since a
+   * pitch number the containment solve then claws back would pass a
+   * pitch-only assertion and still look broken.
+   */
+  test("the gaze reaches as far down as it reaches up, in degrees and on screen", () => {
+    expect(FOLLOW_PITCH_DOWN).toBe(-FOLLOW_PITCH_UP);
+    expect(FOLLOW_PITCH_UP).toBeGreaterThan(PITCH);
+
+    const shape = superellipseProfile(1, 1, 4);
+    const eyeY = (look: ReturnType<typeof followLook>) => {
+      const engine = new BotEngine(100, "idle", shape);
+      engine.setLook(look, 0, 0);
+      const eyes = engine.sample(6).eyes;
+      return (
+        eyes.reduce((sum, { matrix }) => sum + Number(matrix.slice(7, -1).split(",")[5]), 0) /
+        eyes.length
+      );
+    };
+
+    const top = eyeY(followLook(0, -1));
+    const bottom = eyeY(followLook(0, 1));
+    // screen y grows downward: bottom of the viewport puts the eyes low
+    expect(bottom).toBeGreaterThan(0);
+    expect(top).toBeLessThan(0);
+    // mirror images about the body centre, within a pixel of each other
+    expect(Math.abs(bottom + top)).toBeLessThan(1);
+    // and it is a real excursion, not a token one (it was ~0.1px before)
+    expect(bottom).toBeGreaterThan(30);
   });
 
   test("FOLLOW_MORPH is a short, dedicated pointer-tracking constant, not bloub's ambient LOOK_MORPH (0.24s)", () => {

@@ -10,6 +10,26 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.1.1
+
+### Fixed
+
+- **The tracked gaze can look down.** `handle.follow()` treated the resting
+  pitch bias (10 degrees above the equator, so the bot reads as attentive
+  rather than absent) as the centre of one symmetric deflection. The top of
+  the viewport therefore drove the eyes to +20 degrees while the bottom
+  reached -0.1: on a 100-unit body, 23px of travel above the resting eye
+  height against 0.1px below it. The two extremes are mirror images now,
+  +20 and -20, so a pointer at the bottom of the page moves the eyes 57px
+  down from rest instead of a tenth of a pixel.
+
+  Not a containment problem, which is where this looked like it lived: the
+  eyefit solve clears 30 degrees of downward gaze with the worst seed at 0.68
+  of the local body radius. bloub has the same shape of bug and narrower
+  numbers still (+23 up, -3 down), which is how the port inherited it; it
+  shows less there because that bot sits beside the panel it watches, rather
+  than above a page whose content is below it.
+
 ## 0.1.0
 
 First release of this fork, published as `@luzir/bolota`. The version line
