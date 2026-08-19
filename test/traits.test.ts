@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { blobatar, _layout } from "../src/blobatar";
+import { bolota, _layout } from "../src/bolota";
 import { traits } from "../src/traits";
 import { BLOB_KEYS } from "./keys";
 
@@ -8,7 +8,7 @@ import { BLOB_KEYS } from "./keys";
  * contract that makes them one: an override means the same thing a hashed value
  * means, in the same units, and everything left out still comes from the seed.
  *
- * The geometric half — that no combination of overrides can break a blobatar —
+ * The geometric half — that no combination of overrides can break a bolota —
  * lives in `geometry.test.ts`, next to the containment helpers it needs.
  */
 
@@ -69,17 +69,17 @@ describe("reading", () => {
   });
 });
 
-describe("configuring a blobatar", () => {
+describe("configuring a bolota", () => {
   test("the same seed and overrides always render the same markup", () => {
     const opts = { traits: { shape: 0.95, "eye.ratio": 0.1 } };
-    expect(blobatar(SEED, opts)).toBe(blobatar(SEED, opts));
+    expect(bolota(SEED, opts)).toBe(bolota(SEED, opts));
   });
 
   test("an empty map renders byte-identical markup to no map at all", () => {
-    expect(blobatar(SEED, { traits: {} })).toBe(blobatar(SEED));
+    expect(bolota(SEED, { traits: {} })).toBe(bolota(SEED));
   });
 
-  test("a sparse map leaves the rest of the blobatar on the seed", () => {
+  test("a sparse map leaves the rest of the bolota on the seed", () => {
     const a = blobLayout("one", { traits: { shape: 0.95 } });
     const b = blobLayout("two", { traits: { shape: 0.95 } });
 
@@ -110,14 +110,14 @@ describe("configuring a blobatar", () => {
   });
 
   test("pinning every trait makes the seed irrelevant", () => {
-    // The "one fixed blobatar" case: a full map plus any constant string.
+    // The "one fixed bolota" case: a full map plus any constant string.
     const full: Record<string, number> = {};
     for (const k of BLOB_KEYS) full[k] = 0.42;
 
-    const a = blobatar("one", { traits: full });
-    const b = blobatar("two", { traits: full });
+    const a = bolota("one", { traits: full });
+    const b = bolota("two", { traits: full });
     expect(a).toBe(b);
-    // And it is a real blobatar, not an empty frame.
+    // And it is a real bolota, not an empty frame.
     expect(a).toContain("<path");
   });
 
@@ -133,6 +133,6 @@ describe("configuring a blobatar", () => {
     // land on the last item rather than falling off the end of the list.
     const opts = { traits: { shape: 0.14, "body.r": 1, eyes: 0.999999 } };
     expect(blobLayout(SEED, opts).shape).toBe("round");
-    expect(blobatar(SEED, opts)).toContain("<path");
+    expect(bolota(SEED, opts)).toContain("<path");
   });
 });

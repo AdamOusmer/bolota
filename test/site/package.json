@@ -1,5 +1,5 @@
 {
-  "name": "blobatar-test-site",
+  "name": "bolota-test-site",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "blobatar": "file:../.."
+    "bolota": "file:../.."
   },
   "devDependencies": {
     "vite": "^7",

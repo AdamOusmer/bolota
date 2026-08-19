@@ -2,19 +2,20 @@
  * Ported verbatim from bloub (https://github.com/jeremyPerret/bloub),
  * MIT License, Copyright (c) 2026 Jérémy Perret.
  *
- * Ring/particle/comet decor geometry (elliptical arcs, notification badge). Not adapted — see ../engine.ts for the blobatar-specific bridge
+ * Ring/particle/comet decor geometry (elliptical arcs, notification badge). Not adapted — see ../engine.ts for the bolota-specific bridge
  * (seed-to-silhouette conversion, DOM mounting, rAF loop). This file's
- * own logic, comments and variable names (French, in the original) are
- * untouched beyond TS-strict fixes and import paths.
+ * own logic and structure are untouched beyond TS-strict fixes, import
+ * paths, and translating the original French comments/identifiers to
+ * English (see ../engine.ts's header for the provenance note).
  */
 import { TAU, clamp, createRng, r2 } from './math'
 
-/* ------------------------------------------------------------------ couleurs */
+/* ------------------------------------------------------------------- colors */
 
 /**
- * Les anneaux ne sont pas des couleurs plates : la video montre une roue de
- * teintes complete a luminosite constante, avec un degrade le long de chaque
- * trace. Mesure : S 45-62 %, L 50-67 %.
+ * The rings aren't flat colors: the video shows a full hue wheel at
+ * constant lightness, with a gradient along each trace. Measured: S 45-62%,
+ * L 50-67%.
  */
 function wheel(hue: number, s = 0.55, l = 0.62): string {
   const h = ((hue % 360) + 360) % 360
@@ -40,34 +41,35 @@ function wheel(hue: number, s = 0.55, l = 0.62): string {
   return `#${hex(r)}${hex(g)}${hex(b)}`
 }
 
-/* ------------------------------------------------------------- types de rendu */
+/* -------------------------------------------------------------- render types */
 
 export interface DotRender {
   x: number
   y: number
   r: number
   opacity: number
-  /** couleur explicite ; par defaut le rendu prend celle du corps */
+  /** explicit color; the renderer defaults to the body's own color */
   color?: string
   /**
-   * Brume de profondeur : 0 = fondu dans le fond, 1 = couleur du corps pleine.
-   * Le melange se fait au rendu, qui seul connait la couleur choisie.
+   * Depth haze: 0 = faded into the background, 1 = full body color.
+   * The mix happens at render time, which is the only place that knows the
+   * chosen color.
    */
   depth?: number
   /**
-   * Forme non circulaire, en unites de rayon de boule et centree sur l'origine
-   * (le point du "!" penche est une goutte, pas un disque). Quand elle est
-   * fournie, `r` n'est plus utilise pour le trace.
+   * Non-circular shape, in units of ball radius and centered on the origin
+   * (the dot of the tilted "!" is a drop, not a disk). When provided,
+   * `r` is no longer used for the trace.
    */
   d?: string
-  /** rotation appliquee a `d`, en degres */
+  /** rotation applied to `d`, in degrees */
   rot?: number
 }
 
 /**
- * Ce qu'un etat declare : la geometrie de l'arc reste en unites de rayon de
- * boule, c'est le moteur (seul a connaitre l'echelle du viewBox) qui la
- * rasterise. Sans ca les etats devraient connaitre le viewBox.
+ * What a state declares: the arc's geometry stays in units of ball
+ * radius; it's the engine (the only thing that knows the viewBox scale)
+ * that rasterizes it. Without this, states would need to know the viewBox.
  */
 export interface ArcSpec {
   id: string
@@ -78,29 +80,29 @@ export interface ArcSpec {
 
 export interface ArcRender {
   id: string
-  /** portion devant le corps */
+  /** portion in front of the body */
   front: string
-  /** portion derriere le corps (dessinee avant, donc masquee par la silhouette) */
+  /** portion behind the body (drawn first, so masked by the silhouette) */
   back: string
   width: number
   opacity: number
-  /** degrade de teinte le long du trace */
+  /** hue gradient along the trace */
   grad: { x1: number; y1: number; x2: number; y2: number; stops: string[] }
 }
 
-/* --------------------------------------------------------- arc elliptique 3D */
+/* --------------------------------------------------------------- 3D elliptical arc */
 
 export interface ArcSeed {
-  /** demi-grand axe, en unites de rayon de boule */
+  /** semi-major axis, in units of ball radius */
   a: number
-  /** aplatissement b/a : mesure <= 0.45, les plans d'orbite sont vus par la tranche */
+  /** flattening b/a: measured <= 0.45, orbit planes are seen edge-on */
   k: number
-  /** inclinaison du grand axe a l'ecran, radians */
+  /** tilt of the major axis on screen, radians */
   tilt: number
-  /** tours par seconde */
+  /** revolutions per second */
   speed: number
   phase: number
-  /** fraction du tour reellement tracee */
+  /** fraction of the revolution actually traced */
   sweep: number
   hue: number
   hueSpan: number
@@ -110,13 +112,12 @@ export interface ArcSeed {
 }
 
 /**
- * Projette un cercle 3D incline en orthographique.
+ * Projects a tilted 3D circle in orthographic view.
  *
- * Le cercle vit dans le plan engendre par u (dans l'ecran) et v (qui plonge
- * dans la profondeur). La composante z sert a couper l'arc en deux : la moitie
- * arriere est dessinee avant le corps, donc occultee par lui. C'est ce vrai tri
- * en profondeur qui fait lire les anneaux comme des orbites et pas comme un
- * dessin plat.
+ * The circle lives in the plane spanned by u (on screen) and v (which dips
+ * into depth). The z component is what splits the arc in two: the back
+ * half is drawn before the body, so it's occluded by it. It's this real
+ * depth sort that makes the rings read as orbits instead of a flat drawing.
  */
 export function arcRender(seed: ArcSeed, t: number, scale: number, id: string, opacity = 1): ArcRender {
   const spin = seed.phase + t * seed.speed * TAU
@@ -134,7 +135,7 @@ export function arcRender(seed: ArcSeed, t: number, scale: number, id: string, o
     const th = spin + (i / N) * span
     const ct = Math.cos(th)
     const st = Math.sin(th)
-    // u = (cos tilt, sin tilt, 0) ; v = (-sin tilt * k, cos tilt * k, kz)
+    // u = (cos tilt, sin tilt, 0); v = (-sin tilt * k, cos tilt * k, kz)
     const x = seed.a * (ct * cu + st * -su * seed.k) + seed.cx
     const y = seed.a * (ct * su + st * cu * seed.k) + seed.cy
     const z = seed.a * st * kz
@@ -166,13 +167,13 @@ export function arcRender(seed: ArcSeed, t: number, scale: number, id: string, o
   }
 }
 
-/* ---------------------------------------------------------------- anneaux */
+/* ------------------------------------------------------------------------ rings */
 
 const RING_RNG = createRng(0xa11ce)
 
 /**
- * 6 anneaux, demi-grand axe 1.30-1.40 (donc nettement plus grands que la
- * boule), aplatissement toujours <= 0.45, epaisseur 0.055, ~3.3 tours/s.
+ * 6 rings, semi-major axis 1.30-1.40 (so noticeably bigger than the ball),
+ * flattening always <= 0.45, thickness 0.055, ~3.3 rev/s.
  */
 export const RINGS: ArcSeed[] = Array.from({ length: 6 }, (_, i) => ({
   a: 1.3 + RING_RNG() * 0.1,
@@ -189,8 +190,8 @@ export const RINGS: ArcSeed[] = Array.from({ length: 6 }, (_, i) => ({
 }))
 
 /**
- * Bouquet d'arcs emboites qui balaie le triangle juste avant les orbites.
- * Vus quasiment par la tranche (d'ou la forme en epingle a cheveux), rmax 1.37.
+ * Nested bouquet of arcs that sweeps across the triangle right before the
+ * orbit states. Seen almost edge-on (hence the hairpin shape), rmax 1.37.
  */
 export const SWOOSH: ArcSeed[] = Array.from({ length: 4 }, (_, i) => ({
   a: 0.78 + i * 0.2,
@@ -206,18 +207,18 @@ export const SWOOSH: ArcSeed[] = Array.from({ length: 4 }, (_, i) => ({
   cy: -0.12
 }))
 
-/* ------------------------------------------------------------- 3 points */
+/* -------------------------------------------------------------------- 3 dots */
 
-/** x mesures : -0.557 / -0.013 / +0.532, y = 0. */
+/** x measured: -0.557 / -0.013 / +0.532, y = 0. */
 export const DOT_X = [-0.557, -0.013, 0.532] as const
 export const DOT_R = 0.165
 export const DOT_PEAK = 1.25
 
-/* ------------------------------------------------------------ particules */
+/* ---------------------------------------------------------------- particles */
 
 const P_RNG = createRng(0xbeef)
 
-/** 5 particules, une nouvelle toutes les 0.2 s, duree de vie 0.55 s. */
+/** 5 particles, a new one every 0.2s, 0.55s lifetime. */
 const PARTICLES = Array.from({ length: 5 }, (_, i) => ({
   birth: i * 0.2,
   angle: P_RNG() * TAU,
@@ -225,9 +226,9 @@ const PARTICLES = Array.from({ length: 5 }, (_, i) => ({
 }))
 
 /**
- * Les particules ne partent pas en ligne droite : elles spiralent vers le
- * centre (rayon x0.75 par frame, angle +100 deg/s) en grossissant, et passent
- * derriere le noyau ou elles sont avalees.
+ * The particles don't fly off in a straight line: they spiral toward the
+ * center (radius x0.75 per frame, angle +100 deg/s) while growing, and pass
+ * behind the core where they're swallowed.
  */
 export function particles(t: number, scale: number): DotRender[] {
   const out: DotRender[] = []
@@ -247,23 +248,23 @@ export function particles(t: number, scale: number): DotRender[] {
   return out
 }
 
-/* ------------------------------------------------------------------ comete */
+/* -------------------------------------------------------------------- comet */
 
 /**
- * Contrairement a l'intuition, le point ne traverse pas l'ecran : il reste au
- * centre et c'est la trainee qui l'orbite. Ellipse a = 0.85, b = 0.15,
- * grand axe incline de +34deg, 4 rubans, ~210 deg/s.
+ * Counter-intuitively, the dot doesn't cross the screen: it stays at the
+ * center and it's the trail that orbits it. Ellipse a = 0.85, b = 0.15,
+ * major axis tilted +34deg, 4 ribbons, ~210 deg/s.
  */
 const COMET_RNG = createRng(0xc0e7)
 export const COMET_RIBBONS: ArcSeed[] = Array.from({ length: 4 }, (_, i) => {
   const d = i - 1.5
   return {
     a: 0.85 * (1 + d * 0.03),
-    // meme aplatissement a +-5 % pres : les rubans forment un faisceau serre
+    // same flattening within +-5%: the ribbons form a tight bundle
     k: (0.15 / 0.85) * (1 + d * 0.16),
     tilt: (34 * Math.PI) / 180 + d * 0.035,
     speed: 210 / 360,
-    // dephasage mesure : 10 a 20 degres entre rubans, pas davantage
+    // measured phase offset: 10 to 20 degrees between ribbons, no more
     phase: -i * 0.045 + COMET_RNG() * 0.012,
     sweep: 0.34,
     hue: i * 85 + COMET_RNG() * 20,
@@ -274,21 +275,21 @@ export const COMET_RIBBONS: ArcSeed[] = Array.from({ length: 4 }, (_, i) => {
   }
 })
 
-/** Rayon du point de la comete, mesure a 0.129. */
+/** Radius of the comet's dot, measured at 0.129. */
 export const COMET_DOT = 0.129
 
-/* --------------------------------------------------- pastille notification */
+/* ------------------------------------------------------------- notification badge */
 
-/** Bleu releve au pixel. */
+/** Blue picked off the pixel. */
 export const NOTIF_BLUE = '#2496e8'
-/** La pastille est posee exactement sur la circonference, a -42deg. */
+/** The badge sits exactly on the circumference, at -42deg. */
 export const NOTIF_ANGLE = -42
 export const NOTIF_DIST = 1.003
-/** Rayon au repos ; le pop culmine 14 % au-dessus. */
+/** Resting radius; the pop peaks 14% above it. */
 export const NOTIF_R = 0.15
 export const NOTIF_POP = 1.14
 /**
- * L'encoche est un disque concentrique a la pastille, soustrait du corps.
- * La marge est constante (0.054 R) et suit l'echelle du corps.
+ * The notch is a disk concentric with the badge, subtracted from the body.
+ * The margin is constant (0.054 R) and follows the body's scale.
  */
 export const NOTIF_MARGIN = 0.054

@@ -5,7 +5,7 @@ import { r2 } from "../src/bloub/math";
 import { radiusAtAngle, superellipseProfile, toPoints } from "../src/bloub/shape";
 import { ORBIT_PERIOD, STATE_BY_ID, type StateId } from "../src/bloub/states";
 
-// `BotEngine.sample(t)` is pure and DOM-free ("moteur sans horloge" — see its own
+// `BotEngine.sample(t)` is pure and DOM-free ("clockless engine" — see its own
 // doc comment), so every check here drives it with an explicit clock instead of a
 // real or faked `requestAnimationFrame`: sampling at chosen `t` values IS the fake
 // clock, and it is exact rather than timer-jitter-prone.
@@ -24,11 +24,11 @@ const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
 const R = 100;
 
 describe("bug 1 — eye anchoring on arbitrary seeded silhouettes", () => {
-  // Three synthetic seeds standing in for blobatar bodies: superellipse profiles
+  // Three synthetic seeds standing in for bolota bodies: superellipse profiles
   // with exponents/scales that do not match any of bloub's 8 catalog `SHAPES`
-  // (`skins.ts`) — the array reference `decalageDesYeux` used to key its
-  // correction table on, and which no real blobatar seed ever equals. Before the
-  // fix, `DECALAGES.get(radii)` missed for all three and every correction fell
+  // (`skins.ts`) — the array reference `eyeOffset` used to key its
+  // correction table on, and which no real bolota seed ever equals. Before the
+  // fix, `OFFSETS.get(radii)` missed for all three and every correction fell
   // through to `{x:0,y:0}`.
   const shapes = [
     superellipseProfile(2.5, 1, 0.55), // flat/wide, capsule-like

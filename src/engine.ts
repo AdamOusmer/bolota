@@ -1,10 +1,10 @@
 /**
- * The bridge between blobatar's seeded body and bloub's animation engine.
+ * The bridge between bolota's seeded body and bloub's animation engine.
  *
  * `src/bloub/` is a verbatim port of bloub (https://github.com/jeremyPerret/bloub,
- * MIT License, Copyright (c) 2026 Jérémy Perret) — its 14-state catalog, decor
+ * MIT License, Copyright (c) 2026 Jérémy Perret) — its 13-state catalog, decor
  * geometry and the DOM-free `BotEngine.sample(t)` render loop, none of it
- * adapted. This file is the only place new logic lives: it turns a blobatar
+ * adapted. This file is the only place new logic lives: it turns a bolota
  * seed into the radial silhouette `BotEngine` expects, mounts its output as
  * real SVG elements inside a caller-owned `<svg>`, and drives it with the
  * same delta-clamped `requestAnimationFrame` loop bloub's own player uses
@@ -14,24 +14,33 @@
  * This file deliberately does NOT re-smooth `BotEngine.sample(t)`'s own pose
  * numbers (eye matrices, the body path, decor params), to keep the port
  * verbatim rather than merely inspired-by: `sample` is already a continuous,
- * eased function of time — `easeOutQuint` throughout, no snapping, "moteur
- * sans horloge" by its own doc comment — and reaching into a 64-point path
- * string or an eye's serialized `matrix()` to filter its numbers a second
- * time would mean parsing bloub's own output back apart, then re-adding lag
- * on top of curves already tuned against the reference video. Rendering here
- * is otherwise a direct, unfiltered pass-through of whatever `sample`
- * returns — no motion blur or other post-processing (a prior version had a
- * velocity-driven `feGaussianBlur` on the body/rings/particles/eyes; user
- * call was to drop it and render sharp always, so it's gone rather than
- * dormant).
+ * eased function of time — `easeOutQuint` throughout, no snapping, a
+ * "clockless engine" by its own doc comment — and reaching into a 64-point
+ * path string or an eye's serialized `matrix()` to filter its numbers a
+ * second time would mean parsing bloub's own output back apart, then
+ * re-adding lag on top of curves already tuned against the reference video.
+ * Rendering here is otherwise a direct, unfiltered pass-through of whatever
+ * `sample` returns — no motion blur or other post-processing (a prior
+ * version had a velocity-driven `feGaussianBlur` on the body/rings/
+ * particles/eyes; user call was to drop it and render sharp always, so it's
+ * gone rather than dormant).
  *
  * `<defs>` ids are namespaced per instance (`uid` below) — the static core
- * (`blobatar()`, `parts()`) guarantees no element ids at all, a guarantee
+ * (`bolota()`, `parts()`) guarantees no element ids at all, a guarantee
  * this file does not extend and does not need to: its ids never leave the
  * `<g>` this call to `mountEngine` owns.
+ *
+ * Provenance note (referenced from every `src/bloub/*.ts` header): the
+ * original bloub source is French throughout — identifiers, comments, doc
+ * prose. `src/bloub/` translates all of it to English (this bridge file
+ * included) so the library reads as a single-language codebase; nothing
+ * about the geometry, timing, or logic changed in the process, only names
+ * and prose. The untranslated original is preserved verbatim, unrenamed, at
+ * https://github.com/AdamOusmer/bloub — that repository is the source of
+ * truth for what the French originals said before this translation pass.
  */
-import type { BlobatarOptions } from "./blobatar";
-import { _layout } from "./blobatar";
+import type { BolotaOptions } from "./bolota";
+import { _layout } from "./bolota";
 import { BotEngine, type BotFrame, type Look } from "./bloub/engine";
 import { EXPRESSIONS, EXPRESSION_BY_ID } from "./bloub/expressions";
 import { MAX_PITCH_DRIFT, MAX_YAW_DRIFT } from "./bloub/face";
@@ -189,14 +198,14 @@ function seededSilhouette(
 // pointer" as a portable library feature: a constant `-TURN` yaw bias (the
 // bot looks left, toward its own settings panel, even with the pointer
 // centered) and a `tour` ramp tied to bloub's view-entry swirl animation,
-// which blobatar has no equivalent of. Both are dropped; `followLook` below
+// which bolota has no equivalent of. Both are dropped; `followLook` below
 // is this bridge's own replacement, not a call into `gaze.ts`'s `lookTarget`.
 //
 // Deflection range is `MAX_YAW_DRIFT`/`MAX_PITCH_DRIFT` (16deg/16deg,
 // `bloub/face.ts`) rather than `gaze.ts`'s own `YAW_MAX`/`PITCH_MAX`
 // (16deg/13deg): those were bloub's numbers for bloub's own, much smaller
 // idle wander (+-7.1/+-5.5deg pre-port); this branch's own eye-anchoring
-// work already widened blobatar's idle wander to exactly
+// work already widened bolota's idle wander to exactly
 // MAX_YAW_DRIFT/MAX_PITCH_DRIFT and proved (`test/eyefit.test.ts`, long
 // sweeps) that `eyefit.ts`'s containment solve stays safe at that bound —
 // reusing it here means a tracked cursor near the viewport edge drives the
@@ -218,7 +227,7 @@ export const FOLLOW_MAX_PITCH = MAX_PITCH_DRIFT;
 export function followLook(nx: number, ny: number): Look {
   return {
     yaw: nx * FOLLOW_MAX_YAW,
-    // tangage positif = regard vers le haut, alors que le y de l'ecran descend
+    // positive pitch = looking up, while screen y goes down
     pitch: PITCH - ny * FOLLOW_MAX_PITCH,
     mix: 1,
     spin: 0,
@@ -376,14 +385,14 @@ export interface EngineHandle {
 }
 
 /**
- * Mounts a bloub-driven blobatar inside `svgRoot` and starts it on `"idle"`.
+ * Mounts a bloub-driven bolota inside `svgRoot` and starts it on `"idle"`.
  *
- * Draws blobatar's own two-color convention (a `head`-filled body path, an
+ * Draws bolota's own two-color convention (a `head`-filled body path, an
  * `eye`-filled path per eye on top) rather than bloub's mask-cut-hole
  * technique (`BloubBot.vue`'s `<mask>`) — the coordinates and geometry come
  * from bloub verbatim, only the paint does not. Decor (rings, particles,
  * the comet's ribbons) keeps bloub's own rainbow gradient, computed in
- * `bloub/decor.ts` and independent of the blobatar palette.
+ * `bloub/decor.ts` and independent of the bolota palette.
  *
  * Respects `prefers-reduced-motion`: renders one static frame — at bloub's
  * own `POSES[state]`, the instant its own thumbnails use — and never starts
@@ -392,7 +401,7 @@ export interface EngineHandle {
 export function mountEngine(
   svgRoot: SVGSVGElement,
   name: string,
-  opts?: BlobatarOptions,
+  opts?: BolotaOptions,
 ): EngineHandle {
   const doc = svgRoot.ownerDocument;
   const { palette, body, draw, petals, extra } = _layout(name, opts);
@@ -593,7 +602,7 @@ export function mountEngine(
   /**
    * Re-evaluated every tick — the avatar's own box can move under a fixed
    * pointer (scroll, layout, resize), and bloub re-reads it every frame for
-   * the same reason ("le rectangle est relu a chaque image") — but only
+   * the same reason ("the rectangle is re-read every frame") — but only
    * *retargets* (captures a new `from`/`to`/`retargetAt`) when the result
    * actually differs from the last one applied (see the note above
    * `lastNx`). While `followEase`'s curve is still catching up to its
@@ -605,10 +614,10 @@ export function mountEngine(
    * nothing further to push until the pointer actually moves or leaves.
    *
    * Only engages on a `baseFace` state (bloub's own gate: `BloubBot.vue`'s
-   * `aim()` bails the same way — "`baseFace` fait porter le visage de
-   * repos, donc le suivi du curseur s'applique des cette entree [...] un
-   * etat qui aurait sa propre pose de regard [...] rendrait la main a
-   * l'etat suivant en pleine course, et les yeux sauteraient d'un coup",
+   * `aim()` bails the same way — "`baseFace` makes it carry the resting
+   * face, so cursor-follow applies from this entrance onward [...] a
+   * state with its own gaze pose [...] would hand off to the next state
+   * mid-motion, and the eyes would jump all at once",
    * `bloub/states.ts`'s own doc comment on `swirl`). Only `idle`/`swirl`
    * are `baseFace: true` in this port's `states.ts` — every other state
    * (`orbit`, `burst`, `wink`, ...) choreographs its own `pose.gaze`, which

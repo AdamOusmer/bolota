@@ -1,4 +1,4 @@
-import { blobatar, parts, normalizeSeed, type BlobatarOptions } from "blobatar";
+import { bolota, parts, normalizeSeed, type BolotaOptions } from "bolota";
 import {
   idle,
   happy,
@@ -14,21 +14,21 @@ import {
   shy,
   sick,
   type Expression,
-} from "blobatar/expression";
-import "blobatar/motion.css";
-// NOTE(e875087): "blobatar/frames.css" and "blobatar/decor" were removed --
+} from "bolota/expression";
+import "bolota/motion.css";
+// NOTE(e875087): "bolota/frames.css" and "bolota/decor" were removed --
 // the bb-* CSS keyframe approximations are gone, replaced entirely by the
 // bloub JS engine below. Importing either now fails module resolution.
-import { mountEngine, engineStates, type EngineHandle } from "blobatar/engine";
-import { runSequence } from "blobatar/sequences";
-// NOTE(e875087): "blobatar/sequences" API changed shape completely. It used
+import { mountEngine, engineStates, type EngineHandle } from "bolota/engine";
+import { runSequence } from "bolota/sequences";
+// NOTE(e875087): "bolota/sequences" API changed shape completely. It used
 // to be `runSequence(el: Element, seq: FrameSeq, opts?) => cancel fn`, with
 // `entrance`/`burst`/`orbit`/`comet` exported as FrameSeq constants. Now it's
 // `runSequence(handle: EngineHandle, name: "entrance"|"burst"|"orbit"|"comet") => void`,
 // a one-line lookup table onto `handle.play(state)` -- no cancel fn exists
 // anymore because `mountEngine`'s `play()` already returns to "idle" on its
 // own once a non-looping state's duration elapses (see engine.ts's `tick()`).
-// The old `import { runSequence, burst } from "blobatar/sequences"` from the
+// The old `import { runSequence, burst } from "bolota/sequences"` from the
 // previous phase no longer resolves: `burst` (the FrameSeq const) is gone.
 
 const findings: string[] = [];
@@ -58,7 +58,7 @@ function card(title: string, wide = false): HTMLDivElement {
  * `parts().bg` is NOT a pre-serialized string -- it's `{d, fill} | undefined`,
  * the adapter has to build the `<path>` itself.
  */
-function makeAvatar(name: string, opts: BlobatarOptions) {
+function makeAvatar(name: string, opts: BolotaOptions) {
   const p = parts(name, opts);
   const span = document.createElement("span");
   span.className = "avatar-wrap";
@@ -85,8 +85,8 @@ function makeAvatar(name: string, opts: BlobatarOptions) {
 }
 
 /** Same adapter, but static (no animate) -- used by the determinism card's
- * third slot to prove the parts() path agrees with the blobatar() string path. */
-function partsSvg(name: string, opts: BlobatarOptions = {}): string {
+ * third slot to prove the parts() path agrees with the bolota() string path. */
+function partsSvg(name: string, opts: BolotaOptions = {}): string {
   const p = parts(name, opts);
   const dim = opts.size ? ` width="${opts.size}" height="${opts.size}"` : "";
   const bgMarkup = p.bg ? `<path d="${p.bg.d}" fill="${p.bg.fill}"/>` : "";
@@ -99,14 +99,14 @@ function partsSvg(name: string, opts: BlobatarOptions = {}): string {
  * `parts()`, there is no markup for the caller to assemble, only an empty
  * `<svg viewBox="0 0 100 100">` to hand it.
  *
- * FINDING: `mountEngine(svgRoot, name, opts?)`'s `opts` is `BlobatarOptions`
+ * FINDING: `mountEngine(svgRoot, name, opts?)`'s `opts` is `BolotaOptions`
  * but only ever reaches `resolve()` (hue/tone/palette/traits/size) via
  * `_layout` -- `opts.expression` is silently ignored. An engine-mounted
- * avatar cannot wear `blobatar/expression`'s `happy`/`wink`/etc; those poses
- * only exist on the `parts()`/`blobatar()` core path. See "MIX: celebrate"
+ * avatar cannot wear `bolota/expression`'s `happy`/`wink`/etc; those poses
+ * only exist on the `parts()`/`bolota()` core path. See "MIX: celebrate"
  * below, which composes two avatars for exactly this reason.
  */
-function mountEngineSvg(container: HTMLElement, name: string, size: number, opts: BlobatarOptions = {}) {
+function mountEngineSvg(container: HTMLElement, name: string, size: number, opts: BolotaOptions = {}) {
   const svg = document.createElementNS(SVG_NS, "svg") as unknown as SVGSVGElement;
   svg.setAttribute("viewBox", "0 0 100 100");
   svg.setAttribute("width", String(size));
@@ -134,8 +134,8 @@ function mountEngineSvg(container: HTMLElement, name: string, size: number, opts
   const slot2 = document.createElement("span");
   const slot3 = document.createElement("span");
   for (const [label, slot] of [
-    ["blobatar() #1", slot1],
-    ["blobatar() #2", slot2],
+    ["bolota() #1", slot1],
+    ["bolota() #2", slot2],
     ["parts() adapter", slot3],
   ] as const) {
     const wrap = document.createElement("div");
@@ -170,9 +170,9 @@ function mountEngineSvg(container: HTMLElement, name: string, size: number, opts
   c.appendChild(hintLabel);
 
   function update(raw: string) {
-    const seed = raw || "blobatar-testbed";
-    const s1 = blobatar(seed, { size: 64 });
-    const s2 = blobatar(seed, { size: 64 });
+    const seed = raw || "bolota-testbed";
+    const s1 = bolota(seed, { size: 64 });
+    const s2 = bolota(seed, { size: 64 });
     slot1.innerHTML = s1;
     slot2.innerHTML = s2;
     slot3.innerHTML = partsSvg(seed, { size: 64 });
@@ -181,11 +181,11 @@ function mountEngineSvg(container: HTMLElement, name: string, size: number, opts
     status.textContent = equal ? "deterministic ✓" : `MISMATCH -- diff length ${Math.abs(s1.length - s2.length)}`;
     status.classList.toggle("ok", equal);
     status.classList.toggle("bad", !equal);
-    if (!equal) log(`FINDING: blobatar("${seed}") not byte-equal across two calls`);
+    if (!equal) log(`FINDING: bolota("${seed}") not byte-equal across two calls`);
 
     const norm = normalizeSeed(seed);
-    const rawFace = blobatar(seed, { size: 40 });
-    const normFace = blobatar(norm, { size: 40 });
+    const rawFace = bolota(seed, { size: 40 });
+    const normFace = bolota(norm, { size: 40 });
     hintRaw.innerHTML = rawFace;
     hintNorm.innerHTML = normFace;
     const seedEqual = rawFace === normFace;
@@ -242,7 +242,7 @@ function mountEngineSvg(container: HTMLElement, name: string, size: number, opts
   row.className = "row";
   for (const size of [32, 56, 96]) {
     const wrap = document.createElement("span");
-    wrap.innerHTML = blobatar("static-seed-" + size, { size });
+    wrap.innerHTML = bolota("static-seed-" + size, { size });
     row.appendChild(wrap);
   }
   c.appendChild(row);
@@ -404,41 +404,30 @@ function mountEngineSvg(container: HTMLElement, name: string, size: number, opts
   const { handle } = mountEngineSvg(c, "expression-gallery", 96);
   handle.play("idle", { loop: true });
 
-  // bloub's own French ids, labeled with the English names its face
-  // customizer shows -- same order as `handle.expressions`
-  // (`bloub/expressions.ts`'s `EXPRESSIONS` array), so this is a straight
-  // zip, not a lookup keyed off anything that could drift.
-  const LABELS = [
-    "Neutral", "Attentive", "Surprised", "Excited", "Happy", "Laughing",
-    "Angry", "Sad", "Scared", "Suspicious", "Confused", "Curious",
-    "Proud", "Shy", "Unimpressed", "Sleepy",
-  ];
+  // bloub's expression ids are plain English now (`bloub/expressions.ts`'s
+  // `EXPRESSIONS` array), so the display label is just the id
+  // capitalized -- no separate English/French label list to keep in sync.
+  const label = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
 
   const status = document.createElement("div");
   status.className = "status";
-  status.textContent = `expression: ${LABELS[0]} (${handle.expressions[0]})`;
+  status.textContent = `expression: ${label(handle.expressions[0]!)} (${handle.expressions[0]})`;
   c.appendChild(status);
 
   const row = document.createElement("div");
   row.className = "row";
   row.style.flexWrap = "wrap";
-  handle.expressions.forEach((id: string, i: number) => {
+  handle.expressions.forEach((id: string) => {
     const btn = document.createElement("button");
-    btn.textContent = LABELS[i] ?? id;
+    btn.textContent = label(id);
     btn.addEventListener("click", () => {
       handle.setExpression(id);
-      status.textContent = `expression: ${LABELS[i] ?? id} (${id})`;
+      status.textContent = `expression: ${label(id)} (${id})`;
     });
     row.appendChild(btn);
   });
   c.appendChild(row);
 
-  if (handle.expressions.length !== LABELS.length) {
-    log(
-      `BUG: handle.expressions has ${handle.expressions.length} entries, LABELS has ${LABELS.length} -- ` +
-        `roster/label drift.`,
-    );
-  }
   log(
     `INFO: mounted 1 engine driving all ${handle.expressions.length} bloub face expressions via setExpression() -- ` +
       `eased transition reuses BotEngine's own exprAtTime/blendExpression path, no new easing.`,
@@ -616,7 +605,7 @@ function mountEngineSvg(container: HTMLElement, name: string, size: number, opts
   c.appendChild(btn);
 
   log(
-    "INFO: MIX celebrate composes two avatars -- mountEngine's BlobatarOptions never reaches expression handling " +
+    "INFO: MIX celebrate composes two avatars -- mountEngine's BolotaOptions never reaches expression handling " +
       "(only resolve()'s hue/tone/palette/traits/size), so the engine avatar cannot itself wear `happy`; the core " +
       "parts()-adapter badge carries that half.",
   );

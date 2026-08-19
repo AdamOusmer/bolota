@@ -2,10 +2,11 @@
  * Ported verbatim from bloub (https://github.com/jeremyPerret/bloub),
  * MIT License, Copyright (c) 2026 Jérémy Perret.
  *
- * Deterministic easing/PRNG/vector helpers. Not adapted — see ../engine.ts for the blobatar-specific bridge
+ * Deterministic easing/PRNG/vector helpers. Not adapted — see ../engine.ts for the bolota-specific bridge
  * (seed-to-silhouette conversion, DOM mounting, rAF loop). This file's
- * own logic, comments and variable names (French, in the original) are
- * untouched beyond TS-strict fixes and import paths.
+ * own logic and structure are untouched beyond TS-strict fixes, import
+ * paths, and translating the original French comments/identifiers to
+ * English (see ../engine.ts's header for the provenance note).
  */
 export const TAU = Math.PI * 2
 
@@ -15,10 +16,10 @@ export const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 export type Easing = (t: number) => number
 
 /**
- * Mesure sur la video : les transitions sont des ease-out exponentiels, sans
- * depassement du corps. Les seuls effets de ressort sont locaux (le pop de la
- * pastille de notification, l'ouverture des yeux) et sont ecrits directement
- * dans l'etat concerne.
+ * Measured off the reference video: transitions are exponential ease-outs,
+ * with no overshoot on the body. The only spring-like effects are local
+ * (the notification badge's pop, the eyes opening) and are written directly
+ * into the state concerned.
  */
 export const easings = {
   easeOutCubic: (t: number) => 1 - (1 - t) ** 3,
@@ -26,7 +27,7 @@ export const easings = {
   easeOutQuint: (t: number) => 1 - (1 - t) ** 5
 } satisfies Record<string, Easing>
 
-/** Bruit 1D periodique : boucle sans couture sur `period`, utile pour la derive du regard. */
+/** Periodic 1D noise: loops seamlessly over `period`, useful for gaze drift. */
 export function loopNoise(t: number, period: number, seed = 0): number {
   const p = (t / period) * TAU
   return (
@@ -36,7 +37,7 @@ export function loopNoise(t: number, period: number, seed = 0): number {
   )
 }
 
-/** PRNG deterministe (mulberry32) : meme sequence a chaque lecture. */
+/** Deterministic PRNG (mulberry32): same sequence on every read. */
 export function createRng(seed: number) {
   let a = seed >>> 0
   return () => {
@@ -47,5 +48,5 @@ export function createRng(seed: number) {
   }
 }
 
-/** Arrondi court : divise par ~2 le poids des chaines de path generees a 60 fps. */
+/** Short rounding: roughly halves the weight of path strings generated at 60 fps. */
 export const r2 = (v: number) => Math.round(v * 100) / 100

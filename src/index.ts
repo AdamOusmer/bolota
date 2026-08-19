@@ -1,10 +1,10 @@
 export {
-  blobatar,
+  bolota,
   _layout,
   type Animate,
-  type BlobatarOptions,
+  type BolotaOptions,
   type Expression,
-} from "./blobatar";
+} from "./bolota";
 
 /**
  * The `<svg>` contents and its motion custom properties, separately.
@@ -18,7 +18,7 @@ export {
  * varies with `expression` appears in `inner` — an expression is style, not
  * markup, so changing it changes zero bytes of `inner` and a morph can run.
  */
-export { parts } from "./blobatar";
+export { parts } from "./bolota";
 export {
   palette,
   ramp,
@@ -33,7 +33,7 @@ export { normalizeSeed } from "./hash";
 
 /**
  * The version this build came from. Asserted against package.json in
- * `test/blobatar.test.ts`, so it cannot drift.
+ * `test/bolota.test.ts`, so it cannot drift.
  *
  * It is also load-bearing, which is the part worth knowing before deleting it.
  * On Bun 1.3.14, bundling an entry whose body is *nothing but* named re-exports

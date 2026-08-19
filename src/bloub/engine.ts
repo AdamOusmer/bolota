@@ -2,14 +2,15 @@
  * Ported verbatim from bloub (https://github.com/jeremyPerret/bloub),
  * MIT License, Copyright (c) 2026 Jérémy Perret.
  *
- * BotEngine — the pure, DOM-free sample(t) render loop. Not adapted — see ../engine.ts for the blobatar-specific bridge
+ * BotEngine — the pure, DOM-free sample(t) render loop. Not adapted — see ../engine.ts for the bolota-specific bridge
  * (seed-to-silhouette conversion, DOM mounting, rAF loop). This file's
- * own logic, comments and variable names (French, in the original) are
- * untouched beyond TS-strict fixes and import paths.
+ * own logic and structure are untouched beyond TS-strict fixes, import
+ * paths, and translating the original French comments/identifiers to
+ * English (see ../engine.ts's header for the provenance note).
  */
 import { arcRender, type ArcRender, type DotRender } from './decor'
 import { blendExpression, type BotExpression } from './expressions'
-import { decalageDesYeux } from './eyefit'
+import { eyeOffset } from './eyefit'
 import { blinkScale, eyePoses, liveliness } from './face'
 import { clamp, easings, lerp, r2 } from './math'
 import {
@@ -34,7 +35,7 @@ export interface BotFrame {
   bodyAlpha: number
   eyes: RenderedEye[]
   dots: DotRender[]
-  /** true = les points passent derriere le corps (particules de l'eclatement) */
+  /** true = the dots pass behind the body (burst particles) */
   dotsBehind: boolean
   arcs: ArcRender[]
   notif: { x: number; y: number; r: number } | null
@@ -42,36 +43,36 @@ export interface BotFrame {
 }
 
 /**
- * Ou le bot porte son regard quand quelque chose d'exterieur le pilote — le
- * pointeur de la souris, aujourd'hui.
+ * Where the bot looks when something external is driving it — the mouse
+ * pointer, today.
  *
- * `yaw` et `pitch` sont des directions ABSOLUES, qui remplacent celles de la pose
- * a mesure que `mix` monte. Deux raisons, chacune un piege deja tombe :
+ * `yaw` and `pitch` are ABSOLUTE directions, which replace the pose's own as
+ * `mix` rises. Two reasons, each a trap already fallen into:
  *
- * - c'est le MOTEUR qui doit faire ce melange, pas l'appelant, parce que lui seul
- *   connait la pose A CET INSTANT. Un appelant qui compenserait l'orientation de
- *   l'expression lirait sa valeur d'arrivee pendant que le morph est encore en
- *   cours, et les yeux sautaient a chaque changement d'humeur ;
- * - et il faut que ce soit absolu sur les DEUX axes. En relatif, la hauteur des
- *   yeux suivait celle de chaque expression — « neutre » regarde a +28,6deg quand
- *   les autres sont entre -9 et +9 — donc les yeux tombaient d'un coup au premier
- *   changement d'humeur. Ce qui fait le caractere d'une expression pendant le
- *   suivi, c'est la FORME de ses yeux (plisses, ronds, dissymetriques), pas
- *   l'endroit ou elle regarde : celui-la, c'est le curseur qui le decide.
+ * - it's the ENGINE that has to do this blend, not the caller, because only
+ *   it knows the pose AT THIS INSTANT. A caller compensating for the
+ *   expression's orientation would read its arrival value while the morph is
+ *   still running, and the eyes would jump on every mood change;
+ * - and it has to be absolute on BOTH axes. As a relative value, eye height
+ *   used to follow each expression's own — "neutral" looks at +28.6deg while
+ *   the others sit between -9 and +9 — so the eyes would drop all at once on
+ *   the first mood change. What gives an expression its character during
+ *   follow is the SHAPE of its eyes (squinted, round, asymmetric), not where
+ *   it looks: that part, the cursor decides.
  *
- * `mix` dit a quel point l'exterieur commande la DIRECTION (0 = pas du tout).
+ * `mix` says how much the external target commands DIRECTION (0 = not at all).
  *
- * `wander` dit, separement, ce qui reste de derive automatique. Les deux ne se
- * confondent pas : quand le pointeur bouge, la derive doit s'eteindre — cumulees,
- * le bot aurait l'air de chercher le curseur sans jamais le tenir. Mais quand il
- * n'y a PAS de pointeur (arrivee au clavier, au tactile, ou souris sortie de la
- * fenetre), la tete doit rester tournee ET continuer de vivre. Les confondre
- * figeait le regard des que la vue s'ouvrait.
+ * `wander` says, separately, how much automatic drift is left. The two don't
+ * mix: when the pointer moves, the drift has to die down — combined, the bot
+ * would look like it's hunting for the cursor without ever holding it. But
+ * when there's NO pointer (arriving by keyboard, by touch, or the mouse left
+ * the window), the head has to stay turned AND keep living. Conflating the
+ * two froze the gaze the moment the view opened.
  *
- * `spin` est un tour a parcourir EN CHEMIN, en degres, qu'on fait fondre vers 0
- * avec l'arrivee. Comme les yeux vivent sur une sphere, un tour les fait passer
- * derriere la boule et revenir de l'autre cote — et `-360deg` etant le meme
- * angle que `0`, il ne change rien a l'endroit ou ils se posent.
+ * `spin` is a turn to travel EN ROUTE, in degrees, faded to 0 as the arrival
+ * progresses. Since the eyes live on a sphere, a turn sends them behind the
+ * ball and back out the other side — and since `-360deg` is the same angle
+ * as `0`, it changes nothing about where they end up.
  */
 export interface Look {
   yaw: number
@@ -98,7 +99,7 @@ const lerpEye = (a: Pose['eyes'][number], b: Pose['eyes'][number], t: number) =>
   tilt: lerp(a.tilt ?? 0, b.tilt ?? 0, t)
 })
 
-/** Interpolation de deux poses. Le decor se croise en opacite, pas en geometrie. */
+/** Interpolates two poses. The decor cross-fades in opacity, not geometry. */
 function blendPose(a: Pose, b: Pose, t: number): Pose {
   const out = 1 - t
   return {
@@ -122,34 +123,35 @@ function blendPose(a: Pose, b: Pose, t: number): Pose {
       ...a.arcs.map((r) => ({ ...r, id: `a${r.id}`, opacity: r.opacity * out })),
       ...b.arcs.map((r) => ({ ...r, id: `b${r.id}`, opacity: r.opacity * t }))
     ],
-    // la pastille appartient a un seul des deux etats, elle ne se melange pas
+    // the badge belongs to only one of the two states, it doesn't blend
     notif: t < 0.5 ? a.notif : b.notif,
     dotsBehind: t < 0.5 ? a.dotsBehind : b.dotsBehind
   }
 }
 
 /**
- * Moteur sans horloge : `sample(t)` est une fonction pure du temps.
+ * Clockless engine: `sample(t)` is a pure function of time.
  *
- * Consequence pratique : pause, reprise, ralenti et saut a une date arbitraire
- * donnent exactement la meme image, et le rendu est testable sans DOM.
+ * Practical consequence: pause, resume, slow motion and jumping to an
+ * arbitrary date all give exactly the same image, and the render is
+ * testable without a DOM.
  */
 export class BotEngine {
-  /** rayon de la boule au repos, en unites de viewBox */
+  /** ball radius at rest, in viewBox units */
   readonly scale: number
 
   private cur: StateId
   private prev: StateId | null = null
   /**
-   * Pose de depart FIGEE, posee seulement quand un changement d'etat arrive alors qu'un
-   * fondu est deja en cours. Cf. `setState`.
+   * FROZEN starting pose, set only when a state change arrives while a
+   * cross-fade is already running. See `setState`.
    */
-  private departFige: Pose | null = null
+  private frozenStart: Pose | null = null
   private tCur = 0
   private tPrev = 0
   private blinkAt = -10
   /**
-   * blobatar addition: true while the current state is meant to repeat
+   * bolota addition: true while the current state is meant to repeat
    * indefinitely (`setState`/`reset`'s own `loop` argument). Gates whether
    * `wrapped()` below folds elapsed time into `[0, def.period)` — looping is
    * therefore a property of HOW a state is being played, not of the state
@@ -167,17 +169,18 @@ export class BotEngine {
   private look: Look = NO_LOOK
   private lookPrev: Look = NO_LOOK
   private lookAt = -10
-  /** duree de rattrapage en cours ; voir `LOOK_MORPH`, sa valeur par defaut */
+  /** duration of the catch-up in progress; see `LOOK_MORPH`, its default value */
   private lookMorph = 0.24
 
-  /** duree du morph quand on change la forme du corps */
+  /** duration of the morph when the body shape changes */
   static readonly SHAPE_MORPH = 0.45
 
   /**
-   * Duree de rattrapage du regard vers la cible. Plus court que `SHAPE_MORPH` :
-   * un regard qui suit doit paraitre attentif, pas visqueux. Comme la cible est
-   * reposee a chaque mouvement de souris, c'est cette duree qui donne au suivi
-   * son inertie — le regard n'atteint jamais tout a fait un curseur qui bouge.
+   * Catch-up duration of the gaze toward its target. Shorter than
+   * `SHAPE_MORPH`: a following gaze should read as attentive, not sluggish.
+   * Since the target is reset on every mouse move, it's this duration that
+   * gives the follow its inertia — the gaze never quite reaches a moving
+   * cursor.
    */
   static readonly LOOK_MORPH = 0.24
 
@@ -194,8 +197,8 @@ export class BotEngine {
   }
 
   /**
-   * Expression de repos choisie dans le personnalisateur. Comme la forme, elle
-   * glisse vers la nouvelle valeur au lieu de sauter.
+   * Resting expression chosen in the personalizer. Like the shape, it
+   * glides to the new value instead of jumping.
    */
   setExpression(expression: BotExpression | null, now = 0) {
     if (expression === this.expr) return
@@ -204,7 +207,7 @@ export class BotEngine {
     this.exprAt = now
   }
 
-  /** Expression effective a l'instant `now`, morph en cours compris. */
+  /** Effective expression at instant `now`, morph in progress included. */
   private exprAtTime(now: number): BotExpression | null {
     const to = this.expr
     const from = this.exprPrev
@@ -215,12 +218,12 @@ export class BotEngine {
   }
 
   /**
-   * Forme choisie dans le personnalisateur. Elle ne remplace le corps que sur
-   * les etats au repos (`baseBody`) : sur les autres, la silhouette EST
-   * l'animation et ne doit pas etre ecrasee.
+   * Shape chosen in the personalizer. It only replaces the body on
+   * at-rest states (`baseBody`): on the others, the silhouette IS the
+   * animation and must not be overwritten.
    *
-   * Le changement se fait en morph, pas d'un coup : comme toutes les formes sont
-   * echantillonnees aux memes angles, il suffit d'interpoler les rayons.
+   * The change happens as a morph, not a jump: since every shape is
+   * sampled at the same angles, interpolating the radii is enough.
    */
   setShape(radii: number[] | null, now = 0) {
     if (radii === this.shape) return
@@ -230,11 +233,12 @@ export class BotEngine {
   }
 
   /**
-   * Forme effective a l'instant `now`, morph en cours compris.
+   * Effective shape at instant `now`, morph in progress included.
    *
-   * Ne remet PAS `shapePrev` a null en fin de morph : `sample` doit rester une
-   * fonction pure du temps, donc relire une date passee doit redonner l'image
-   * intermediaire. On garde juste une reference de plus.
+   * Does NOT reset `shapePrev` to null at the end of the morph: `sample`
+   * has to stay a pure function of time, so re-reading a past date must
+   * give back the same intermediate image. We just keep one more
+   * reference around.
    */
   private shapeAtTime(now: number): number[] | null {
     const to = this.shape
@@ -243,30 +247,30 @@ export class BotEngine {
     const k = (now - this.shapeAt) / BotEngine.SHAPE_MORPH
     if (k >= 1) return to
     const t = easings.easeOutQuint(clamp(k))
-    // alloue seulement pendant le morph ; hors morph on rend le tableau tel quel
+    // allocated only during the morph; outside the morph the array is returned as-is
     return to.map((r, i) => lerp(from[i] ?? r, r, t))
   }
 
   /**
-   * Nouvelle cible de regard, `null` pour revenir a celui de l'etat.
+   * New gaze target, `null` to fall back to the state's own.
    *
-   * Elle repart de la valeur COURANTE, et non de la cible precedente comme
-   * `setShape` : cette methode est appelee a chaque mouvement de pointeur, et
-   * repartir de l'ancienne cible ferait reculer le regard d'un cran avant
-   * chaque rattrapage — le suivi tremblerait au lieu de glisser.
+   * It starts from the CURRENT value, not the previous target the way
+   * `setShape` does: this method fires on every pointer move, and starting
+   * from the old target would set the gaze back a step before every
+   * catch-up — the follow would judder instead of gliding.
    *
-   * Meme contrat que `setShape` par ailleurs : l'etat externe entre par un
-   * setter horodate, jamais par une variable lue pendant `sample`, sinon le
-   * moteur cesse d'etre une fonction pure du temps.
+   * Same contract as `setShape` otherwise: external state comes in through
+   * a timestamped setter, never through a variable read during `sample`,
+   * or the engine stops being a pure function of time.
    */
   setLook(look: Look | null, now: number, morph = BotEngine.LOOK_MORPH) {
     /*
-     * Une cible non finie est refusee. Le moteur GARDE la derniere : un `NaN`
-     * pose une seule fois se propagerait a chaque image et le bot ne se
-     * reposerait plus jamais. C'est arrive pour de vrai — un
-     * `getBoundingClientRect` sur une boite de taille nulle donne `0 / 0` chez
-     * l'appelant. Celui-la est corrige, mais le moteur n'a pas a dependre de la
-     * prudence de ses appelants pour rester rejouable.
+     * A non-finite target is rejected. The engine KEEPS the last one: a
+     * `NaN` set just once would propagate to every frame after and the bot
+     * would never settle again. This happened for real — a
+     * `getBoundingClientRect` on a zero-size box gives `0 / 0` on the
+     * caller's side. That one is fixed, but the engine shouldn't have to
+     * depend on its callers' caution to stay replayable.
      */
     if (look && !Number.isFinite(look.yaw + look.pitch + look.mix + look.spin + look.wander)) {
       return
@@ -278,9 +282,9 @@ export class BotEngine {
   }
 
   /**
-   * Regard effectif a l'instant `now`, rattrapage en cours compris.
+   * Effective gaze at instant `now`, catch-up in progress included.
    *
-   * blobatar divergence: `easeOutQuint` here (bloub's own choice everywhere else in
+   * bolota divergence: `easeOutQuint` here (bloub's own choice everywhere else in
    * this file) starts a retarget at FULL velocity — its derivative at k=0 is 5, not 0
    * — so every pointer move snapped the gaze into motion instead of easing into it.
    * Harmless for the state/shape/expr morphs elsewhere in this file, which all start
@@ -288,7 +292,7 @@ export class BotEngine {
    * `setLook` fires on every pointer-move event, i.e. mid-motion far more often than
    * not, so the missing accel phase was audible as a snap on each retarget — the
    * literal user report ("eye position changes are NOT eased — they snap"). Unlike
-   * `decalageAtTime` below, this morph is NOT coupled to the shape/body morph curve
+   * `offsetAtTime` below, this morph is NOT coupled to the shape/body morph curve
    * (see `LOOK_MORPH`'s own doc comment: deliberately a different, shorter duration),
    * so it is free to use a different curve too. `easeInOutCubic` (`math.ts`) accelerates
    * in and decelerates out — no snap at either end.
@@ -307,7 +311,7 @@ export class BotEngine {
   ): Pose {
     let pose = def.pose(t)
     if (def.baseBody && shape) {
-      // on garde la pose (rotation, decalage, squash) et on n'echange que le profil
+      // keep the pose (rotation, offset, squash) and swap only the profile
       pose = { ...pose, sil: { ...pose.sil, radii: shape } }
     } else if (shape) {
       // DIVERGENCE FROM VERBATIM BLOUB (user-sanctioned, see src/engine.ts's
@@ -339,52 +343,53 @@ export class BotEngine {
   }
 
   /**
-   * Decalage des yeux a l'instant `now` pour un etat donne, en unites de rayon de boule.
+   * Eye offset at instant `now` for a given state, in units of ball radius.
    *
-   * Il est LU dans une table et interpole, jamais recalcule : `eyefit.ts` explique
-   * pourquoi cette distinction est tout le correctif. Ici il ne reste qu'a l'interpoler
-   * sur l'axe de la forme, avec exactement la courbe et la duree du morph de silhouette
-   * — c'est la meme cause, donc ce doit etre le meme mouvement.
+   * It's READ from a table and interpolated, never recomputed: `eyefit.ts`
+   * explains why that distinction is the whole fix. Here all that's left is
+   * to interpolate it along the shape axis, with exactly the same curve and
+   * duration as the silhouette morph — it's the same cause, so it has to be
+   * the same movement.
    *
-   * On interroge la table sur les BORNES du morph (`shapePrev` et `shape`) et non sur le
-   * profil que rend `shapeAtTime` : celui-la est un tableau neuf alloue a chaque image,
-   * donc sans identite, et il n'existe dans aucune table.
+   * The table is queried at the morph's BOUNDS (`shapePrev` and `shape`),
+   * not the profile `shapeAtTime` renders: that one is a fresh array
+   * allocated every frame, so it has no identity, and it exists in no table.
    */
-  private decalageAtTime(now: number, state: StateId): { x: number; y: number } {
+  private offsetAtTime(now: number, state: StateId): { x: number; y: number } {
     /**
-     * Un axe de morph : on lit la table sur ses deux BORNES et on interpole avec sa
-     * courbe. Jamais sur la valeur interpolee — celle-la n'a pas d'identite et n'existe
-     * dans aucune table, et c'est en la lui donnant a manger que les versions
-     * precedentes tremblaient.
+     * A morph axis: the table is read at its two BOUNDS and interpolated
+     * with its curve. Never on the interpolated value — that one has no
+     * identity and exists in no table, and feeding it to the table is what
+     * made earlier versions jitter.
      */
-    const surAxe = (
-      debut: number,
-      duree: number,
+    const alongAxis = (
+      start: number,
+      duration: number,
       a: { x: number; y: number },
       b: { x: number; y: number }
     ) => {
       if (a === b) return b
-      const k = (now - debut) / duree
+      const k = (now - start) / duration
       if (k >= 1) return b
       const t = easings.easeOutQuint(clamp(k))
       return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) }
     }
 
-    // axe de l'expression, pour chacune des deux formes en presence
-    const parForme = (radii: number[] | null) =>
-      surAxe(
+    // expression axis, for each of the two shapes in play
+    const byShape = (radii: number[] | null) =>
+      alongAxis(
         this.exprAt,
         BotEngine.SHAPE_MORPH,
-        decalageDesYeux(radii, state, this.exprPrev?.id ?? null),
-        decalageDesYeux(radii, state, this.expr?.id ?? null)
+        eyeOffset(radii, state, this.exprPrev?.id ?? null),
+        eyeOffset(radii, state, this.expr?.id ?? null)
       )
 
-    // puis axe de la forme
-    return surAxe(
+    // then the shape axis
+    return alongAxis(
       this.shapeAt,
       BotEngine.SHAPE_MORPH,
-      parForme(this.shapePrev),
-      parForme(this.shape)
+      byShape(this.shapePrev),
+      byShape(this.shape)
     )
   }
 
@@ -393,21 +398,25 @@ export class BotEngine {
   }
 
   /**
-   * Repart sur `id` SANS etat precedent, comme un moteur neuf pose sur cet etat.
+   * Restarts on `id` with NO previous state, like a fresh engine dropped
+   * onto that state.
    *
-   * C'est ce que veut dire « rembobiner » pour ce moteur. `setState` seul ne peut pas le
-   * faire : il garde l'etat quitte pour le fondre, ce qui est exactement son role en
-   * lecture, et exactement ce qu'il ne faut pas quand on revient au debut d'une sequence.
-   * Rejouer l'image 0 apres une passe complete melangeait le premier etat avec le DERNIER,
-   * et l'export GIF s'ouvrait sur une boule sans yeux — la comete a un `eyeAlpha` nul.
+   * That's what "rewind" means for this engine. `setState` alone can't do
+   * it: it keeps the state it's leaving in order to cross-fade from it,
+   * which is exactly its job during playback, and exactly what must NOT
+   * happen when jumping back to the start of a sequence. Replaying frame 0
+   * after a full pass used to blend the first state with the LAST one, and
+   * the GIF export opened on a ball with no eyes — the comet has zero
+   * `eyeAlpha`.
    *
-   * `sample` reste une fonction pure du temps : comme `setState`, ceci est un setter DATE,
-   * appele par le pilote de la sequence, jamais pendant un echantillonnage.
+   * `sample` stays a pure function of time: like `setState`, this is a
+   * DATE-stamped setter, called by the sequence's driver, never during a
+   * sample.
    */
   reset(id: StateId, now: number, loop = false) {
     this.cur = id
     this.prev = null
-    this.departFige = null
+    this.frozenStart = null
     this.tCur = now
     this.tPrev = now
     this.blinkAt = -10
@@ -415,7 +424,7 @@ export class BotEngine {
   }
 
   /**
-   * blobatar addition: the ONE place elapsed time is folded into a state's
+   * bolota addition: the ONE place elapsed time is folded into a state's
    * own loop phase. Every caller below that feeds a channel-producing
    * `posed()` routes through this first — `pose()` itself, and therefore
    * every channel it returns, only ever sees an already-wrapped number, so
@@ -428,58 +437,61 @@ export class BotEngine {
   }
 
   /**
-   * Origine du fondu en cours : la pose figee s'il y en a une, sinon l'etat quitte evalue
-   * a son propre temps ecoule — donc encore en train de s'animer, ce qui est voulu.
+   * Origin of the cross-fade in progress: the frozen pose if there is one,
+   * otherwise the left state evaluated at its own elapsed time — so still
+   * animating, which is intended.
    */
-  private origine(
+  private origin(
     now: number,
     shape: number[] | null,
     expr: BotExpression | null
   ): Pose | null {
-    if (this.departFige) return this.departFige
+    if (this.frozenStart) return this.frozenStart
     if (!this.prev) return null
     const prevDef = STATE_BY_ID.get(this.prev)!
     return this.posed(prevDef, this.wrapped(prevDef, Math.max(0, now - this.tPrev)), shape, expr)
   }
 
   /**
-   * Pose composite a l'instant `now`, fondu en cours compris : exactement ce que `sample`
-   * melange, avant la couche de vie au repos et de regard. Extraite pour que `setState`
-   * puisse la figer.
+   * Composite pose at instant `now`, cross-fade in progress included:
+   * exactly what `sample` blends, before the idle-life and gaze layer.
+   * Extracted so `setState` can freeze it.
    */
-  private poseComposee(now: number): Pose {
+  private composedPose(now: number): Pose {
     const def = STATE_BY_ID.get(this.cur)!
     const shape = this.shapeAtTime(now)
     const expr = this.exprAtTime(now)
     const pose = this.posed(def, this.wrapped(def, Math.max(0, now - this.tCur)), shape, expr)
     const since = now - this.tCur
     if (since >= def.morph) return pose
-    const origine = this.origine(now, shape, expr)
-    if (!origine) return pose
-    return blendPose(origine, pose, easings.easeOutQuint(clamp(since / def.morph)))
+    const origin = this.origin(now, shape, expr)
+    if (!origin) return pose
+    return blendPose(origin, pose, easings.easeOutQuint(clamp(since / def.morph)))
   }
 
   /**
-   * Changement d'etat, date.
+   * State change, timestamped.
    *
-   * Le moteur ne garde qu'UNE case d'historique, donc un changement qui arrive pendant un
-   * fondu remplacait l'origine du melange par la pose PLEINE de l'etat qu'on quittait, au
-   * lieu de l'image partiellement melangee qui etait a l'ecran. Mesure sur
-   * `idle -> wide -> idle` a 100 ms : 35,9 px de saut contre 8,0 px de mouvement normal.
+   * The engine keeps only ONE slot of history, so a change arriving during
+   * a cross-fade used to replace the blend's origin with the FULL pose of
+   * the state being left, instead of the partially-blended image that was
+   * actually on screen. Measured on `idle -> wide -> idle` at 100ms: 35.9px
+   * of jump against 8.0px of normal motion.
    *
-   * On fige donc la pose composite courante et on melange depuis elle. Continu par
-   * construction, quel que soit le nombre de changements enchaines.
+   * So the current composite pose is frozen and the blend runs from it.
+   * Continuous by construction, no matter how many changes chain together.
    *
-   * Et SEULEMENT dans ce cas. Figer a chaque changement arreterait net l'animation de
-   * l'etat qu'on quitte pendant tout le fondu — le « ! » d'`alert` se figerait en pleine
-   * course — alors qu'il n'y a rien a corriger hors morph : l'etat quitte y est deja
-   * exactement l'image affichee. La lecture d'un montage, dont les blocs durent au moins
-   * le plus long fondu (`MIN_BLOCK`), ne fige donc jamais rien et rend au bit ce qu'elle
-   * rendait.
+   * And ONLY in that case. Freezing on every change would stop the outgoing
+   * state's animation dead for the whole cross-fade — `alert`'s "!" would
+   * freeze mid-motion — when there's nothing to fix outside a morph: the
+   * outgoing state is already exactly the displayed image there. Playing a
+   * sequence, whose blocks all last at least the longest cross-fade
+   * (`MIN_BLOCK`), therefore never freezes anything and renders frame for
+   * frame what it was already rendering.
    */
   setState(id: StateId, now: number, loop = false) {
     if (id === this.cur) {
-      // blobatar addition: the id is unchanged but `loop` may not be (e.g.
+      // bolota addition: the id is unchanged but `loop` may not be (e.g.
       // a state first played once inside a sequence, later looped from a
       // demo) — still worth taking, and cheap; nothing else about an
       // already-current state needs re-arming.
@@ -487,14 +499,14 @@ export class BotEngine {
       return
     }
     const morph = STATE_BY_ID.get(this.cur)!.morph
-    const enPleinFondu = this.prev !== null && now - this.tCur < morph
-    this.departFige = enPleinFondu ? this.poseComposee(now) : null
+    const midMorph = this.prev !== null && now - this.tCur < morph
+    this.frozenStart = midMorph ? this.composedPose(now) : null
     this.prev = this.cur
     this.tPrev = this.tCur
     this.cur = id
     this.tCur = now
     this.looping = loop
-    // Dans la video, chaque changement de forme est masque par un clignement.
+    // In the video, every shape change is masked by a blink.
     if (STATE_BY_ID.get(id)?.blinkIn) this.blinkAt = now
   }
 
@@ -504,40 +516,42 @@ export class BotEngine {
     const shape = this.shapeAtTime(now)
     const expr = this.exprAtTime(now)
     let pose = this.posed(def, this.wrapped(def, Math.max(0, now - this.tCur)), shape, expr)
-    let decalage = this.decalageAtTime(now, this.cur)
+    let offset = this.offsetAtTime(now, this.cur)
 
     // --- transition -------------------------------------------------------
     const since = now - this.tCur
-    // L'etat precedent n'est jamais purge : `since < def.morph` suffit a
-    // l'ignorer une fois le fondu passe, et l'oublier rendrait le moteur non
-    // rejouable — relire une date d'avant la fin du fondu ne le retrouverait
-    // plus. C'est l'optimisation qui parait innocente et qui casse tout.
-    const origine = since < def.morph ? this.origine(now, shape, expr) : null
-    if (origine) {
-      // Ease-out exponentiel : c'est la courbe mesuree sur la video. Le corps
-      // n'a pas d'overshoot (seuls la pastille et l'ouverture des yeux en ont).
-      // Le ratio est borne : relire une date ANTERIEURE au changement d'etat
-      // donnerait un ratio negatif, que l'ease-out extrapole — la silhouette
-      // part alors trente fois trop loin.
+    // The previous state is never purged: `since < def.morph` is enough to
+    // ignore it once the cross-fade is past, and forgetting it would make
+    // the engine non-replayable — re-reading a date before the fade ends
+    // would no longer find it. This is the optimization that looks
+    // innocent and breaks everything.
+    const origin = since < def.morph ? this.origin(now, shape, expr) : null
+    if (origin) {
+      // Exponential ease-out: this is the curve measured off the video.
+      // The body has no overshoot (only the badge and the eye-opening do).
+      // The ratio is clamped: re-reading a date BEFORE the state change
+      // would give a negative ratio, which the ease-out extrapolates — the
+      // silhouette would then fly off thirty times too far.
       const ratio = easings.easeOutQuint(clamp(since / def.morph))
-      pose = blendPose(origine, pose, ratio)
-      // Le decalage des yeux suit la MEME courbe que la silhouette qui le motive. Il vient
-      // de l'etat quitte, que `setState` renseigne toujours en meme temps que l'origine —
-      // le test est la pour le typage, pas pour un cas reel.
-      const quitte = this.prev
-      if (quitte) {
-        const avant = this.decalageAtTime(now, quitte)
-        decalage = {
-          x: lerp(avant.x, decalage.x, ratio),
-          y: lerp(avant.y, decalage.y, ratio)
+      pose = blendPose(origin, pose, ratio)
+      // The eye offset follows the SAME curve as the silhouette that
+      // motivates it. It comes from the left state, which `setState`
+      // always sets at the same time as the origin — the test here is for
+      // typing, not a real case.
+      const left = this.prev
+      if (left) {
+        const before = this.offsetAtTime(now, left)
+        offset = {
+          x: lerp(before.x, offset.x, ratio),
+          y: lerp(before.y, offset.y, ratio)
         }
       }
     }
 
-    // --- vie au repos -----------------------------------------------------
+    // --- idle life ----------------------------------------------------------
     const alive = pose.eyeAlpha > 0.01
     const look = this.lookAtTime(now)
-    // blobatar divergence from the bloub port: `def.ownsLiveliness` (see its
+    // bolota divergence from the bloub port: `def.ownsLiveliness` (see its
     // own doc comment, `states.ts`) — a state that already drives gaze and/or
     // body center itself gets ZERO idle wander/drift/breath composed on top,
     // the same arbitration bug class as follow-vs-idle (`gaze.ts`) but between
@@ -554,18 +568,20 @@ export class BotEngine {
     })
 
     const gaze = {
-      // Les deux visees REMPLACENT celles de la pose au lieu de s'y ajouter (voir
-      // `Look`), et le tour se retranche en chemin. La derive s'ajoute APRES le
-      // melange, sinon la cible l'annulerait en meme temps que la pose — or elle
-      // doit survivre a une tete tournee sans pointeur.
+      // Both aims REPLACE the pose's own (see `Look`) instead of adding to
+      // it, and the turn is subtracted along the way. The drift is added
+      // AFTER the blend, otherwise the target would cancel it out along
+      // with the pose — but it has to survive a head turned with no
+      // pointer.
       yaw: lerp(pose.gaze.yaw, look.yaw, look.mix) + life.dYaw - look.spin,
       pitch: lerp(pose.gaze.pitch, look.pitch, look.mix) + life.dPitch,
-      // le roulis, lui, ne suit rien : la tete du bot est penchee de -13deg dans
-      // la video, et la faire rouler avec le curseur casse cette signature
+      // roll, on the other hand, follows nothing: the bot's head is tilted
+      // -13deg in the video, and rolling it with the cursor would break
+      // that signature
       roll: pose.gaze.roll + life.dRoll
     }
 
-    // clignement declenche par le changement d'etat, en plus du calendrier
+    // blink triggered by the state change, on top of the schedule
     const forced = clamp((now - this.blinkAt) / 0.2)
     const forcedLid = forced < 1 ? Math.abs(forced * 2 - 1) : 1
     const lid = Math.min(life.lid, forcedLid)
@@ -573,7 +589,7 @@ export class BotEngine {
     const offX = pose.offX + life.driftX
     const offY = pose.offY + life.driftY
 
-    // --- corps ------------------------------------------------------------
+    // --- body ---------------------------------------------------------------
     const sil: Silhouette = {
       ...pose.sil,
       cx: pose.sil.cx + offX,
@@ -582,15 +598,15 @@ export class BotEngine {
     }
     const bodyPath = closedPath(toPoints(sil, R, this.pts))
 
-    // --- yeux -------------------------------------------------------------
-    // Les yeux vivent sur une sphere de rayon 1 ; des que la silhouette n'est
-    // plus un cercle, on les ramene au prorata du rayon reel dans leur
-    // direction, sinon ils debordent et le masque les coupe.
+    // --- eyes -----------------------------------------------------------------
+    // The eyes live on a radius-1 sphere; as soon as the silhouette isn't a
+    // circle anymore, they're brought back pro-rated by the real radius in
+    // their direction, otherwise they overflow and the mask clips them.
     const bodyRadius = (x: number, y: number) =>
       radiusAtAngle(pose.sil.radii, Math.atan2(y, x) - pose.sil.rot)
 
     /**
-     * blobatar divergence from the bloub port: the body path (`sil` above, a
+     * bolota divergence from the bloub port: the body path (`sil` above, a
      * few lines up) is drawn at `pose.sil.cx + offX, pose.sil.cy + offY` — but
      * this eye matrix used to add only `offX/offY`, never `pose.sil.cx/cy`.
      * Every OTHER state has `sil.cx === sil.cy === 0` (bloub's own `base()`/
@@ -617,9 +633,9 @@ export class BotEngine {
         if (e.depth <= 0.02) continue
         const cfg = pose.eyes[i]!
         const fit = bodyRadius(e.x, e.y)
-        // Inclinaison propre de l'oeil : on compose le repere tangent avec une
-        // rotation dans le plan de l'oeil (Basis x Rot). C'est ce qui permet des
-        // inclinaisons en miroir entre les deux yeux.
+        // The eye's own tilt: the tangent frame is composed with a rotation
+        // in the eye's own plane (Basis x Rot). That's what allows mirrored
+        // tilts between the two eyes.
         const phi = ((cfg.tilt ?? 0) * Math.PI) / 180
         const cp = Math.cos(phi)
         const sp = Math.sin(phi)
@@ -627,23 +643,23 @@ export class BotEngine {
         const ay = e.b * cp + e.d * sp
         const cx2 = -e.a * sp + e.c * cp
         const cy2 = -e.b * sp + e.d * cp
-        // Le clignement s'applique APRES tout ca : c'est un ecrasement vertical
-        // a l'ecran, pas le long de l'axe de la gelule.
+        // The blink is applied AFTER all of that: it's a vertical squash on
+        // screen, not along the capsule's own axis.
         const k = blinkScale(Math.min(lid, cfg.open))
         eyes.push({
           d: capsulePath(cfg.w * R, cfg.h * R),
-          matrix: `matrix(${r2(ax)},${r2(ay * k)},${r2(cx2)},${r2(cy2 * k)},${r2(e.x * fit + bodyCx + (offX + decalage.x) * R)},${r2(e.y * fit + bodyCy + (offY + decalage.y) * R)})`,
+          matrix: `matrix(${r2(ax)},${r2(ay * k)},${r2(cx2)},${r2(cy2 * k)},${r2(e.x * fit + bodyCx + (offX + offset.x) * R)},${r2(e.y * fit + bodyCy + (offY + offset.y) * R)})`,
           alpha: pose.eyeAlpha * clamp(e.depth / 0.12)
         })
       }
     }
 
-    // --- decor ------------------------------------------------------------
+    // --- decor ----------------------------------------------------------------
     const dots = pose.dots
       .filter((p) => p.opacity > 0.01 && p.r > 0.0005)
       .map((p) => ({ ...p, x: (p.x + offX) * R, y: (p.y + offY) * R, r: p.r * R }))
 
-    // la pastille est posee sur le contour : elle suit donc la forme aussi
+    // the badge sits on the outline: so it follows the shape too
     const nFit = pose.notif ? bodyRadius(pose.notif.x, pose.notif.y) : 1
     const nx = pose.notif ? (pose.notif.x * nFit + offX) * R : 0
     const ny = pose.notif ? (pose.notif.y * nFit + offY) * R : 0
@@ -656,8 +672,9 @@ export class BotEngine {
       eyes,
       dots,
       dotsBehind: pose.dotsBehind,
-      // Les etats declarent des arcs en unites de rayon de boule ; le moteur
-      // est le seul a connaitre l'echelle du viewBox, donc c'est lui qui trace.
+      // States declare arcs in units of ball radius; the engine is the
+      // only thing that knows the viewBox scale, so it's the one that
+      // rasterizes them.
       arcs: pose.arcs
         .filter((a) => a.opacity > 0.01)
         .map((a) => arcRender(a.seed, a.t, R, a.id, a.opacity)),
@@ -666,4 +683,3 @@ export class BotEngine {
     }
   }
 }
-

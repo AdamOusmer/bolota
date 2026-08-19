@@ -97,9 +97,9 @@ describe("expressions on the engine handle", () => {
   test("all 16 bloub expression ids are present, bloub's own array order", () => {
     const { handle } = mount();
     expect(handle.expressions).toEqual([
-      "neutre", "attentif", "surpris", "excite", "heureux", "hilare",
-      "colere", "triste", "effraye", "mefiant", "confus", "curieux",
-      "fier", "timide", "blase", "somnolent",
+      "neutral", "attentive", "surprised", "excited", "happy", "laughing",
+      "angry", "sad", "scared", "suspicious", "confused", "curious",
+      "proud", "shy", "unimpressed", "sleepy",
     ]);
     expect(handle.expressions).toHaveLength(16);
   });
@@ -115,7 +115,7 @@ describe("expressions on the engine handle", () => {
     run(doc, 50); // settle onto idle's own first frame past mount's t=0 sample
     const before = eyeD(svg);
 
-    handle.setExpression("somnolent"); // sleepy: half-shut, tilted eyes -- far from neutral
+    handle.setExpression("sleepy"); // sleepy: half-shut, tilted eyes -- far from neutral
     run(doc, 500); // > BotEngine.SHAPE_MORPH (0.45s): fully eased in
 
     const after = eyeD(svg);
@@ -127,7 +127,7 @@ describe("expressions on the engine handle", () => {
     handle.play("idle", { loop: true });
     run(doc, 50);
 
-    handle.setExpression("somnolent");
+    handle.setExpression("sleepy");
     run(doc, 500);
     const held = eyeD(svg);
 

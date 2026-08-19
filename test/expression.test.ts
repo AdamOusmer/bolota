@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { blobatar, _layout, parts } from "../src/blobatar";
+import { bolota, _layout, parts } from "../src/bolota";
 import {
   bakePose,
   happy,
@@ -28,7 +28,7 @@ import { traits } from "../src/traits";
  * hardest, a body scale pushing a sun's petals through the frame.
  *
  * The other half is the contract, which is cheap to assert and expensive to
- * discover broken: `idle` costs nothing, and every blobatar wears a given
+ * discover broken: `idle` costs nothing, and every bolota wears a given
  * expression at the same strength.
  */
 
@@ -75,9 +75,9 @@ function corners(e: {
 describe("the contract", () => {
   test("idle is byte-identical to no expression at all", () => {
     // The whole determinism story depends on this: adding expressions in a minor
-    // must not move a single existing blobatar.
+    // must not move a single existing bolota.
     for (const s of SEEDS.slice(0, 500)) {
-      expect(blobatar(s, { expression: idle })).toBe(blobatar(s));
+      expect(bolota(s, { expression: idle })).toBe(bolota(s));
     }
   });
 
@@ -95,8 +95,8 @@ describe("the contract", () => {
 
   test("a named expression changes the markup", () => {
     for (const [name, e] of NAMED) {
-      expect(blobatar("seed-1", { expression: e }), name).not.toBe(
-        blobatar("seed-1"),
+      expect(bolota("seed-1", { expression: e }), name).not.toBe(
+        bolota("seed-1"),
       );
     }
   });
@@ -183,7 +183,7 @@ describe("geometry survives every expression", () => {
     // x, y and the odd indices are the ones `bdy` moves.
     for (const [name, e] of NAMED) {
       for (const s of SEEDS.slice(0, 1500)) {
-        const svg = blobatar(s, { expression: e, background: false });
+        const svg = bolota(s, { expression: e, background: false });
         for (const m of svg.matchAll(/ d="([^"]+)"/g)) {
           const n = m[1]!.match(/-?\d+\.?\d*/g)!.map(Number);
           for (let i = 1; i < n.length; i += 2) {
@@ -333,7 +333,7 @@ describe("the tilt has real headroom", () => {
     }
   });
 
-  test("every blobatar wears the same strength of a given expression", () => {
+  test("every bolota wears the same strength of a given expression", () => {
     // The positive form of the same decision: no seed gets a milder `mad`. The
     // variation that makes a grid read as a crowd comes from the geometry the
     // pose lands on, never from the pose.
@@ -373,7 +373,7 @@ describe("the tilt has real headroom", () => {
   });
 
   test("the seeded lean comes back the moment the expression clears", () => {
-    // Locking is a property of the pose, not a permanent edit to the blobatar:
+    // Locking is a property of the pose, not a permanent edit to the bolota:
     // identity lives in the idle face and has to survive being posed.
     for (const s of SEEDS.slice(0, 200)) {
       const before = (_layout(s).eyes as { rot: number }[]).map((e) => e.rot);

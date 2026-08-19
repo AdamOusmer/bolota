@@ -1,9 +1,9 @@
 {
-  "name": "blobatar",
+  "name": "bolota",
   "version": "2.0.0",
-  "description": "Deterministic geometric blobatars from any string. No dependencies.",
+  "description": "Deterministic geometric bolotas from any string. No dependencies.",
   "type": "module",
-  "//sideEffects": "Not `false`. That would license bundlers to drop `import \"blobatar/motion.css\"` as dead weight, and animated blobatars would silently render static for everyone shipping through a bundler.",
+  "//sideEffects": "Not `false`. That would license bundlers to drop `import \"bolota/motion.css\"` as dead weight, and animated bolotas would silently render static for everyone shipping through a bundler.",
   "sideEffects": ["*.css"],
   "files": ["dist", "src", "README.md", "CHANGELOG.md", "LICENSE"],
   "main": "./dist/index.js",
@@ -35,7 +35,7 @@
     "@types/bun": "latest",
     "typescript": "^5"
   },
-  "keywords": ["blobatar", "avatar", "identicon", "svg", "deterministic", "no-dependencies"],
+  "keywords": ["bolota", "avatar", "identicon", "svg", "deterministic", "no-dependencies"],
   "license": "MIT",
   "author": "Alain",
   "repository": {

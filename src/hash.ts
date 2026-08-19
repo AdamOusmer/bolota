@@ -3,11 +3,11 @@
  *
  * Two guarantees this file exists to provide:
  *
- * 1. Avalanche — "alain" and "alaim" must produce visually unrelated blobatars.
+ * 1. Avalanche — "alain" and "alaim" must produce visually unrelated bolotas.
  *    Plain FNV-1a does not give you this; the murmur3 finalizer does.
  * 2. Streaming — the seed is hashed once, then each trait key continues from
  *    that state. Trait values are therefore independent of one another, so
- *    adding a trait in a later version cannot disturb existing blobatars.
+ *    adding a trait in a later version cannot disturb existing bolotas.
  */
 
 const SEP = 0xff;
@@ -35,7 +35,7 @@ const utf8 = new TextEncoder();
  *
  * NFC first, so precomposed "é" and decomposed "é" agree; then trim, then
  * lowercase. Without this, `Alain@x.com` and `alain@x.com` produce different
- * blobatars for the same person — which gets reported as a bug, every time.
+ * bolotas for the same person — which gets reported as a bug, every time.
  */
 export function normalizeSeed(seed: string): string {
   return seed.normalize("NFC").trim().toLowerCase();
