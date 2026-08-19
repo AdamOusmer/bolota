@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9",
+    "wrangler": "^4",
     "typescript": "^5"
   }
 }

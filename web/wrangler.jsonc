@@ -1,0 +1,19 @@
+{
+  // Cloudflare Workers Builds runs `npx wrangler deploy` from this directory
+  // (Root directory `/web/` in the dashboard), and wrangler needs a config to
+  // know what it is deploying. Without this file the build succeeded and the
+  // deploy step failed with nothing to deploy.
+  //
+  // Assets-only Worker: no `main`, so there is no server-side code at all and
+  // Cloudflare serves `dist/` straight from its edge. `_headers` in the build
+  // output (the site's CSP) is honoured by Workers Assets.
+  "name": "bolota",
+  "compatibility_date": "2026-08-19",
+  "assets": {
+    "directory": "./dist",
+    // One page, no 404 route of its own: anything unmatched gets Cloudflare's
+    // own 404 rather than a rewrite to index.html, which would make every typo
+    // render the homepage and report 200.
+    "not_found_handling": "none"
+  }
+}
