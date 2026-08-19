@@ -166,7 +166,7 @@ const { cls, bg, inner, vars } = parts(user.id, { size: 64 });
 
 | Field   | What it is                                                        |
 | ------- | ----------------------------------------------------------------- |
-| `cls`   | class list for the `<svg>` element                                 |
+| `cls`   | class list for the `<svg>` element, absent unless motion is on      |
 | `bg`    | background colour, absent when the render is transparent            |
 | `inner` | the `<svg>` children, as markup, for an innerHTML-style sink       |
 | `vars`  | CSS custom properties for the expression and motion, absent when neither is asked for |
