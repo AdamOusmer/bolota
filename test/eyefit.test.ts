@@ -183,6 +183,48 @@ describe("swirl — rests on NEUTRAL_GAZE like the rest of the roster", () => {
   });
 });
 
+describe("alert / exclaim — the blob is the glyph's dot, the bar is decor", () => {
+  // Owner's redesign: these two states used to morph the BODY into the "!"'s
+  // bar (`barItalic` / `barUpright`) and draw the dot as a small decor blob,
+  // which read as the blob folding into the tail. Inverted: the body is the
+  // dot — round, so it keeps the seed's own silhouette AND its face — and the
+  // bar is a `dots[]` entry standing above it. These pin the inversion, since
+  // nothing else in the suite would notice the roles swapping back.
+  for (const id of ["alert", "exclaim"] as const) {
+    const def = STATE_BY_ID.get(id)!;
+
+    test(`"${id}" keeps a face: eyeAlpha is not zeroed`, () => {
+      for (let t = 0; t <= def.duration; t += def.duration / 8) {
+        expect(def.pose(t).eyeAlpha).toBeGreaterThan(0.9);
+      }
+    });
+
+    test(`"${id}" body is the round dot, not a bar profile`, () => {
+      for (let t = 0; t <= def.duration; t += def.duration / 8) {
+        const radii = def.pose(t).sil.radii;
+        // a bar profile swings from its half-width to its half-length; a dot
+        // is one constant radius at every angle
+        expect(Math.max(...radii) - Math.min(...radii)).toBeCloseTo(0, 6);
+        expect(radii[0]!).toBeCloseTo(0.34, 6);
+      }
+    });
+
+    test(`"${id}" draws exactly one bar above the body, clear of it`, () => {
+      for (let t = 0; t <= def.duration; t += def.duration / 8) {
+        const pose = def.pose(t);
+        expect(pose.dots).toHaveLength(1);
+        const bar = pose.dots[0]!;
+        // a path, not a disk: `r` alone would render the bar as a circle
+        expect(bar.d).toBeTruthy();
+        // above the body (SVG y grows downward), and clear of it: the bar's
+        // own half-length is 0.33 + its cap, the body's radius 0.34
+        const gap = pose.sil.cy - bar.y;
+        expect(gap).toBeGreaterThan(0.34 + 0.33);
+      }
+    });
+  }
+});
+
 describe("bug 3 — eased retarget, no snap", () => {
   test("a look retarget starts slow (easeInOutCubic), not at full speed (easeOutQuint)", () => {
     const engine = new BotEngine(R);

@@ -31,7 +31,6 @@ import {
   circle,
   hullOfCircles,
   polyPath,
-  profileFromPolygon,
   silhouette,
   type Silhouette
 } from './shape'
@@ -109,47 +108,29 @@ function base(over: Partial<Pose> = {}): Pose {
 
 /* ---------------------------------------------------------- non-radial shapes */
 
-/**
- * Vertical "!" bar: convex hull of two circles.
- * Measured: top circle (0, -0.505) r 0.132, bottom circle (0, +0.130) r
- * 0.075, straight sides. So it's conical (top/bottom ratio 1.76).
- */
-const BAR_UPRIGHT_CY = -0.1875
-const BAR_UPRIGHT = profileFromPolygon(
-  hullOfCircles(0, -0.505, 0.132, 0, 0.13, 0.075),
-  0,
-  BAR_UPRIGHT_CY
-)
-
-/** Tilted "!" bar: a pure capsule (constant width 0.269, length 0.776). */
-const BAR_ITALIC = profileFromPolygon(hullOfCircles(0, -0.2535, 0.1345, 0, 0.2535, 0.1345), 0, 0)
-
-const barUpright = (pose: Partial<Silhouette> = {}): Silhouette => ({
-  radii: [...BAR_UPRIGHT],
-  rot: 0,
-  cx: 0,
-  cy: BAR_UPRIGHT_CY,
-  sx: 1,
-  sy: 1,
-  ...pose
-})
-
-const barItalic = (pose: Partial<Silhouette> = {}): Silhouette => ({
-  radii: [...BAR_ITALIC],
-  rot: 0,
-  cx: 0,
-  cy: 0,
-  sx: 1,
-  sy: 1,
-  ...pose
-})
 
 /**
- * The tilted "!"'s dot isn't a disk: it's a drop, round end (r 0.118) on
- * the bar's side and a tapered point on the other, length 0.300 along the
- * glyph's axis. Centered on the round end's centroid.
+ * bolota redesign (owner's call): `alert` and `exclaim` used to morph the
+ * BODY into the "!"'s bar and draw the dot as a decor blob — the body was
+ * the tail. Read as the blob folding into a stick. Inverted here: the blob
+ * IS the dot, keeping its seeded silhouette and its face, and the bar is
+ * decor drawn above it.
+ *
+ * Both bars keep bloub's own measured proportions, scaled to sit above a
+ * dot the size of a real body rather than the 0.118 disk they were drawn
+ * for: upright stays conical (top/bottom ratio 1.76, bloub's own), italic
+ * stays a constant-width capsule. Both paths are centered on the origin,
+ * as `DotRender.d` requires, and placed via the dot's own `x`/`y`.
  */
-const TEAR = polyPath(hullOfCircles(0, 0, 0.118, 0, 0.172, 0.012))
+const GLYPH_BAR_UPRIGHT = polyPath(hullOfCircles(0, -0.33, 0.16, 0, 0.33, 0.091))
+const GLYPH_BAR_ITALIC = polyPath(hullOfCircles(0, -0.33, 0.135, 0, 0.33, 0.135))
+/** body radius while folded into the glyph's dot */
+const GLYPH_DOT_R = 0.34
+/** dot (body) center, and the bar's, measured down/up from the ball's own */
+const GLYPH_DOT_CY = 0.42
+const GLYPH_BAR_CY = -0.42
+/** center-to-center along the glyph's axis, dot to bar */
+const GLYPH_AXIS = GLYPH_DOT_CY - GLYPH_BAR_CY
 
 /**
  * The triangle doesn't spin on itself: its center traces a circle of
@@ -510,29 +491,31 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // bolota eye-visibility audit: left at `eyeAlpha: 0`. `sil` here is
-    // `barItalic` — a thin italic glyph bar, not a round body — there is no face
-    // plane for a pair of capsule eyes to sit on. Truly impossible, not overlooked;
-    // covered by the same cross-fade as `thinking` above.
+    // bolota redesign: the body is the glyph's DOT now (see
+    // `GLYPH_BAR_ITALIC` above), so it keeps the seed's own silhouette and
+    // its face — `eyeAlpha` stays at `base()`'s 1, where this state used to
+    // force 0 because a thin italic bar had no face plane to sit on.
     pose: (t) => {
       // Measured travel: -0.087 -> +0.732 over 1.5s, ease-in-out, micro-overshoot.
       const p = clamp(t / 1.5)
       const travel = easings.easeInOutCubic(p) * 0.82 - 0.087
       const back = t > 1.6 ? clamp((t - 1.6) / 0.4) : 0
       const x = travel * (1 - back) + 0.1 * back
-      // Secondary vibration at 2.5Hz, bar and dot in phase opposition.
+      // Secondary vibration at 2.5Hz, dot and bar in phase opposition.
       const buzz = Math.sin(t * 2.5 * TAU) * 0.005
       const tilt = (17.7 * Math.PI) / 180
+      const dotY = GLYPH_DOT_CY + buzz * 2.8
       return base({
-        sil: barItalic({ rot: tilt, cx: x, cy: -0.325 - buzz }),
-        eyeAlpha: 0,
+        gaze: { ...NEUTRAL_GAZE },
+        sil: circle(GLYPH_DOT_R, { cx: x, cy: dotY }),
         dots: [
           {
-            // the dot follows the glyph's axis, 0.580 from the bar's center
-            x: x - Math.sin(tilt) * 0.58,
-            y: -0.325 + Math.cos(tilt) * 0.58 + buzz * 2.8,
-            r: 0.118,
-            d: TEAR,
+            // up the glyph's axis from the dot: same offset the dot used to
+            // take from the bar, sign flipped now that the roles swapped
+            x: x + Math.sin(tilt) * GLYPH_AXIS,
+            y: dotY - Math.cos(tilt) * GLYPH_AXIS - buzz,
+            r: 0.135,
+            d: GLYPH_BAR_ITALIC,
             rot: (tilt * 180) / Math.PI,
             opacity: 1
           }
@@ -576,13 +559,14 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // bolota eye-visibility audit: left at `eyeAlpha: 0` — same reasoning as
-    // `alert`, `sil` is `barUpright()`, a bar glyph with no face plane.
+    // bolota redesign: same inversion as `alert` above — the body is the
+    // glyph's dot (seeded silhouette, face visible), the upright bar is
+    // decor standing above it.
     pose: () =>
       base({
-        sil: barUpright(),
-        eyeAlpha: 0,
-        dots: [{ x: -0.012, y: 0.526, r: 0.113, opacity: 1 }]
+        gaze: { ...NEUTRAL_GAZE },
+        sil: circle(GLYPH_DOT_R, { cy: GLYPH_DOT_CY }),
+        dots: [{ x: 0, y: GLYPH_BAR_CY, r: 0.16, d: GLYPH_BAR_UPRIGHT, opacity: 1 }]
       })
   },
 
