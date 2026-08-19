@@ -300,6 +300,28 @@ export class BotEngine {
     if (def.baseBody && shape) {
       // on garde la pose (rotation, decalage, squash) et on n'echange que le profil
       pose = { ...pose, sil: { ...pose.sil, radii: shape } }
+    } else if (shape) {
+      // DIVERGENCE FROM VERBATIM BLOUB (user-sanctioned, see src/engine.ts's
+      // header): every state renders on the seed's own profile now, never
+      // one of bloub's built-in body shapes (the spinning triangle in
+      // orbit/play, egg's egg, hexagon's hexagon, the plain circle every
+      // collapse/regrow and decorative-dot state used) -- this package's
+      // identity lives in the seeded silhouette, and a state that swapped
+      // it out for a different shape read as "wrong" (screenshot reports:
+      // burst/comet "popping into a sphere", orbit/play/egg/hexagon not
+      // looking like the seed at all).
+      //
+      // A state's pose still controls SIZE: `scale` is the pose's own mean
+      // radius, exact for every `circle(k)` state (which is every
+      // collapse/regrow and decorative-dot case -- circle(k).radii is `k`
+      // repeated, so its mean is exactly `k`) and a faithful aggregate for
+      // a state that blends two named profiles (e.g. orbit's triangle-to-
+      // ball). Only the ANGULAR shape bloub's own profile carried is
+      // discarded, replaced by the seed's. Original bloub (each state
+      // drawing its own catalog of body shapes) lives on unrenamed at
+      // github.com/AdamOusmer/bloub.
+      const scale = pose.sil.radii.reduce((a, b) => a + b, 0) / pose.sil.radii.length
+      pose = { ...pose, sil: { ...pose.sil, radii: shape.map((r) => r * scale) } }
     }
     if (def.baseFace && expr) {
       pose = { ...pose, gaze: expr.gaze, split: expr.split, eyes: expr.eyes }
