@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { _layout, bolota } from "../src/bolota";
 import { engineStates, mountEngine, type EngineHandle } from "../src/engine";
 import { runSequence } from "../src/sequences";
+import { BotEngine } from "../src/bloub/engine";
+import { PROFILE_SAMPLES } from "../src/bloub/profiles";
 
 /**
  * A minimal fake SVG DOM covering exactly what `mountEngine` touches
@@ -480,4 +482,156 @@ describe("body profile == seeded profile at all times (modulo scale/transform/co
       });
     }
   }
+});
+
+describe("orbit decor and eye-pair fidelity to bloub", () => {
+  /**
+   * Root cause of the "no orbiting rings, a few scattered dots" report:
+   * `mountEngine` never set a viewBox on the caller's `<svg>` — every caller
+   * (this repo's own test site included) reuses the static core's tight
+   * `viewBox="0 0 100 100"`, sized to fit the BODY alone. Orbit's rings climb
+   * to 1.4x the ball's own radius (`bloub/decor.ts`'s `RINGS`), and for any
+   * seed whose body occupies more than ~1/1.4 of that box's half-width (a
+   * measured, common case: `body.rx` runs 22-41 depending on traits, against
+   * a fixed ~49-unit margin), the rings render mostly outside the box and get
+   * clipped to a handful of stray fragments. Bloub itself never has this
+   * problem: `bot/repere.ts`'s `DEMI_VIEWBOX`/`RAYON` is a permanent 1.58x
+   * margin around the ball, `bloub/frame.ts`'s ported (but, until now,
+   * unused outside `eyefit.ts`) `HALF_VIEWBOX`/`RADIUS`.
+   *
+   * These seeds span the measured rx range on both sides of the old clipping
+   * threshold (~35): "a" sat comfortably inside the old 100x100 box, "u" did
+   * not.
+   */
+  const RING_SEEDS = ["a", "b", "f", "r", "u", "engine-liveliness-seed"];
+
+  function viewBoxOf(svg: FakeElement) {
+    const vb = svg.getAttribute("viewBox")!;
+    const [x, y, w, h] = vb.split(" ").map(Number) as [number, number, number, number];
+    return { x, y, w, h };
+  }
+
+  for (const seed of RING_SEEDS) {
+    test(`"${seed}": mounted viewBox has bloub's own margin, not the static core's tight box`, () => {
+      const { svg } = mount(seed);
+      const { body } = _layout(seed);
+      const box = viewBoxOf(svg as unknown as FakeElement);
+      // The static core's own box, `render.ts`'s `viewBox="0 0 100 100"`,
+      // would fail this for every "wide" seed above -- this is the
+      // regression test for the fix, not a tautology: it fails against the
+      // pre-fix `mountEngine` (no `setAttribute("viewBox", ...)` at all,
+      // `getAttribute` returns `null`, `.split` throws).
+      const halfWidth = box.w / 2;
+      expect(halfWidth, seed).toBeGreaterThanOrEqual(body.rx * 1.4);
+    });
+
+    test(`"${seed}": orbit's rings stay inside the mounted viewBox at steady state (6 rings)`, () => {
+      const { doc, svg, handle } = mount(seed);
+      handle.play("orbit", { loop: true });
+      run(doc, 1000); // past the 0.8s entrance ramp, all 6 rings in
+      const box = viewBoxOf(svg as unknown as FakeElement);
+      const p = parts(svg as unknown as FakeElement);
+      const ringPaths = [...p.back.children, ...p.front.children].filter(
+        (c) => c.tagName === "path" && (c.getAttribute("d")?.length ?? 0) > 0,
+      );
+      expect(ringPaths.length, seed).toBe(12); // 6 rings x (front + back)
+      for (const ring of ringPaths) {
+        const b = bbox(ring.getAttribute("d")!);
+        // A few viewBox units of slack for stroke width (~0.05 x R) and the
+        // 64-point polyline approximation of the true ellipse.
+        const slack = Math.max(2, box.w * 0.03);
+        expect(b.w, seed).toBeLessThanOrEqual(box.w + slack);
+        expect(b.h, seed).toBeLessThanOrEqual(box.h + slack);
+      }
+    });
+  }
+
+  /**
+   * Eye PLACEMENT during orbit: the eyes must travel with the body through
+   * its spin, not sit at a fixed screen position while the silhouette spins
+   * and translates around them (the other half of the same user report,
+   * "one eye in an odd place"). `spinningTriangle`'s `cx/cy` (bolota's
+   * `states.ts`) trace a circle of radius `TRI_ORBIT` (0.213 x R) around the
+   * origin every 0.8s (`rot`'s own period at 1.25 rev/s) -- `bloub/engine.ts`
+   * adds that same `sil.cx/cy` to the eye matrix's translation (`bodyCx`/
+   * `bodyCy`), so the eye-pair midpoint should trace a comparably small,
+   * *non-degenerate* circle in lockstep, not stay pinned to one point.
+   */
+  /**
+   * White-box, not DOM: a seed's own irregular profile makes `bodyRadius`'s
+   * per-eye fit (`bloub/engine.ts`'s `fit = bodyRadius(e.x, e.y)`) oscillate
+   * with `sil.rot` on its own, which already moves the eyes some regardless
+   * of whether `sil.cx/cy` is ever added to their position -- a DOM-level
+   * "the eyes move at all" assertion against a real seed cannot tell the two
+   * apart, and does not (verified: it keeps passing with `bodyCx`/`bodyCy`
+   * zeroed out by hand). A perfectly circular `radii` array pins that
+   * confound (`bodyRadius` returns the same 1.0 at every angle, so `fit`
+   * never moves), which isolates the one channel under test: with the eyes'
+   * own gaze constant (orbit's is, by design -- `states.ts`), the eye-pair
+   * midpoint minus the body's own bbox center should be a near-constant
+   * vector (the fixed gaze offset) at every t, while the body's own center
+   * itself traces `spinningTriangle`'s circle -- i.e. the eyes ride it.
+   */
+  function circleFrame(t: number) {
+    const shape = new Array(PROFILE_SAMPLES).fill(1);
+    const eng = new BotEngine(100, "orbit", shape, null);
+    eng.reset("orbit", 0);
+    return eng.sample(t);
+  }
+
+  function eyeMidpoint(f: ReturnType<typeof circleFrame>) {
+    const pts = f.eyes.map((e) => {
+      const m = /matrix\(([^,]+),([^,]+),([^,]+),([^,]+),(-?[\d.]+),(-?[\d.]+)\)/.exec(e.matrix);
+      return m ? { x: +m[5]!, y: +m[6]! } : null;
+    });
+    if (!pts[0] || !pts[1]) throw new Error("expected both eyes visible");
+    return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+  }
+
+  test("orbit: the eye-pair midpoint rides the body's own TRI_ORBIT wobble, not pinned to world origin", () => {
+    const ts = [0.2, 0.36, 0.52, 0.68, 0.84]; // spans one 0.8s wobble period (rot at 1.25 rev/s)
+    const frames = ts.map(circleFrame);
+    const eyeMid = frames.map(eyeMidpoint);
+
+    // `bbox()` (this file's own helper, used elsewhere in the file) returns
+    // width/height spans, not a center -- for a circle centered at
+    // (sil.cx*R, sil.cy*R) with constant radius, the span alone does not
+    // expose the center. Recompute the center directly from the path's own
+    // min/max instead.
+    function center(d: string) {
+      const nums = d.match(/-?\d+\.?\d*/g)?.map(Number) ?? [];
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (let i = 0; i + 1 < nums.length; i += 2) {
+        const x = nums[i]!, y = nums[i + 1]!;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+      return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    }
+    const centers = frames.map((f) => center(f.bodyPath));
+
+    const centerSpreadX = Math.max(...centers.map((c) => c.x)) - Math.min(...centers.map((c) => c.x));
+    const centerSpreadY = Math.max(...centers.map((c) => c.y)) - Math.min(...centers.map((c) => c.y));
+    // The body itself genuinely moves (sanity check on the fixture, not the
+    // fix): `spinningTriangle`'s cx/cy wobble is ~0.213 x R either axis.
+    expect(centerSpreadX + centerSpreadY, "fixture: body wobbles").toBeGreaterThan(10);
+
+    const rel = eyeMid.map((e, i) => ({ x: e.x - centers[i]!.x, y: e.y - centers[i]!.y }));
+    const relSpreadX = Math.max(...rel.map((r) => r.x)) - Math.min(...rel.map((r) => r.x));
+    const relSpreadY = Math.max(...rel.map((r) => r.y)) - Math.min(...rel.map((r) => r.y));
+    // The pre-fix bug: eyes at a fixed screen position while the body
+    // (bbox center above) orbits around them -- `eyeMid - bodyCenter` would
+    // then swing by the SAME amount the body itself does. Post-fix, that
+    // difference stays close to flat: the gaze is constant (orbit's own
+    // `REST_GAZE`), so the only residual wobble is the per-eye radius-fit
+    // term this fixture already pinned to 1.0, i.e. near zero.
+    expect(relSpreadX, "eye-body offset stays ~constant (eyes ride the body)").toBeLessThan(
+      centerSpreadX * 0.25,
+    );
+    expect(relSpreadY, "eye-body offset stays ~constant (eyes ride the body)").toBeLessThan(
+      centerSpreadY * 0.25,
+    );
+  });
 });

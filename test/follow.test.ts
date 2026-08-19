@@ -556,3 +556,72 @@ describe("handle.follow — premium tuning: wide deflection, low latency", () =>
     expect(soon).not.toEqual(start);
   });
 });
+
+describe("handle.follow — eye-pair coherence (both eyes move as one head, not independently)", () => {
+  /**
+   * "Eyes feel disjoint" report: `eyePoses` (`bloub/face.ts`) derives BOTH
+   * eyes from one `HeadGaze`, so they cannot diverge on the gaze axis alone
+   * -- but each eye is then independently rescaled by `bodyRadius(e.x, e.y)`
+   * (`bloub/engine.ts`), the LOCAL body radius in that eye's own direction.
+   * For an irregular seed that term can vary eye to eye, which is a real,
+   * inherent property of "eyes painted on a body silhouette that isn't a
+   * perfect sphere" (bloub's own built-in profiles have it too) rather than
+   * a bug on its own -- what a regression WOULD look like is the pair
+   * coming apart much further than that fit term alone explains, or ceasing
+   * to move together at all. These lock in "together enough": inter-eye
+   * distance stays within a bounded band of its at-rest value across a full
+   * pointer sweep, for both a round seed and the most irregular one this
+   * repo's own trait ranges produce.
+   */
+  function eyeXY1(svg: FakeElement) {
+    const m = eyes(svg)[1]?.getAttribute("transform");
+    if (!m) return null;
+    const nums = /matrix\(([^,]+),([^,]+),([^,]+),([^,]+),(-?[\d.]+),(-?[\d.]+)\)/.exec(m);
+    return nums ? { x: +nums[5]!, y: +nums[6]! } : null;
+  }
+  function pairDistance(svg: FakeElement) {
+    const a = eyeXY(svg);
+    const b = eyeXY1(svg);
+    if (!a || !b) return null;
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  }
+
+  // "0" is this repo's own most irregular seed by petal count (measured
+  // against the trait catalog, see `test/eyefit.test.ts`'s own seed
+  // choices for the same reasoning) -- the seed most likely to expose the
+  // per-eye `bodyRadius` fit term's own variation, deliberately alongside a
+  // plain round one.
+  for (const seed of ["follow-seed", "0"]) {
+    test(`"${seed}": inter-eye distance stays within a bounded band of rest across a full pointer sweep`, () => {
+      const { doc, svg, handle } = mount(seed);
+      handle.follow("window");
+
+      move(doc, doc.defaultView, 100, 100); // dead center
+      run(doc, 500);
+      const rest = pairDistance(svg as unknown as FakeElement)!;
+      expect(rest).not.toBeNull();
+
+      const sweep: [number, number][] = [
+        [10, 10], [100, 10], [190, 10],
+        [10, 100], [190, 100],
+        [10, 190], [100, 190], [190, 190],
+      ];
+      const distances: number[] = [];
+      for (const [x, y] of sweep) {
+        move(doc, doc.defaultView, x, y);
+        run(doc, 300); // let the look-retarget morph settle
+        const d = pairDistance(svg as unknown as FakeElement);
+        expect(d, `${seed} at (${x},${y})`).not.toBeNull();
+        distances.push(d!);
+      }
+
+      for (const d of distances) {
+        // A genuinely disjoint pair (independent per-eye motion, not a
+        // shared-fit wobble) swings far outside this -- bloub's own eyes,
+        // on a body that IS a perfect sphere, would hold near 1.0 exactly.
+        expect(d, `${seed}: pair distance vs rest (${rest.toFixed(2)})`).toBeGreaterThan(rest * 0.5);
+        expect(d, `${seed}: pair distance vs rest (${rest.toFixed(2)})`).toBeLessThan(rest * 1.8);
+      }
+    });
+  }
+});
