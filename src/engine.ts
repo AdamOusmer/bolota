@@ -346,6 +346,8 @@ export function engineExpressions(): string[] {
 export interface EngineHandle {
   /** Plays a state by id (see `states`). Throws on an unknown id. */
   play(state: string, opts?: { loop?: boolean }): void;
+  /** Sugar for `play(state, { loop: true })`. */
+  loop(state: string): void;
   /** Freezes the current frame; breathing/blinking/morph all pause. */
   stop(): void;
   /**
@@ -677,17 +679,20 @@ export function mountEngine(
     clock += dt;
 
     const def = STATE_BY_ID.get(current)!;
-    // Orbit's own pose math never plateaus — its rotation (`states.ts`'s
-    // `rot = -TAU * 1.25 * t * ramp`) has no clamp on `t`, so it keeps
-    // spinning at a constant rate forever once its 0.35s ramp-in is done.
-    // Forcing a periodic `reset()` on it would be the only thing that ever
-    // interrupts that spin, snapping the phase back to 0 — so it is simply
-    // never reset. Every other looping state's pose *does* plateau (every
-    // one of its terms is wrapped in `clamp(...)`), so it needs a periodic
-    // restart to keep animating at all, which is where the `duration`
-    // bookkeeping below is for.
-    const selfSustaining = current === "orbit";
-    if (loop && !selfSustaining) {
+    // `def.period` (`bloub/states.ts`) means this state's own `pose()` is a
+    // single, phase-wrapped timeline — `BotEngine` folds elapsed time into
+    // `[0, period)` itself (see its `wrapped()`), every channel included, so
+    // there is nothing for this file to periodically re-`reset()`. That used
+    // to be a hardcoded `current === "orbit"` special case (orbit was the
+    // only state whose own math never plateaus, so periodic reset would
+    // have snapped its spin back to 0); it is now the general rule any
+    // state opts into by declaring a `period`, not a name check.
+    //
+    // Every state WITHOUT one still plateaus (every one of its own terms is
+    // wrapped in `clamp(...)`, not periodic), so it needs the periodic
+    // restart below to keep animating at all once it settles.
+    const structuralLoop = !!def.period;
+    if (loop && !structuralLoop) {
       // Restart `duration + def.morph` in, not at `duration` itself: bloub's
       // own transient elements (particle windows, ribbon fades, eyeAlpha
       // ramps) finish inside that extra margin, so by the time `reset()`
@@ -743,8 +748,11 @@ export function mountEngine(
       current = id;
       stateStart = clock;
       loop = !!o?.loop;
-      engine.setState(id, clock);
+      engine.setState(id, clock, loop);
       ensureRunning();
+    },
+    loop(state) {
+      this.play(state, { loop: true });
     },
     setExpression(name) {
       const expr = name === null ? null : EXPRESSION_BY_ID.get(name);
