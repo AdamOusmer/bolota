@@ -45,9 +45,12 @@ export function motionVars(t: Traits): Record<string, string> {
   const ms = (v: number) => `${-Math.round(v)}ms`;
   const r2 = (v: number) => String(Math.round(v * 100) / 100);
   const blink = Math.round(t.num("motion.blink", 3500, 6500));
-  const saccade = Math.round(t.num("motion.saccade", 4200, 7600));
-  const lookX = t.num("motion.lookX", 1, 2.2);
-  const lookY = t.num("motion.lookY", 0.8, 1.7);
+  // Saccade period lowered from 4200-7600 and look magnitude raised from
+  // 1-2.2/0.8-1.7 — quicker, more frequent, farther-travelling glances.
+  // `mo-saccade`'s own per-window multipliers moved with this, ~1.6x.
+  const saccade = Math.round(t.num("motion.saccade", 2600, 4800));
+  const lookX = t.num("motion.lookX", 1.4, 3);
+  const lookY = t.num("motion.lookY", 1.1, 2.3);
 
   return {
     "--mo-phase": ms(t.num("motion.phase", 0, 2800)),

@@ -61,10 +61,13 @@ new package major. Upgrading `blobatar@1` → `@2` is the opt-in; applications t
 stay on v1 keep both its output and package size. A major contains one frozen
 generation, so the ordinary API remains just `blobatar(name, options)`.
 
-**Contrast.** Eyes clear 4.5:1 against the body at every hue and every tone —
-verified at 1° resolution in the test suite. Polarity flips automatically, so
-the near-black tone gets light eyes rather than an invisible face.
-Colors passed via the `palette` option bypass all of this, by definition.
+**Contrast.** The body clears 1.25:1 against a near-black host page at every
+hue and tone. The eye is fixed dark — no polarity flip — matching
+[bloub](https://github.com/jeremyPerret/bloub)'s own eyes (see Credits): it
+clears 4.5:1 against the body on every tone but the darkest ("ink", the
+near-black swatch), which scores ~1.6:1 by design rather than being walked
+back to contrast. Colors passed via the `palette` option bypass all of this,
+by definition.
 
 **Name normalization.** Names are NFC-normalized, trimmed and lowercased before
 hashing, so `Alain@Example.com` and `alain@example.com` agree, as do the
@@ -270,6 +273,9 @@ for free — no path arithmetic, no clip paths, no element ids.
 **Eye dimensions are fractions of the body radius**, not absolute units. Bodies
 range from 22 to 38 units depending on how much room the decoration needs, and
 absolute sizes would drift off a small sun while looking lost on a large round.
+The outline itself is a capsule (stadium), not a superellipse — bloub's own
+eye shape (see Credits), position and size still driven by this package's own
+seeded traits.
 
 Colors are resolved from OKLCh to hex at render time rather than emitted as
 `oklch()`, because server-side rasterizers largely do not support it and blobatars
@@ -307,10 +313,13 @@ petal, or pushes geometry outside the frame.
 
 ## Credits
 
-`src/frames.css`, `src/decor.ts` and `src/sequences.ts` — the burst/orbit/comet
-decorative animations — are ported from
-[bloub](https://github.com/jeremyPerret/bloub) (MIT License, Copyright (c)
-2026 Jérémy Perret): its measured easing curves, burst-collapse timing, and
-particle/ring parameters, re-expressed as CSS keyframes and static SVG rather
-than its per-frame JS renderer. Each file's header says exactly what was
-carried over and what was not.
+`src/bloub/` is a verbatim port of [bloub](https://github.com/jeremyPerret/bloub)
+(MIT License, Copyright (c) 2026 Jérémy Perret) — its 14-state animation
+catalog, decor geometry, and the DOM-free `BotEngine.sample(t)` render loop.
+`src/engine.ts` is the adaptation seam: it turns a blobatar seed into the
+radial silhouette `BotEngine` expects and mounts its output as real SVG
+elements (see `mountEngine`, exported as `blobatar/engine`); `src/sequences.ts`
+is a thin convenience layer on top of it. This package's own eye shape
+(`capsulePath` in `src/shape.ts`, used by every silhouette) is also bloub's,
+ported into this package's own positioning convention. Each file's header
+says exactly what was carried over and what was not.

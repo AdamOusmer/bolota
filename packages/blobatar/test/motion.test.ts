@@ -198,10 +198,10 @@ describe("timing", () => {
     // drew 0.02 would have eyes that technically animate and visibly do not.
     for (const s of SEEDS) {
       const v = motionVars(traits(s));
-      expect(Math.abs(Number(v["--mo-look-x"]))).toBeGreaterThanOrEqual(1);
-      expect(Math.abs(Number(v["--mo-look-y"]))).toBeGreaterThanOrEqual(0.8);
-      expect(Math.abs(Number(v["--mo-look-x"]))).toBeLessThanOrEqual(2.2);
-      expect(Math.abs(Number(v["--mo-look-y"]))).toBeLessThanOrEqual(1.7);
+      expect(Math.abs(Number(v["--mo-look-x"]))).toBeGreaterThanOrEqual(1.4);
+      expect(Math.abs(Number(v["--mo-look-y"]))).toBeGreaterThanOrEqual(1.1);
+      expect(Math.abs(Number(v["--mo-look-x"]))).toBeLessThanOrEqual(3);
+      expect(Math.abs(Number(v["--mo-look-y"]))).toBeLessThanOrEqual(2.3);
     }
   });
 
@@ -240,8 +240,8 @@ describe("timing", () => {
     for (const s of SEEDS) {
       const v = motionVars(traits(s));
       const period = ms(v["--mo-saccade"]!);
-      expect(period).toBeGreaterThanOrEqual(4200);
-      expect(period).toBeLessThanOrEqual(7600);
+      expect(period).toBeGreaterThanOrEqual(2600);
+      expect(period).toBeLessThanOrEqual(4800);
       expect(-ms(v["--mo-saccade-phase"]!)).toBeLessThanOrEqual(period);
     }
   });

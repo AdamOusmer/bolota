@@ -382,26 +382,33 @@ const RAMP = (h: number, tone: number): Record<string, Oklch> => {
   return {
     bg: { l: 0.965, c: 0.01, h },
     head,
-    // Polarity follows the body: dark eyes on a light body, light eyes on a
-    // dark one. Without this the ink tone would render an invisible face.
-    eye: head.l >= 0.5 ? { l: 0.17, c: 0.02, h } : { l: 0.97, c: 0.012, h },
+    // Fixed dark, no polarity flip — matches bloub's eyes, which this
+    // package's own eye shape now draws (see `capsulePath` in `shape.ts`).
+    // This is a deliberate v2 break: the ink tone (`TONES`'s darkest swatch)
+    // no longer clears 4.5:1 against a fixed-black eye. Not walked back to
+    // contrast here — `FLOORS` below no longer enforces `eye`/`head` at all,
+    // so this value ships exactly as authored. See `test/color.test.ts`'s
+    // "eye is always the fixed dark tone" for the tones that fall short.
+    eye: { l: 0.17, c: 0.02, h },
   };
 };
 
 /**
  * Minimum contrast ratios as [foreground, background, ratio], applied in order.
  * Later pairs resolve against already-final earlier colors, so the chain
- * converges. `4.5` on the eyes is the WCAG text floor: they are small marks
- * that have to read at 24px.
+ * converges.
  *
  * The body/backdrop floor is deliberately weak. The backdrop is off by default,
  * and the pale swatches are meant to sit quietly on a light surface — forcing
  * 1.6:1 there would darken exactly the tones the style exists for.
+ *
+ * No `["eye", "head", 4.5]` row anymore. The eye is fixed dark (see `RAMP`
+ * above) rather than walked to clear a floor, which is a v2 break: the ink
+ * tone no longer guarantees 4.5:1 against the eye. `enforce` therefore no
+ * longer touches `eye` at all — see `ramp()`'s loop below, which only ever
+ * walks the pairs listed here.
  */
-const FLOORS: [string, string, number][] = [
-  ["head", "bg", 1.25],
-  ["eye", "head", 4.5],
-];
+const FLOORS: [string, string, number][] = [["head", "bg", 1.25]];
 
 export { FLOORS };
 

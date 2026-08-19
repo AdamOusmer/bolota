@@ -71,8 +71,15 @@ const ENTRIES: {
     // along their diameters, and a taper has to be the tangents from its apex to
     // the body ellipse. Measured against the arc-drawn single-outline version of
     // the same two shapes, which is a further 108 B for an identical render.
+    //
+    // Raised from 4410 by ~90 B when the eyes switched from `superellipse` to
+    // `capsulePath` (bloub's own eye shape, ported into `shape.ts`). Four
+    // cubic-Bézier corners plus straight runs cost more per eye than
+    // `superellipse`'s four-segment quadrant approximation; unavoidable once
+    // every silhouette draws the same eye outline (see `color.ts`/`RAMP` and
+    // `styles/compose.ts`'s `eye` for the rest of that change).
     name: "blob only",
-    budget: 4410,
+    budget: 4550,
     external: [] as string[],
     source: `import { blobatar } from "../../src/blob";
              globalThis.x = blobatar(String(globalThis.seed));`,
@@ -80,15 +87,17 @@ const ENTRIES: {
   {
     // The barrel. Costs more than `blob only` above because it also carries the
     // colour and trait utilities, which a consumer who only renders never touches.
+    // Raised from 4400 alongside "blob only" above — same capsule-eye cost.
     name: "barrel",
-    budget: 4400,
+    budget: 4540,
     external: [],
     source: `import { blobatar } from "../../src/index";
              globalThis.x = blobatar(String(globalThis.seed));`,
   },
   {
+    // Raised from 4490 alongside "blob only" above — same capsule-eye cost.
     name: "uri",
-    budget: 4490,
+    budget: 4630,
     external: [],
     source: `import { blobatarUri } from "../../src/uri";
              globalThis.x = blobatarUri(String(globalThis.seed));`,
@@ -99,8 +108,9 @@ const ENTRIES: {
     // above — the delta is what a single pose actually costs.
     // Measured: +343 B for the first expression (the shared serializer and bake,
     // paid once) and +36 B for each one after it. Importing all three is 4098.
+    // Raised from 4740 alongside "blob only" above — same capsule-eye cost.
     name: "blob + happy",
-    budget: 4740,
+    budget: 4870,
     external: [],
     source: `import { blobatar } from "../../src/blob";
              import { happy } from "../../src/expression";
@@ -167,35 +177,31 @@ const ENTRIES: {
     source: `@import "../../src/motion.css";`,
   },
   {
-    // The decorative counterpart to `motion css` above: burst/orbit/comet,
-    // ported from bloub (see the file's header). Paid once per app, same
-    // reasoning as `motion css` — nobody wants these keyframes duplicated
-    // per blobatar.
-    name: "frames css",
-    budget: 780,
+    // The bloub engine: 14 states' worth of pose math, decor geometry and
+    // eye-fit tables (`src/bloub/`), plus `_layout` for the seed-to-silhouette
+    // bridge. Heavier by design — it is an opt-in animation engine, not part
+    // of the static-render path `blob only`/`barrel` above measure — but
+    // still gated so it cannot grow silently.
+    // Raised from 15200 by ~600 B for velocity-scaled motion blur: three
+    // `feGaussianBlur` filters (body/rings/particles), the damped speed
+    // tracking that drives them, and the tightened rAF delta clamp.
+    name: "engine",
+    budget: 15850,
     external: [],
-    ext: "css",
-    source: `@import "../../src/frames.css";`,
+    source: `import { mountEngine } from "../../src/engine";
+             globalThis.x = mountEngine;`,
   },
   {
-    // The sequence runner: no DOM assumptions beyond `Element.classList`, no
-    // dependency on the renderer, so importing it costs nothing beyond its
-    // own body and the four `FrameSeq` constants.
+    // `runSequence`'s only import from `./engine` is the `EngineHandle`
+    // *type*, erased under `verbatimModuleSyntax` — this must stay near-free
+    // and must NOT pull in `engine.ts`'s runtime (bloub, `_layout`) for a
+    // consumer who only wants the four friendly names.
     name: "sequences",
-    budget: 320,
+    budget: 260,
     external: [],
-    source: `import { runSequence, burst } from "../../src/sequences";
+    source: `import { runSequence, SEQUENCES } from "../../src/sequences";
              globalThis.x = runSequence;
-             globalThis.y = burst;`,
-  },
-  {
-    // Static markup only — no renderer import, so this must not drag in
-    // `blob`/`blobatar` for a consumer who only wants the decor fragments.
-    name: "decor",
-    budget: 420,
-    external: [],
-    source: `import { decorMarkup } from "../../src/decor";
-             globalThis.x = decorMarkup("orbit");`,
+             globalThis.y = SEQUENCES;`,
   },
 ];
 

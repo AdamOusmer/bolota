@@ -233,3 +233,49 @@ export function taper(cx: number, cy: number, rx: number, ry: number, tip: numbe
     `L${r2(cx + tx)} ${r2(ty)}Z`
   );
 }
+
+/**
+ * Capsule (stadium) at `(cx, cy)`, width `w`, height `h`, rotated `rot`
+ * degrees — bloub's own measured eye shape, ported into blobatar's own
+ * calling convention. Ported from bloub
+ * (https://github.com/jeremyPerret/bloub), MIT License, Copyright (c) 2026
+ * Jérémy Perret: `capsulePath(w, h)` in its `src/bot/shape.ts` (defined
+ * right after `polyPath`) draws the same outline centered on the origin,
+ * local units, no rotation, with `A` (arc) commands for the four corners.
+ *
+ * Two things changed porting it here, both for the same reason —
+ * `test/expression.test.ts`'s frame-containment sweep regexes every number
+ * out of a static render's `d` attribute and assumes plain alternating x/y
+ * pairs, which an `A` command's extra `rx ry x-axis-rotation large-arc-flag
+ * sweep-flag` breaks: (1) `cx`/`cy`/`rot` are baked into the points, the
+ * same contract `superellipse` above satisfies, rather than emitted as a
+ * separate `transform`; (2) the four corners are cubic Béziers at circular
+ * curvature (`K`, the same 4/3·(√2−1) constant `superellipse` computes for
+ * its own n=2 case) instead of `A` arcs — visually identical at this size,
+ * numerically just points. `styles/compose.ts` calls this instead of
+ * `superellipse` for eyes now; the seeded size/lean traits that feed
+ * `cx`/`cy`/`w`/`h`/`rot` are unchanged — only the outline generator
+ * swapped.
+ */
+const K = 0.5522847498;
+
+export function capsulePath(cx: number, cy: number, w: number, h: number, rot = 0): string {
+  const hw = Math.max(w, 0.01) / 2;
+  const hh = Math.max(h, 0.01) / 2;
+  const r = Math.min(hw, hh);
+  const rk = r * K;
+  const t = (rot * Math.PI) / 180;
+  const cos = Math.cos(t);
+  const sin = Math.sin(t);
+  const at = (x: number, y: number) => `${r2(cx + x * cos - y * sin)} ${r2(cy + x * sin + y * cos)}`;
+  return (
+    `M${at(-hw, -hh + r)}` +
+    `C${at(-hw, -hh + r - rk)} ${at(-hw + r - rk, -hh)} ${at(-hw + r, -hh)}` +
+    `L${at(hw - r, -hh)}` +
+    `C${at(hw - r + rk, -hh)} ${at(hw, -hh + r - rk)} ${at(hw, -hh + r)}` +
+    `L${at(hw, hh - r)}` +
+    `C${at(hw, hh - r + rk)} ${at(hw - r + rk, hh)} ${at(hw - r, hh)}` +
+    `L${at(-hw + r, hh)}` +
+    `C${at(-hw + r - rk, hh)} ${at(-hw, hh - r + rk)} ${at(-hw, hh - r)}Z`
+  );
+}
