@@ -1,4 +1,5 @@
-import { mountEngine, type EngineHandle } from "@luzir/bolota/engine";
+import type { EngineHandle } from "@luzir/bolota/engine";
+import { ensureEngine } from "../lib/live-engine";
 import { onSeedChange, getSeed } from "../lib/seed-store";
 import { DEFAULT_SEED } from "../lib/curated-seeds";
 import { humanizeExpression } from "../lib/humanize";
@@ -31,6 +32,10 @@ export function setupExpressions() {
   let autoTimer: ReturnType<typeof setInterval> | null = null;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let index = 0;
+  // See hero.ts/live-engine.ts's own copies of this pattern: guards a
+  // stale mount() (superseded by a newer seed change before its
+  // ensureEngine() await resolved) from clobbering a newer one.
+  let gen = 0;
 
   function select(i: number, id: string, byUser: boolean) {
     index = i;
@@ -82,8 +87,11 @@ export function setupExpressions() {
     observeReveals(picker!);
   }
 
-  function mount(nextSeed: string) {
+  async function mount(nextSeed: string) {
+    const myGen = ++gen;
     seed = nextSeed;
+    const { mountEngine } = await ensureEngine();
+    if (myGen !== gen) return; // a newer mount() call already won the race
     handle?.destroy();
     handle = mountEngine(svg, seed);
     handle.play("idle", { loop: true });
