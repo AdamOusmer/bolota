@@ -268,11 +268,26 @@ export class BotEngine {
     this.lookMorph = morph
   }
 
-  /** Regard effectif a l'instant `now`, rattrapage en cours compris. */
+  /**
+   * Regard effectif a l'instant `now`, rattrapage en cours compris.
+   *
+   * blobatar divergence: `easeOutQuint` here (bloub's own choice everywhere else in
+   * this file) starts a retarget at FULL velocity — its derivative at k=0 is 5, not 0
+   * — so every pointer move snapped the gaze into motion instead of easing into it.
+   * Harmless for the state/shape/expr morphs elsewhere in this file, which all start
+   * from rest at a `setState`/`setShape`/`setExpression` call the caller controls; but
+   * `setLook` fires on every pointer-move event, i.e. mid-motion far more often than
+   * not, so the missing accel phase was audible as a snap on each retarget — the
+   * literal user report ("eye position changes are NOT eased — they snap"). Unlike
+   * `decalageAtTime` below, this morph is NOT coupled to the shape/body morph curve
+   * (see `LOOK_MORPH`'s own doc comment: deliberately a different, shorter duration),
+   * so it is free to use a different curve too. `easeInOutCubic` (`math.ts`) accelerates
+   * in and decelerates out — no snap at either end.
+   */
   private lookAtTime(now: number): Look {
     const k = (now - this.lookAt) / this.lookMorph
     if (k >= 1) return this.look
-    return lerpLook(this.lookPrev, this.look, easings.easeOutQuint(clamp(k)))
+    return lerpLook(this.lookPrev, this.look, easings.easeInOutCubic(clamp(k)))
   }
 
   private posed(

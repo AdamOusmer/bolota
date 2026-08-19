@@ -48,10 +48,10 @@
  */
 
 import { EXPRESSIONS, type BotExpression } from './expressions'
-import { eyePoses } from './face'
+import { eyePoses, MAX_PITCH_DRIFT, MAX_YAW_DRIFT } from './face'
 import { radiusAtAngle, toPoints, type Point } from './shape'
 import { SHAPES } from './skins'
-import { STATES, type Pose, type StateDef, type StateId } from './states'
+import { STATE_BY_ID, STATES, type Pose, type StateDef, type StateId } from './states'
 
 /** Rayon de reference du solveur. Le decalage rendu est en unites de ce rayon. */
 const R = 100
@@ -65,9 +65,15 @@ const R = 100
  * seconde plus tard : 7 degres de lacet deplacent l'oeil d'une douzaine d'unites sur une
  * boule de rayon 100. C'est precisement ce qui faisait deborder `capsule` + `effraye`
  * alors qu'une mesure a un seul instant le declarait bon.
+ *
+ * blobatar divergence: imported from `face.ts` instead of restated as local literals.
+ * The idle wander amplitude was raised there (bug report: gaze drift read as barely
+ * moving) and a hand-copied constant here would silently stop bounding the real
+ * amplitude the moment the two drift — which is exactly the failure mode this comment
+ * warns about, just self-inflicted instead of a bloub upstream change.
  */
-const DERIVE_YAW = 5.5 + 1.6
-const DERIVE_PITCH = 4.2 + 1.3
+const DERIVE_YAW = MAX_YAW_DRIFT
+const DERIVE_PITCH = MAX_PITCH_DRIFT
 /** Flottement du centre, en unites de rayon de boule. */
 const DERIVE_X = 0.006
 const DERIVE_Y = 0.007
@@ -439,13 +445,39 @@ function batir(): Map<number[], Map<string, { x: number; y: number }>> {
 const DECALAGES = batir()
 
 /**
+ * blobatar divergence from the bloub port: `batir()` above only ever walks `SHAPES`,
+ * bloub's own fixed 8-entry personalizer catalog. blobatar seeds an arbitrary
+ * superellipse per avatar (`engine.ts`'s `seededSilhouette`) — a `number[]` that is
+ * never `===` any entry `batir()` built, so `DECALAGES.get(radii)` always missed for a
+ * real avatar and `decalageDesYeux` fell through to `NUL` unconditionally. The
+ * correction this whole module exists for (see file header) was therefore dead code
+ * for every seeded avatar: eyes rendered at the raw, uncorrected `radiusAtAngle` fit,
+ * which is exactly the "stuck at the top/side" report — the fit that `eyefit.ts` was
+ * built to patch, silently never running.
+ *
+ * Fix: solve the SAME way, just lazily and per (radii, state, expr) key instead of
+ * eagerly for the whole catalog. Cost stays "solved once, not per frame" — the
+ * invariant the rest of this file is built around (see the module doc comment) — it is
+ * just once per *seed* the first time each state/expression combination is actually
+ * sampled, instead of once at import for a fixed 8-shape catalog. A seed's `radii`
+ * array is a stable reference for the engine's lifetime (only `setShape` replaces it,
+ * with a fresh array), so the cache below hits on every frame after the first.
+ */
+function resousPourCle(radii: number[], state: StateId, expr: string | null) {
+  const def = STATE_BY_ID.get(state)
+  if (!def || !def.baseBody) return NUL
+  const exprDef = def.baseFace ? (EXPRESSIONS.find((e) => e.id === expr) ?? null) : null
+  return decalagePour(def, radii, exprDef)
+}
+
+/**
  * Decalage a appliquer aux deux yeux pour cette forme sur cet etat, en unites de rayon
  * de boule — le moteur le remet a son echelle.
  *
- * Vaut zero des que la forme n'est pas au catalogue, ce qui couvre `null` et le cercle :
- * sur le cercle les deux profils sont le meme, donc la marge est deja celle exigee et la
- * descente sort au premier tour. La forme relevee sur la video ne bouge donc pas, sans
- * cas particulier.
+ * Vaut zero des que la forme n'est pas au catalogue ET n'a pas encore ete resolue, ce
+ * qui couvre `null` et le cercle : sur le cercle les deux profils sont le meme, donc la
+ * marge est deja celle exigee et la descente sort au premier tour. La forme relevee sur
+ * la video ne bouge donc pas, sans cas particulier.
  */
 export function decalageDesYeux(
   radii: number[] | null,
@@ -453,10 +485,19 @@ export function decalageDesYeux(
   expr: string | null
 ): { x: number; y: number } {
   if (!radii) return NUL
-  const par = DECALAGES.get(radii)
-  if (!par) return NUL
+  let par = DECALAGES.get(radii)
   // un etat sans visage de repos n'a qu'une entree, quelle que soit l'expression
-  return par.get(clef(state, expr)) ?? par.get(clef(state, null)) ?? NUL
+  const hit = par?.get(clef(state, expr)) ?? par?.get(clef(state, null))
+  if (hit) return hit
+  // Cache miss: not a catalog shape (or a catalog key not yet in this seed's lazily
+  // built map — same map, filled on demand). Solve once for exactly this key.
+  const valeur = resousPourCle(radii, state, expr)
+  if (!par) {
+    par = new Map()
+    DECALAGES.set(radii, par)
+  }
+  par.set(clef(state, expr), valeur)
+  return valeur
 }
 
 /** Pour les tests : de quoi verifier la table sans refaire la geometrie. */
