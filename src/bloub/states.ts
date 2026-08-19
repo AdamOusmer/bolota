@@ -146,6 +146,15 @@ const TEAR = polyPath(hullOfCircles(0, 0, 0.118, 0, 0.172, 0.012))
  */
 const TRI_ORBIT = 0.213
 
+/**
+ * blobatar addition: `orbit`'s loop phase — 4 whole revolutions at the
+ * state's own measured 1.25 rev/s (`4 / 1.25`), so `rot` (and everything
+ * trig-derived from it) is back at its `t = 0` value, exactly, when the
+ * phase wraps. See `StateDef.period` and the `orbit` entry below for the
+ * rest of the mechanism this feeds.
+ */
+export const ORBIT_PERIOD = 4 / 1.25
+
 function spinningTriangle(rot: number): Silhouette {
   return silhouette('triangle', {
     rot,
@@ -223,6 +232,27 @@ export interface StateDef {
    * behavior, for every state that doesn't opt in.
    */
   ownsLiveliness?: boolean
+  /**
+   * blobatar addition (not from bloub): the phase length this state repeats
+   * on when played with `loop: true`. Absent = not loop-safe as a single
+   * timeline (the caller's existing periodic-`reset()` bridge mechanism
+   * still handles it, unchanged); present = `BotEngine.sample()` itself
+   * wraps the local clock to `[0, period)` BEFORE calling `pose()`, so this
+   * function only ever sees a value in that range while looping. That is
+   * the whole mechanism: EVERY channel `pose()` returns — silhouette,
+   * gaze, rings, dots, whatever — is a function of that one wrapped
+   * number, so nothing downstream can wrap on its own schedule and drift
+   * out of phase with anything else (`orbit`'s old per-channel `t % 3.6`
+   * ring-fade band-aid, replaced by this, is the bug this prevents: ONE
+   * wrap point, upstream of every channel, not one per channel hoping they
+   * agree).
+   *
+   * The value itself must make every one of `pose()`'s own periodic terms
+   * land back where they started at `t = period` — `orbit`'s `ORBIT_PERIOD`
+   * (its own comment) is the worked example: chosen as a whole number of
+   * its rotation's own period so the wrap is exact, not approximate.
+   */
+  period?: number
   pose(local: number): Pose
 }
 
@@ -474,58 +504,89 @@ export const STATES: StateDef[] = [
   {
     id: 'orbit',
     duration: 3.4,
-    // le corps a fini de se relacher du triangle vers la boule a 1.6 + 0.9
-    minDuration: 2.5,
     morph: 0.6,
     baseFace: false,
     baseBody: false,
     blinkIn: false,
     // blobatar addition: see `StateDef.ownsLiveliness`'s own comment — this
-    // state drives gaze (+-65deg yaw sweep below) and body center (`sil.cx/cy`
-    // via `spinningTriangle`) itself, so idle's wander/drift/breath must not
-    // also compose on top of it.
+    // state drives body center (`sil.cx/cy` via `spinningTriangle`) itself,
+    // so idle's wander/drift/breath must not also compose on top of it. Gaze
+    // no longer needs the same guard: see `ORBIT_PERIOD`'s comment below,
+    // the eyes are calm and no longer a moving channel to protect.
     ownsLiveliness: true,
+    // blobatar addition: whole revolutions (`1.25 tour/s` below) of the
+    // rotation's own rate — 4 turns at 1.25 rev/s. `rot`'s value at
+    // `t = ORBIT_PERIOD` is therefore an exact multiple of a full turn,
+    // i.e. identical (mod 2*PI) to its value at `t = 0`: `sil.rot` and
+    // `sil.cx/cy` (both pure trig functions of `rot` now, see below) land
+    // back where they started, exactly, not approximately.
+    //
+    // This replaced two DIFFERENT bugs a full-channel continuity sweep
+    // found, not one. `t % 3.6` on the ring fade alone was the first
+    // (git history) — one channel wrapping on a period nothing else
+    // respected. The second was subtler and survived that first fix:
+    // bloub's own verbatim choreography had the body settle from a
+    // spinning TRIANGLE into a plain ball once, over its first ~2.5s (an
+    // ease `back` ramp, 0 -> 1, scaling `cx/cy`'s wobble down to a dead
+    // stop and blending `radii` from triangle to ball) — correct for a
+    // ONE-SHOT playback, but `back(0) = 0` while `back(ORBIT_PERIOD) = 1`
+    // (long saturated): looping wrapped `t` straight from "fully settled,
+    // cy = 0" back to "just started settling, cy = TRI_ORBIT" every
+    // cycle — measured, a same-frame `sil.cy` jump of 0.213 against a
+    // mid-cycle max of 0.05, i.e. the actual "eyes keep repinning" report
+    // (`sil.cx/cy` is what round 3's fix made the eyes ride). A settle
+    // transient fundamentally can't wrap: it has a start and an end that
+    // differ on purpose, and looping erases the distinction between "the
+    // end of the story" and "the start of it" every cycle.
+    //
+    // Fix: no settle transient in the loop at all. The wobble is now a
+    // pure function of `rot` (`spinningTriangle`'s own `cx/cy`, unscaled)
+    // — periodic by construction, for the same reason `rot` itself is,
+    // with nothing left to fall out of sync with it. One wrap, upstream of
+    // every channel (`BotEngine.sample()`'s `wrapped()`, gated on this
+    // field): every term below is simply a function of `t`, already
+    // guaranteed to fall in `[0, ORBIT_PERIOD)` while looping, so nothing
+    // here needs a modulo of its own.
+    period: ORBIT_PERIOD,
     pose: (t) => {
-      // Rotation mesuree : rampe sur 0.35 s puis 1.25 tour/s (sens antihoraire).
-      const ramp = easings.easeInOutCubic(clamp(t / 0.35))
-      const rot = -TAU * 1.25 * t * ramp
-      // Le corps se relache du triangle vers la boule pendant l'orbite.
-      const back = easings.easeInOutCubic(clamp((t - 1.6) / 0.9))
-      const tri = spinningTriangle(rot)
-      const ball = circle(1, { rot })
-      const sil: Silhouette = {
-        radii: tri.radii.map((r, i) => r + (ball.radii[i]! - r) * back),
-        rot,
-        cx: tri.cx * (1 - back),
-        cy: tri.cy * (1 - back),
-        sx: 1,
-        sy: 1
-      }
-      // DIVERGENCE FROM VERBATIM BLOUB (user-sanctioned, see src/engine.ts's
-      // header): bloub's own player never loops one state in place — it
-      // always advances a sequence, so this fade was authored as a one-shot
-      // 0-3.6s window and never needed to repeat. This package's engine does
-      // loop a single state (`play(id, { loop: true })`), and `rot` above
-      // has no such window — it is unclamped, so the body keeps spinning
-      // correctly forever on its own. The rings did not: past t=3.6 this
-      // fade clamped to 0 permanently, so a looping orbit spun a bare,
-      // featureless circle (imperceptible rotation) with its rings gone for
-      // good — which is what the "orbit doesn't look like it's looping"
-      // report was. Wrapping just the fade's own input re-plays the
-      // in/hold/out envelope every 3.6s while `rot` and the per-ring
-      // entrance stagger below (`t - i * 0.13`, intentionally NOT wrapped —
-      // it should only ever happen once) are untouched. Original bloub
-      // (single-shot `t`, no wrap) lives on at github.com/AdamOusmer/bloub.
-      const fade = clamp((t % 3.6) / 0.8) * clamp((3.6 - (t % 3.6)) / 0.9)
+      // Rotation mesuree : 1.25 tour/s (sens antihoraire). Constant-rate,
+      // deliberately: a ramp-up here would go back to 0 every loop, briefly
+      // slowing the spin down and re-accelerating it each cycle — smooth,
+      // but still a recurring hitch a full sweep would flag, and everything
+      // this state needs a "wraps clean" story to be free of gets one.
+      const rot = -TAU * 1.25 * t
+      // Le triangle tourne autour de l'origine (mesure) : c'est ce decalage
+      // qui donne l'impression qu'il bascule au lieu de pivoter sur place.
+      // `sil.radii`'s own angular shape never reaches the screen either way
+      // — `BotEngine.posed()` substitutes the seed's own profile, scaled to
+      // this array's mean, for every non-`baseBody` state (see its own doc
+      // comment) — so `spinningTriangle` is used here purely for its
+      // already-periodic `cx/cy`, not for its triangle.
+      const sil = spinningTriangle(rot)
+      // Rise over the same 0.8s the rings take to enter, hold, fall over the
+      // last 0.9s before the loop wraps — symmetric with the entrance so the
+      // wrap point (both fully faded) is where the visual seam already is.
+      const fade = clamp(t / 0.8) * clamp((ORBIT_PERIOD - t) / 0.9)
       return base({
         sil,
-        // les yeux filent autour de la sphere ~3x plus vite que la silhouette
-        gaze: {
-          yaw: REST_GAZE.yaw + Math.sin(t * 6.5) * 65 * (1 - back),
-          pitch: -4 + back * 32,
-          roll: -13
-        },
-        eyes: pair(0.18, 0.34 + back * 0.07),
+        // blobatar divergence from verbatim bloub (user-sanctioned, see
+        // src/engine.ts's header): bloub's own reference had the eyes race
+        // around the sphere ~3x faster than the silhouette (+-65deg yaw,
+        // its own separate 6.5rad/s sweep, no relation to `rot`'s 0.8s
+        // period or `ORBIT_PERIOD`) — a THIRD independent frequency, and
+        // reintroducing it here would put right back the exact class of bug
+        // `period` above exists to kill: another channel wrapping (or not
+        // wrapping) on its own schedule. It also read as chaotic on its own
+        // merits, independent of any phase bug — measured before removal,
+        // a single 1/60s frame during the sweep moved an eye center 16+
+        // viewBox units on a R=100 ball. Calm, forward, level eyes while
+        // the body drifts and the rings do the spectacle instead: fewer
+        // moving parts to desync, and readable.
+        gaze: { ...REST_GAZE },
+        // Constant too (was `0.34 + back * 0.07`, another `back`-driven
+        // grow that would have reset every loop) — same reasoning as `rot`
+        // and `sil` above, one fewer channel with a start/end to desync.
+        eyes: pair(0.18, 0.34),
         // les anneaux entrent un par un sur 0.8 s
         arcs: RINGS.map((s, i) => ({
           id: `rg${i}`,

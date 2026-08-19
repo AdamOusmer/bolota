@@ -3,7 +3,7 @@ import { BotEngine, type Look } from "../src/bloub/engine";
 import { eyePoses } from "../src/bloub/face";
 import { r2 } from "../src/bloub/math";
 import { radiusAtAngle, superellipseProfile, toPoints } from "../src/bloub/shape";
-import { STATE_BY_ID, type StateId } from "../src/bloub/states";
+import { ORBIT_PERIOD, STATE_BY_ID, type StateId } from "../src/bloub/states";
 
 // `BotEngine.sample(t)` is pure and DOM-free ("moteur sans horloge" — see its own
 // doc comment), so every check here drives it with an explicit clock instead of a
@@ -258,20 +258,88 @@ describe("orbit — eyes ride the body's own wobbling center", () => {
     });
   }
 
-  test("no eye-center discontinuity across the orbit loop wrap (t=duration -> t=0)", () => {
-    const engine = new BotEngine(R, "orbit", superellipseProfile(3, 0.6, 1));
-    // BotEngine.sample is a pure function of `now` and does not itself loop —
-    // the bridge's `tick()` calls `engine.reset(current, clock)` on wrap. Model
-    // that directly: sample the tail end of one cycle and the head of the
-    // next on a freshly-reset engine, and check the eye center doesn't jump.
-    const before = eyeCenters(engine.sample(orbitDef.duration - 0.01).eyes)[0]!;
-    engine.reset("orbit", 0);
-    const after = eyeCenters(engine.sample(0.01).eyes)[0]!;
-    // Not a tight bound (the pose itself is discontinuous at the loop point in
-    // bloub's own design — `rot` resets, the ring fade re-triggers — so some
-    // jump is real and expected); this catches the eyes specifically snapping
-    // much FARTHER than the body's own frame-to-frame travel would.
-    expect(dist(before, after)).toBeLessThan(R);
+  test("every orbit channel is phase-continuous across 3 full loop cycles", () => {
+    // Structural loop test: `def.period` (`ORBIT_PERIOD`, `states.ts`) means
+    // `BotEngine` itself wraps elapsed time into `[0, ORBIT_PERIOD)` before
+    // `pose()` ever sees it (`wrapped()`, `bloub/engine.ts`) — every channel
+    // `pose()` returns is therefore a function of that ONE wrapped number,
+    // so there is no per-channel wrap to get out of sync. This is the direct
+    // regression guard for the "eyes keep repinning" report: `reset(...,
+    // true)` actually engages looping (a plain `new BotEngine(...)` does
+    // not — `looping` defaults false), then sample continuously across 3
+    // period boundaries at 60Hz and check every channel's frame-to-frame
+    // delta stays within the same bound the state maintains mid-cycle,
+    // i.e. the boundary is not distinguishable from any other instant.
+    const seed = superellipseProfile(3, 0.6, 1);
+    const engine = new BotEngine(R, "idle", seed);
+    engine.reset("orbit", 0, true);
+
+    const dt = 1 / 60;
+    const cycles = 3;
+    const totalT = ORBIT_PERIOD * cycles;
+
+    type Sample = {
+      cx: number;
+      cy: number;
+      e0x: number;
+      e0y: number;
+      e1x: number;
+      e1y: number;
+      e0a: number;
+      e0b: number;
+      ring0: number;
+      yaw: number;
+    };
+    const series: Sample[] = [];
+    for (let t = 0; t <= totalT; t += dt) {
+      const frame = engine.sample(t);
+      const centers = eyeCenters(frame.eyes);
+      const raw = orbitDef.pose(t % ORBIT_PERIOD);
+      const eye0 = frame.eyes[0]!;
+      const nums = eye0.matrix.slice(7, -1).split(",").map(Number);
+      series.push({
+        cx: raw.sil.cx,
+        cy: raw.sil.cy,
+        e0x: centers[0]?.x ?? NaN,
+        e0y: centers[0]?.y ?? NaN,
+        e1x: centers[1]?.x ?? NaN,
+        e1y: centers[1]?.y ?? NaN,
+        e0a: nums[0]!,
+        e0b: nums[1]!,
+        // `frame.arcs` is the RENDERED (post `opacity > 0.01` filter,
+        // `bloub/engine.ts`) list — it drops the ring entirely for a few
+        // frames right where the entrance/exit envelope troughs near 0,
+        // which shifts every later ring's array INDEX and reads as a huge
+        // "opacity" swing that is actually two different rings. Read the
+        // pre-filter value straight from `pose().arcs` instead, matching
+        // `sil`/`gaze` above.
+        ring0: raw.arcs[0]?.opacity ?? NaN,
+        yaw: raw.gaze.yaw
+      });
+    }
+
+    const keys: (keyof Sample)[] = ["cx", "cy", "e0x", "e0y", "e1x", "e1y", "e0a", "e0b", "ring0", "yaw"];
+    // Per-channel bound: the largest delta ANYWHERE mid-cycle (excluding the
+    // few samples nearest each period boundary, where the real bound is
+    // established below) times a small safety factor — if the boundary
+    // delta exceeds what the channel does elsewhere in the cycle, that IS a
+    // snap. Mid-cycle deltas are tiny for constant/near-constant channels
+    // (gaze, ring0 once settled) and bounded by ordinary motion for cx/cy
+    // and the eye centers, so this is a real per-channel bound, not one
+    // fixed number papering over very different channels.
+    for (const key of keys) {
+      let midMax = 0;
+      let boundaryMax = 0;
+      const boundaryIdx = new Set<number>();
+      for (let c = 1; c < cycles; c++) boundaryIdx.add(Math.round((ORBIT_PERIOD * c) / dt));
+      for (let i = 1; i < series.length; i++) {
+        const d = Math.abs(series[i]![key] - series[i - 1]![key]);
+        const nearBoundary = [...boundaryIdx].some((b) => Math.abs(i - b) <= 1);
+        if (nearBoundary) boundaryMax = Math.max(boundaryMax, d);
+        else midMax = Math.max(midMax, d);
+      }
+      expect(boundaryMax).toBeLessThanOrEqual(midMax * 1.5 + 0.05);
+    }
   });
 
   test("orbit's own pose drives the eyes exclusively — idle wander contributes zero", () => {

@@ -148,6 +148,15 @@ export class BotEngine {
   private tCur = 0
   private tPrev = 0
   private blinkAt = -10
+  /**
+   * blobatar addition: true while the current state is meant to repeat
+   * indefinitely (`setState`/`reset`'s own `loop` argument). Gates whether
+   * `wrapped()` below folds elapsed time into `[0, def.period)` — looping is
+   * therefore a property of HOW a state is being played, not of the state
+   * itself; the same `orbit` plays once, unwrapped, inside a composed
+   * sequence, or forever, phase-wrapped, from the demo's `loop: true`.
+   */
+  private looping = false
   private pts: Point[] = []
   private shape: number[] | null = null
   private shapePrev: number[] | null = null
@@ -395,13 +404,27 @@ export class BotEngine {
    * `sample` reste une fonction pure du temps : comme `setState`, ceci est un setter DATE,
    * appele par le pilote de la sequence, jamais pendant un echantillonnage.
    */
-  reset(id: StateId, now: number) {
+  reset(id: StateId, now: number, loop = false) {
     this.cur = id
     this.prev = null
     this.departFige = null
     this.tCur = now
     this.tPrev = now
     this.blinkAt = -10
+    this.looping = loop
+  }
+
+  /**
+   * blobatar addition: the ONE place elapsed time is folded into a state's
+   * own loop phase. Every caller below that feeds a channel-producing
+   * `posed()` routes through this first — `pose()` itself, and therefore
+   * every channel it returns, only ever sees an already-wrapped number, so
+   * no individual channel (a ring's fade, a rotation, anything) can wrap on
+   * a schedule of its own and drift out of phase with the rest. See
+   * `StateDef.period`'s own doc comment for the full mechanism.
+   */
+  private wrapped(def: StateDef, elapsed: number): number {
+    return this.looping && def.period ? elapsed % def.period : elapsed
   }
 
   /**
@@ -416,7 +439,7 @@ export class BotEngine {
     if (this.departFige) return this.departFige
     if (!this.prev) return null
     const prevDef = STATE_BY_ID.get(this.prev)!
-    return this.posed(prevDef, Math.max(0, now - this.tPrev), shape, expr)
+    return this.posed(prevDef, this.wrapped(prevDef, Math.max(0, now - this.tPrev)), shape, expr)
   }
 
   /**
@@ -428,7 +451,7 @@ export class BotEngine {
     const def = STATE_BY_ID.get(this.cur)!
     const shape = this.shapeAtTime(now)
     const expr = this.exprAtTime(now)
-    const pose = this.posed(def, Math.max(0, now - this.tCur), shape, expr)
+    const pose = this.posed(def, this.wrapped(def, Math.max(0, now - this.tCur)), shape, expr)
     const since = now - this.tCur
     if (since >= def.morph) return pose
     const origine = this.origine(now, shape, expr)
@@ -454,8 +477,15 @@ export class BotEngine {
    * le plus long fondu (`MIN_BLOCK`), ne fige donc jamais rien et rend au bit ce qu'elle
    * rendait.
    */
-  setState(id: StateId, now: number) {
-    if (id === this.cur) return
+  setState(id: StateId, now: number, loop = false) {
+    if (id === this.cur) {
+      // blobatar addition: the id is unchanged but `loop` may not be (e.g.
+      // a state first played once inside a sequence, later looped from a
+      // demo) — still worth taking, and cheap; nothing else about an
+      // already-current state needs re-arming.
+      this.looping = loop
+      return
+    }
     const morph = STATE_BY_ID.get(this.cur)!.morph
     const enPleinFondu = this.prev !== null && now - this.tCur < morph
     this.departFige = enPleinFondu ? this.poseComposee(now) : null
@@ -463,6 +493,7 @@ export class BotEngine {
     this.tPrev = this.tCur
     this.cur = id
     this.tCur = now
+    this.looping = loop
     // Dans la video, chaque changement de forme est masque par un clignement.
     if (STATE_BY_ID.get(id)?.blinkIn) this.blinkAt = now
   }
@@ -472,7 +503,7 @@ export class BotEngine {
     const def = STATE_BY_ID.get(this.cur)!
     const shape = this.shapeAtTime(now)
     const expr = this.exprAtTime(now)
-    let pose = this.posed(def, Math.max(0, now - this.tCur), shape, expr)
+    let pose = this.posed(def, this.wrapped(def, Math.max(0, now - this.tCur)), shape, expr)
     let decalage = this.decalageAtTime(now, this.cur)
 
     // --- transition -------------------------------------------------------
