@@ -85,11 +85,11 @@ function run(doc: FakeDocument, totalMs: number, frameMs = 16) {
 }
 
 /** First eye `<path>`'s `d` attribute -- root's children are
- * [filterDefs, defs, back, bodyPath, eyes, front] (`engine.ts`'s
- * `mountEngine`, fixed append order). */
+ * [defs, back, bodyPath, eyes, front] (`engine.ts`'s `mountEngine`, fixed
+ * append order). */
 function eyeD(svg: FakeElement): string | null {
   const root = svg.children[0]!;
-  const eyes = root.children[4]!;
+  const eyes = root.children[3]!;
   return eyes.children[0]!.getAttribute("d");
 }
 
