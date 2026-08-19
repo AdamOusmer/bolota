@@ -91,15 +91,20 @@ you want motion, the engine is opt-in and additive.
 
 ## Install
 
-The package is not published to a registry — install it straight from this
-repo as a git dependency:
+```sh
+bun add @luzir/bolota
+```
+
+npm, pnpm and yarn all understand the same package name if you're not on Bun.
+Scoped packages need no extra flag to install (only to publish); a plain
+`npm install @luzir/bolota` works.
+
+Installing straight from this repo as a git dependency also still works, and
+tracks unreleased changes ahead of the last npm publish:
 
 ```sh
 bun add git+https://github.com/AdamOusmer/bolota
 ```
-
-npm, pnpm and yarn all understand the same `git+https://...` dependency
-syntax if you're not on Bun.
 
 ***
 
@@ -108,7 +113,7 @@ syntax if you're not on Bun.
 ### Render to SVG
 
 ```ts
-import { bolota } from "bolota";
+import { bolota } from "@luzir/bolota";
 
 bolota("alain@example.com");
 // '<svg xmlns="..." viewBox="0 0 100 100">…</svg>'
@@ -118,7 +123,7 @@ bolota("alain@example.com");
 `data:` URI helper for `<img src>` or CSS `background-image`:
 
 ```ts
-import { bolotaUri } from "bolota/uri";
+import { bolotaUri } from "@luzir/bolota/uri";
 
 el.style.backgroundImage = `url("${bolotaUri(user.id)}")`;
 ```
@@ -132,7 +137,7 @@ your own renderer (React, Vue, Svelte, canvas, whatever) instead of taking the
 library's SVG string as-is:
 
 ```ts
-import { parts } from "bolota/blob";
+import { parts } from "@luzir/bolota/blob";
 
 const face = parts("alain@example.com");
 // { shape, hue, tone, eyes, mouth, background, ... }
@@ -144,14 +149,14 @@ function Avatar({ name }: { name: string }) {
 }
 ```
 
-This is the intentional replacement for the removed `bolota/react` export:
+This is the intentional replacement for the removed `@luzir/bolota/react` export:
 one seam, framework-agnostic, instead of a component per framework.
 
 ### Expressions
 
 ```ts
-import { bolota } from "bolota";
-import { happy } from "bolota/expression";
+import { bolota } from "@luzir/bolota";
+import { happy } from "@luzir/bolota/expression";
 
 bolota(user.email, { expression: happy });
 ```
@@ -177,7 +182,7 @@ bolota directly onto an `<svg>` element and drives it through a state
 machine instead of rendering one static frame:
 
 ```ts
-import { mountEngine } from "bolota/engine";
+import { mountEngine } from "@luzir/bolota/engine";
 
 const avatar = mountEngine(svgRoot, user.id, { hue: 210 });
 
@@ -191,7 +196,7 @@ avatar.destroy();  // remove every node this call created
 
 15 states ship: `idle`, `thinking`, `wink`, `wide`, `alert`, `notify`,
 `exclaim`, `sleep`, `egg`, `hexagon`, `play`, `orbit`, `swirl`, `burst`,
-`comet` (`avatar.states` lists them at runtime). `bolota/sequences` groups
+`comet` (`avatar.states` lists them at runtime). `@luzir/bolota/sequences` groups
 related states into ready-made playlists if you'd rather drive a sequence
 than call `play()` state by state.
 
@@ -202,7 +207,7 @@ so multiple engine instances on one page never collide — the static
 `bolota()` output stays completely id/filter-free either way.
 
 No separate CSS file is required; the engine builds its own `<defs>` inline.
-The engine is a separate entry point (`bolota/engine`) from the static
+The engine is a separate entry point (`@luzir/bolota/engine`) from the static
 renderer — importing one never pulls in the other. It respects
 `prefers-reduced-motion`: it renders one static pose and never starts the
 render loop.
@@ -265,14 +270,14 @@ Exposed entry points:
 
 | Export             | What it is                                   |
 | ------------------- | --------------------------------------------- |
-| `bolota`          | `bolota()` — render straight to an SVG string, plus palette/trait utilities |
-| `bolota/blob`      | `parts()` — the structured renderer seam, on its own (saves ~1 KB if that's all you use) |
-| `bolota/uri`       | `bolotaUri()` — wraps output in a `data:` URI |
-| `bolota/expression`| Named expression values (`happy`, `sad`, …)   |
-| `bolota/motion.css`| Required CSS for the static renderer's `animate` mode |
-| `bolota/engine`    | `mountEngine()` — the bloub-ported animation engine |
-| `bolota/sequences` | Ready-made playlists across engine states     |
-| `bolota/package.json`| The package manifest itself, resolvable as a subpath (tooling convenience) |
+| `@luzir/bolota`          | `bolota()` — render straight to an SVG string, plus palette/trait utilities |
+| `@luzir/bolota/blob`      | `parts()` — the structured renderer seam, on its own (saves ~1 KB if that's all you use) |
+| `@luzir/bolota/uri`       | `bolotaUri()` — wraps output in a `data:` URI |
+| `@luzir/bolota/expression`| Named expression values (`happy`, `sad`, …)   |
+| `@luzir/bolota/motion.css`| Required CSS for the static renderer's `animate` mode |
+| `@luzir/bolota/engine`    | `mountEngine()` — the bloub-ported animation engine |
+| `@luzir/bolota/sequences` | Ready-made playlists across engine states     |
+| `@luzir/bolota/package.json`| The package manifest itself, resolvable as a subpath (tooling convenience) |
 
 The engine needs no separate stylesheet — its motion is built from inline
 SVG `<defs>` at mount time, not CSS keyframes.
@@ -281,11 +286,11 @@ SVG `<defs>` at mount time, not CSS keyframes.
 
 ## v2 Breaking Changes
 
-- **React adapter removed.** `bolota/react` is gone; the `parts` seam
-  (`bolota/blob`) is the public replacement for building your own adapter.
+- **React adapter removed.** `@luzir/bolota/react` is gone; the `parts` seam
+  (`@luzir/bolota/blob`) is the public replacement for building your own adapter.
 - **Eyes reworked.** Always the fixed bloub-style black capsule — see
   [Eyes](#eyes) for the contrast-guarantee tradeoff this brings.
-- **Animation engine added.** `bolota/engine`, ported from bloub, alongside
+- **Animation engine added.** `@luzir/bolota/engine`, ported from bloub, alongside
   (not replacing) the existing static renderer and its `animate` mode.
 - **Goldens regenerated.** The eye rework and engine port changed reference
   output; `test/golden` was regenerated against the new renderer.
@@ -318,13 +323,19 @@ Tags follow `vX.Y.Z` (e.g. `v2.0.1`), matching the `version` field in
 The workflow also runs on `workflow_dispatch` with a `dry-run` input, for
 exercising the same gate and tarball verification without publishing.
 
+The package is published as `@luzir/bolota` (the library itself is still
+called `bolota` — only the npm scope differs) under the `luzir` npm org. The
+`luzir` org must already exist on npmjs.com and own the `@luzir` scope before
+the first publish; the trusted publisher config below can't be created until
+it does.
+
 Publishing uses npm's [Trusted Publishing](https://docs.npmjs.com/trusted-publishers)
 (OIDC) — no npm token is stored in this repo. Before the first release, configure
-it once on npmjs.com, on the `bolota` package's Settings page, under "Trusted
+it once on npmjs.com, on the `@luzir/bolota` package's Settings page, under "Trusted
 Publisher":
 
 - Organization or user: `AdamOusmer`
-- Repository: `bolota`
+- Repository: `bolota` (the GitHub repo name is unaffected by the npm scope)
 - Workflow filename: `release.yml` (filename only, not the full path)
 - Environment name: `npm-release` (matches the `environment:` in
   `release.yml`; optional on npm's side, but set it if the GitHub environment
@@ -358,7 +369,7 @@ or endorses it.
 - **[blobatar](https://github.com/Alain00/blobatar)** by Alain — the original
   deterministic blob-avatar library this fork is built on. MIT licensed.
 - **[bloub](https://github.com/jeremy-prt/bloub)** by Jérémy Perret — source
-  of the animation engine ported into this fork's `bolota/engine`. The code
+  of the animation engine ported into this fork's `@luzir/bolota/engine`. The code
   is MIT licensed; its visual design imitates x.ai's, and is not affiliated
   with or endorsed by x.ai.
 
