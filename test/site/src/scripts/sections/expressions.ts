@@ -16,18 +16,15 @@ const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
  * alone and it gently auto-cycles through the roster on its own, nothing
  * on this page needs a play button to be alive.
  *
- * Stage state is `"idle"`, not `"wander"`: `"wander"` composes continuous
- * ambient gaze drift on top of whatever pose is showing, which fights the
- * one thing this section needs — a held expression a visitor can actually
- * judge, undistorted by the stage also wandering underneath it. `"idle"`
- * is bolota's true static-render default (eyes at their seeded anchors,
- * gaze straight; blink + breathe still play, so it isn't a frozen frame
- * either), and — like `setExpression` — only shows on `baseFace` states,
- * which both `"idle"` and `"wander"` are (`bloub/states.ts`'s doc comment
- * on the idle/wander split). `"wander"` stays its own demo, in the States
- * section, not here. Same state Hero uses for the seed's resting portrait,
- * for the same reason: it's the pose that doesn't fight whatever else is
- * meant to be the focus. */
+ * Stage state is `"wander"`, not `"idle"`: `"idle"` is bolota's still
+ * neutral base (dead-ahead gaze, no ambient drift, no float — see the
+ * engine's own comment on that state), which made this whole section read
+ * as a frozen portrait once the idle/wander split landed. `"wander"` is
+ * the living version of the same resting face, and the held expression
+ * still owns the eyes on top of it: the engine replaces gaze/split/eyes
+ * for any `baseFace` state carrying an expression, and both `"idle"` and
+ * `"wander"` are `baseFace`. So the selected pose is exactly what the
+ * picker chose while the body underneath keeps breathing and drifting. */
 export function setupExpressions() {
   const section = document.querySelector<HTMLElement>("[data-expressions]");
   const stageHost = document.querySelector<HTMLElement>("[data-expr-stage]");
@@ -107,7 +104,15 @@ export function setupExpressions() {
     if (myGen !== gen) return; // a newer mount() call already won the race
     handle?.destroy();
     handle = mountEngine(svg, seed);
-    handle.play("idle", { loop: true });
+    // `wander`, not `idle`: idle is the still neutral base now (dead-ahead
+    // gaze, no drift, no float — see the engine's own comment on that
+    // state), so a held expression on top of it renders as a frozen
+    // portrait. `wander` is the living version of the same resting face,
+    // and a held expression still owns the eyes on top of it (the engine
+    // replaces gaze/split/eyes for any `baseFace` state carrying one), so
+    // the pose stays exactly what the picker selected while the body keeps
+    // breathing, blinking and drifting under it.
+    handle.play("wander", { loop: true });
     buildPicker();
     select(0, handle.expressions[0]!, false);
   }
@@ -118,7 +123,7 @@ export function setupExpressions() {
   onVisible(
     svg,
     () => {
-      handle?.play("idle", { loop: true });
+      handle?.play("wander", { loop: true }); // see mount() for why not idle
       scheduleAuto();
     },
     () => {
