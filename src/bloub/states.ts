@@ -165,8 +165,6 @@ export type StateId =
   | 'notify'
   | 'exclaim'
   | 'snooze'
-  | 'egg'
-  | 'hexagon'
   | 'play'
   | 'orbit'
   | 'burst'
@@ -413,38 +411,16 @@ export const STATES: StateDef[] = [
       })
   },
 
-  {
-    id: 'egg',
-    duration: 1.8,
-    morph: 0.4,
-    baseFace: false,
-    baseBody: false,
-    blinkIn: true,
-    pose: () =>
-      base({
-        sil: silhouette('egg'),
-        gaze: { yaw: 19.97, pitch: 26.01, roll: -17.1 },
-        // les yeux se resserrent comme le corps
-        split: 11.07,
-        eyes: pair(0.164, 0.385)
-      })
-  },
-
-  {
-    id: 'hexagon',
-    duration: 1.6,
-    morph: 0.4,
-    baseFace: false,
-    baseBody: false,
-    blinkIn: true,
-    pose: () =>
-      base({
-        sil: silhouette('hexagon'),
-        gaze: { yaw: 23.11, pitch: 24.42, roll: -13.3 },
-        split: 13.37,
-        eyes: pair(0.177, 0.411)
-      })
-  },
+  // `egg` and `hexagon` removed from the catalog (user decision): both were
+  // shape-swap states (`silhouette('egg')`/`silhouette('hexagon')`, a
+  // static named profile for their whole duration, no radius variation),
+  // which is exactly what the seeded-shape enforcement in
+  // `bloub/engine.ts`'s `posed()` makes meaningless — after that fix they
+  // rendered as an unchanging seeded body with a fixed squint,
+  // indistinguishable from idle. Deleted rather than kept unexported: no
+  // remaining caller, so there was nothing a provenance comment would have
+  // been guarding. Original bloub (both states intact) lives on unrenamed
+  // at github.com/AdamOusmer/bloub.
 
   {
     id: 'play',
@@ -666,8 +642,6 @@ export const POSES: Record<StateId, number> = {
   notify: 0.9,
   exclaim: 0.8,
   snooze: 0.45,
-  egg: 0.8,
-  hexagon: 0.8,
   play: 0.9,
   orbit: 1.2,
   swirl: 0.5,
@@ -684,8 +658,6 @@ export const SEQUENCE: StateId[] = [
   'notify',
   'exclaim',
   'snooze',
-  'egg',
-  'hexagon',
   'play',
   'orbit',
   'burst',
