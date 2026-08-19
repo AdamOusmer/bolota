@@ -1,18 +1,17 @@
 /**
  * The site's shared motion language: Lenis smooth scroll, `[data-magnetic]`
- * hover pull, and the sticky nav's scrolled/active-section state.
+ * hover pull, the sticky nav's scrolled/active-section state, and the
+ * scroll-triggered `[data-reveal]` content entrance.
  *
- * Scroll-triggered `[data-reveal]` entrances are pure CSS now (see
- * `[data-reveal]` in src/styles/global.css), ported verbatim from the
- * Portfolio's `animation-timeline: view()` technique, so there is no reveal
- * function here anymore. Lenis setup mirrors adam-ousmer.dev's `scroll.js`
- * (Lenis + rAF loop). Magnetic pull uses the `motion` package the same way
- * the Portfolio's `ui/Magnetic.astro` does: a quick un-eased follow while
- * tracking, a spring release on leave. `prefers-reduced-motion` is the only
- * off-switch anywhere on this page: it skips Lenis and magnetic entirely.
+ * Lenis setup mirrors adam-ousmer.dev's `scroll.js` (Lenis + rAF loop).
+ * Magnetic pull uses the `motion` package the same way the Portfolio's
+ * `ui/Magnetic.astro` does: a quick un-eased follow while tracking, a
+ * spring release on leave. `prefers-reduced-motion` is the only off-switch
+ * anywhere on this page: it skips Lenis, magnetic and reveal entirely,
+ * jumping every `[data-reveal]` element straight to its resting state.
  */
 import Lenis from "lenis";
-import { animate } from "motion";
+import { animate, cubicBezier } from "motion";
 
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -118,4 +117,65 @@ export function setupNav() {
     { rootMargin: "-40% 0px -55% 0px", threshold: 0 },
   );
   sections.forEach((s) => io.observe(s));
+}
+
+/**
+ * Scroll-triggered content entrance for every `[data-reveal]` element:
+ * opacity 0 -> 1 + translateY(10px) -> 0, 650ms, cubic-bezier(0.25, 0.1,
+ * 0.25, 1), per the redesign spec, with a 60ms stagger read off each
+ * element's own `--reveal-i` custom property (already the convention
+ * several sections use for `data-reveal style="--reveal-i:N"` groups).
+ *
+ * IntersectionObserver-driven rather than v1's `animation-timeline: view()`
+ * CSS: that technique ties duration to scroll distance, not a fixed 650ms,
+ * so it cannot hit the spec's exact timing/easing. Base (opacity: 0,
+ * translateY(10px)) state lives in global.css's `[data-reveal]` rule.
+ *
+ * Reduced motion, no IntersectionObserver support, and any animate()
+ * failure all resolve straight to the resting state, never a permanently
+ * invisible section, same belt-and-suspenders shape as hero.ts's own
+ * entrance. See also the `<noscript>` rule in Base.astro for when JS never
+ * runs at all.
+ */
+export function setupReveal() {
+  const els = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+  if (!els.length) return;
+
+  const settle = (el: HTMLElement) => {
+    el.style.opacity = "1";
+    el.style.transform = "none";
+  };
+
+  if (reduceMotion.matches || !("IntersectionObserver" in window)) {
+    els.forEach(settle);
+    return;
+  }
+
+  const ease = cubicBezier(0.25, 0.1, 0.25, 1);
+  const io = new IntersectionObserver(
+    (entries, obs) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const el = entry.target as HTMLElement;
+        obs.unobserve(el);
+
+        const i = Number(getComputedStyle(el).getPropertyValue("--reveal-i")) || 0;
+        const delay = i * 0.06;
+        const finalize = () => settle(el);
+        try {
+          animate(el, { opacity: [0, 1], y: [10, 0] }, { duration: 0.65, delay, ease })
+            .finished.then(finalize)
+            .catch(finalize);
+        } catch {
+          finalize();
+        }
+        // Belt and suspenders: a stalled rAF driver must not leave content
+        // permanently invisible (see hero.ts's playEntrance for the same
+        // pattern and rationale).
+        setTimeout(finalize, delay * 1000 + 900);
+      }
+    },
+    { threshold: 0.15, rootMargin: "0px 0px -10% 0px" },
+  );
+  els.forEach((el) => io.observe(el));
 }

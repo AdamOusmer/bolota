@@ -1,0 +1,69 @@
+/*
+ * Self-hosted @font-face declarations for the redesign's three typefaces.
+ * Replaces the v1 @fontsource(bricolage-grotesque, space-mono) imports in
+ * Base.astro: those were npm packages, these are woff2 files fetched
+ * straight from Fontshare (Clash Display, Switzer) and Google Fonts (Spline
+ * Sans Mono, not on Fontshare) and committed under public/fonts/, referenced
+ * here by absolute path so Astro serves them unprocessed.
+ *
+ * Weights match global.css's --font-display/--font-body/--font-mono usage:
+ * Clash Display 500/600 (headlines only), Switzer 400/500/600 (body/UI),
+ * Spline Sans Mono 400/500 (code + seed-input contexts only). Every face
+ * gets font-display: swap so first paint never blocks on the font request.
+ */
+
+@font-face {
+  font-family: "Clash Display";
+  src: url("/fonts/ClashDisplay-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Clash Display";
+  src: url("/fonts/ClashDisplay-Semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Spline Sans Mono";
+  src: url("/fonts/SplineSansMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Spline Sans Mono";
+  src: url("/fonts/SplineSansMono-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}

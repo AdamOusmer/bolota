@@ -29,22 +29,38 @@
 :root {
   /* ground: the one token under active iteration. Swap this to re-tune the
      whole page, --surface-color and --border-color below are color-mix()
-     steps off of it, not independent hex values. */
+     steps off of it, not independent hex values. Redesign v2 (lamplight
+     specimen stage): surfaces are RARE (boxless law, see global.css), so
+     these two are now a quiet 5%/9% white-mix instead of v1's louder
+     14%/30% step, they only ever show up on the seed input, code blocks and
+     the scrolled nav. */
   --bg-color: #262730;
-  --surface-color: color-mix(in srgb, var(--bg-color) 86%, white 14%);
-  --border-color: color-mix(in srgb, var(--bg-color) 70%, white 30%);
+  --surface-color: color-mix(in srgb, var(--bg-color) 95%, white 5%);
+  --border-color: color-mix(in srgb, var(--bg-color) 91%, white 9%);
 
-  /* text, copied verbatim from the Portfolio's own values */
-  --text-main: #e5e7eb;
-  --text-main-rgb: 229 231 235;
-  --text-muted: #b2bcc7;
+  /* text, warm-tinted off-whites (v1's values retuned toward --light's hue
+     for the redesign, still AA on --bg-color at body sizes) */
+  --text-main: #ece6dc;
+  --text-main-rgb: 236 230 220;
+  --text-muted: #b8b0a4;
   --text-faint: rgb(var(--text-main-rgb) / 0.4);
 
   /* accent: Luzir's one warm "light" color, standing in for the Portfolio's
-     --primary-green everywhere that color is used */
+     --primary-green everywhere that color is used. --accent is the same
+     value under the redesign's own name (kickers, rings, underlines);
+     --light stays for the pre-existing lightfield background/glow call
+     sites so this is an alias, not a second color. */
   --light: #e8b34d;
   --light-rgb: 232 179 77;
   --light-deep: #a5771e;
+  --accent: var(--light);
+  --accent-rgb: var(--light-rgb);
+
+  /* radius: redesign v2. Boxes are rare, so there are only two: the
+     interactive surfaces (seed input, nav pill) and the smaller one for
+     code blocks. */
+  --radius-interactive: 24px;
+  --radius-code: 16px;
 
   /* lightfield: the restored-verbatim v1 background's two-tone glow (warm +
      cool), its canvas motes (brighter than --light-rgb on purpose, small

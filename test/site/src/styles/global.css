@@ -4,12 +4,21 @@
  * Spacing, radii, motion timing and the section heading pattern are lifted
  * from itsmavey.com (source: ~/WebstormProjects/Portfolio, src/styles/
  * style.css, src/layouts/layout.astro, src/components/SectionHeading.astro,
- * ui/buttons/Button.astro, ui/ProjectCard.astro), not invented here. Fonts
- * are a later, deliberate departure from that mirror: body/UI keeps the
- * Portfolio's Space Mono, but headline type is Bricolage Grotesque, not
- * Space Grotesk, for the marketing pass (see the --font-display token
- * below). Both are self-hosted through @fontsource, imported in
- * src/layouts/Base.astro.
+ * ui/buttons/Button.astro, ui/ProjectCard.astro), not invented here.
+ *
+ * Redesign v2 ("lamplight specimen stage"): full type replacement. Display
+ * is Clash Display (was Bricolage Grotesque), body/UI is Switzer, proportional
+ * on purpose to kill the terminal feel v1 had from running Space Mono
+ * everywhere, and Space Mono itself is gone, replaced by Spline Sans Mono,
+ * scoped to code and seed-input contexts only instead of the whole page. All
+ * three are self-hosted via @font-face in ./fonts.css, imported in
+ * src/layouts/Base.astro right after this file's own tokens.css import.
+ *
+ * Also v2: the boxless law. Card/tile/panel chrome (border + background) is
+ * gone except on the three surfaces the redesign spec keeps: the hero seed
+ * input, code blocks, and the nav's scrolled state. Everything else floats
+ * on the stage, separated by spacing, type and (for focal blobs) the
+ * `.light-pool` utility below, not a box.
  *
  * Every color is a `var(--token)` defined in ./tokens.css, imported first;
  * see Base.astro, never a literal here. That file's own header explains the
@@ -18,19 +27,12 @@
  */
 
 :root {
-  /* Display: Bricolage Grotesque, a proper display-weight variable
-     grotesk (200-800, imported at 600/800), swapped in for the marketing
-     pass, replacing the Portfolio-mirrored Space Grotesk for headline type
-     only. Body/UI stays Space Mono; see global.css's header comment. */
-  --font-display: "Bricolage Grotesque", sans-serif;
-  --font-mono: "Space Mono", monospace;
+  --font-display: "Clash Display", "Switzer", sans-serif;
+  --font-body: "Switzer", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Spline Sans Mono", ui-monospace, "SFMono-Regular", "Menlo", monospace;
 
   --ease-smooth: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-elastic: cubic-bezier(0.34, 1.56, 0.64, 1);
-
-  --radius-card: 12px;
-  --radius-sm: 8px;
-  --radius-pill: 999px;
 
   --content-max: 1100px;
   --space-section: clamp(48px, 7vw, 88px);
@@ -42,7 +44,6 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: var(--font-mono);
 }
 
 html {
@@ -56,7 +57,10 @@ html.lenis {
 
 body {
   background: var(--bg-color);
-  color: var(--text-main);
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   min-height: 100dvh;
   overflow-x: clip;
@@ -93,8 +97,8 @@ h2,
 h3,
 h4 {
   font-family: var(--font-display);
-  font-weight: 700;
-  line-height: 1.15;
+  font-weight: 500;
+  line-height: 1.05;
 }
 
 code,
@@ -116,7 +120,8 @@ pre {
    site's one accent); the cool tone and the torch's warm-white are their
    own tokens (--glow-cool-rgb, --torch-rgb in tokens.css) since nothing
    else on the page needs that exact hue, still tokens, not literals, per
-   the no-raw-colors-outside-tokens.css rule. */
+   the no-raw-colors-outside-tokens.css rule. Untouched by the v2 redesign:
+   everything below this block changed, this did not. */
 
 .lightfield {
   position: fixed;
@@ -204,117 +209,164 @@ main {
   border-top: 1px solid var(--border-color);
 }
 
-/* ── scroll reveal ──
-   Ported verbatim from the Portfolio's src/styles/style.css: a scroll-driven
-   native CSS animation (`animation-timeline: view()`), not an
-   IntersectionObserver. Progressive enhancement: browsers without
-   scroll-driven animations just show the content at rest (no opacity: 0
-   base state outside the @supports block), which is also what happens under
-   reduced motion once the query below strips the animation. `--reveal-i`
-   staggers neighbours exactly like the Portfolio's `--index`. */
+/* ── type scale (redesign v2) ──
+   The four shared text roles every section pulls from instead of inventing
+   their own sizes: a hero-scale display line, a smaller section-title
+   display line, a kicker label, and a single "lead" sentence. Body copy's
+   own 17px/1.65/--text-muted default lives on `body` above; nothing extra
+   needed here for that role. */
 
-[data-reveal] {
-  opacity: 1;
-  transform: none;
-}
-
-@supports (animation-timeline: view()) {
-  [data-reveal] {
-    animation: scrollReveal linear both;
-    animation-timeline: view();
-    animation-range: entry calc(0% + (var(--reveal-i, 0) * 4%)) cover calc(22% + (var(--reveal-i, 0) * 3%));
-  }
-}
-
-@keyframes scrollReveal {
-  0% {
-    opacity: 0;
-    transform: translateY(40px) scale(0.95);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-reveal] {
-    animation: none !important;
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* ── section heading (title + animated underline + subtitle) ──
-   Ported from the Portfolio's SectionHeading.astro: no eyebrow label, just
-   an h2 with a short accent bar under it that draws in on scroll, and an
-   optional one-line subtitle. */
-
-.section-head {
-  margin-bottom: 3rem;
-  max-width: 640px;
-}
-
-.section-head h2 {
-  font-size: 2.5rem;
+.display-hero {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(64px, 10vw, 140px);
+  letter-spacing: -0.03em;
+  line-height: 0.95;
   color: var(--text-main);
-  position: relative;
-  display: inline-block;
 }
 
-.section-head h2::after {
+.display-section {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(44px, 6vw, 80px);
+  line-height: 1.05;
+  color: var(--text-main);
+}
+
+.lead {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1.4;
+  color: var(--text-main);
+}
+
+/* Kicker: the small uppercase label above a headline ("A Luzir project", a
+   section eyebrow, a sequence name). Switzer 600, 13px, wide tracking, the
+   accent color, with a 28px underline that draws in on scroll. The draw is
+   plain CSS (`animation-timeline: view()`, ported from v1's identical
+   heading-underline technique) rather than routed through the JS reveal
+   below: it is a decoration, not content entering the page, and this way it
+   still works (skips straight to drawn) in browsers without scroll-driven
+   animations, same graceful-degradation shape as the rest of this file. */
+
+.kicker {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.kicker::after {
   content: "";
-  position: absolute;
-  bottom: -5px;
-  left: 0;
-  width: 60px;
-  height: 4px;
-  background: var(--light);
+  display: block;
+  width: 28px;
+  height: 2px;
   border-radius: 2px;
+  background: var(--accent);
   transform: scaleX(0);
   transform-origin: left;
 }
 
 @supports (animation-timeline: view()) {
-  .section-head h2::after {
-    animation: headingLine linear both;
+  .kicker::after {
+    animation: kickerDraw linear both;
     animation-timeline: view();
-    animation-range: entry 0% cover 30%;
+    animation-range: entry 0% cover 25%;
   }
 }
 
-@keyframes headingLine {
-  0% {
-    transform: scaleX(0);
-  }
-  100% {
+@keyframes kickerDraw {
+  to {
     transform: scaleX(1);
   }
 }
 
-.section-head p {
-  font-size: 1.1rem;
-  color: var(--text-muted);
-  margin-top: 1rem;
-  max-width: 600px;
-  line-height: 1.7;
+@media (prefers-reduced-motion: reduce) {
+  .kicker::after {
+    animation: none;
+    transform: scaleX(1);
+  }
+}
+
+/* Light pool: the boxless layout's one separation device for a focal blob,
+   a soft low-alpha radial glow standing in for the card chrome the boxless
+   law removed everywhere else. Drop `<div class="light-pool" aria-hidden>`
+   inside a `position: relative` wrapper around the blob it should sit
+   behind (z-index: -1 needs that ancestor to actually be a stacking
+   context). Sections needing a bigger pool (hero, sequences) can override
+   `inset`/`filter` in their own scoped styles, per the redesign split. */
+
+.light-pool {
+  position: absolute;
+  inset: -25%;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgb(var(--light-rgb) / 0.22), rgb(var(--light-rgb) / 0.08) 55%, transparent 72%);
+  filter: blur(clamp(24px, 4vw, 56px));
+}
+
+/* ── scroll reveal ──
+   Content entrance, distinct from the kicker's decorative underline above.
+   Base (pre-reveal) state only, CSS gives every `[data-reveal]` element the
+   spec's resting position: `src/scripts/lib/motion.ts`'s `setupReveal()`
+   drives the actual 650ms/cubic-bezier(0.25,0.1,0.25,1) animation on
+   intersection, reading each element's own `--reveal-i` for the 60ms
+   sibling stagger (already the convention several sections use for their
+   `data-reveal style="--reveal-i:N"` groups). Reduced motion and any
+   failure to reach JS (disabled, error, IntersectionObserver missing) both
+   resolve to the resting state via the media query below plus the
+   `<noscript>` rule in Base.astro, never a permanently invisible section. */
+
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── section heading (kicker/title/lead) ──
+   The shared pattern every section opens with: an optional kicker, a
+   `.display-section` title, one `.lead` sentence. No explainer paragraphs,
+   per the redesign's copy voice. See components/SectionHead.astro. */
+
+.section-head {
+  margin-bottom: 3rem;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+@media (max-width: 768px) {
+  .display-section {
+    font-size: clamp(36px, 9vw, 56px);
+  }
 }
 
 .subhead {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 500;
   font-size: 1.15rem;
   color: var(--text-main);
   margin: 3rem 0 1rem;
 }
 
-@media (max-width: 768px) {
-  .section-head h2 {
-    font-size: 2rem;
-  }
-}
-
-/* ── nav ── */
+/* ── nav ──
+   Minimal per the redesign: wordmark, links, GitHub icon, all on the
+   transparent lightfield until scroll. The scrolled state (opaque solid,
+   not another alpha step, so content sliding underneath a fixed header
+   never reads through it) stays exactly as v1 built it. */
 
 .nav {
   position: fixed;
@@ -331,10 +383,6 @@ main {
   transition: border-color 300ms var(--ease-smooth), background 300ms var(--ease-smooth);
 }
 
-/* Scrolled state is a fully opaque solid, not another alpha step: content
-   sliding underneath a fixed header must never read through it, and that
-   guarantee can't depend on backdrop-filter support. The blur above is
-   layered on top only as a nicety for the sliver of transition frames. */
 .nav.is-scrolled {
   border-color: var(--border-color);
   background: var(--bg-color);
@@ -353,7 +401,7 @@ main {
 
 .nav__brand {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 600;
   font-size: 1.05rem;
   color: var(--text-main);
   user-select: none;
@@ -385,7 +433,7 @@ main {
   right: 100%;
   bottom: 0;
   height: 1px;
-  background: var(--light);
+  background: var(--accent);
   transition: right 320ms var(--ease-smooth);
 }
 
@@ -413,153 +461,18 @@ main {
 /* ── magnetic ──
    No CSS transition here on purpose: the pull and the spring-back are both
    driven by the `motion` package (src/scripts/lib/motion.ts), same as the
-   Portfolio's ui/Magnetic.astro. */
+   Portfolio's ui/Magnetic.astro. Redesign v2 scopes this to nav links and
+   copy affordances only (see motion spec); it was never used more broadly
+   than that. */
 
 [data-magnetic] {
   display: inline-flex;
 }
 
-/* ── buttons (ported from ui/buttons/Button.astro) ── */
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0.7rem 1.75rem;
-  border-radius: var(--radius-pill);
-  font-size: 15px;
-  font-weight: 500;
-  position: relative;
-  overflow: hidden;
-  transition: color 0.25s, transform 80ms ease;
-}
-
-.btn span {
-  position: relative;
-  z-index: 1;
-}
-
-.btn::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  transform: translateY(100%);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 0;
-}
-
-.btn:hover::before {
-  transform: translateY(0);
-}
-
-.btn:active {
-  transform: scale(0.97);
-}
-
-.btn.primary {
-  color: var(--bg-color);
-  background: var(--light);
-}
-
-.btn.primary::before {
-  background: var(--light-deep);
-}
-
-.btn.primary:hover {
-  color: var(--text-main);
-}
-
-.btn.secondary {
-  color: var(--text-main);
-  background: transparent;
-  outline: 1.5px solid var(--border-color);
-}
-
-.btn.secondary::before {
-  background: var(--surface-color);
-}
-
-.btn.secondary:hover {
-  outline-color: var(--light);
-}
-
-/* ── hero entrance ──
-   Staggered fade-up on page load, driven by the `motion` package
-   (src/scripts/sections/hero.ts), same pattern as the Portfolio's
-   ui/PageEntrance.astro `.page-stagger` elements. Base state here is the
-   pre-animation one; hero.ts animates to visible and also handles the
-   reduced-motion case (sets these to their end state directly, no
-   animation) so this never depends on JS running under `@media
-   (prefers-reduced-motion: reduce)`. */
-
-[data-hero-stagger] {
-  opacity: 0;
-  transform: translateY(25px);
-}
-
-/* ── hero ── */
-
-.hero {
-  padding-top: calc(var(--nav-h) + clamp(32px, 6vw, 64px));
-  padding-bottom: var(--space-section);
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: clamp(32px, 6vw, 64px);
-  align-items: center;
-}
-
-.hero__title {
-  font-size: clamp(3.5rem, 9vw, 6rem);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1;
-  margin-bottom: 0.75rem;
-  color: var(--text-main);
-}
-
-.hero__subhead {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: clamp(1.15rem, 2vw, 1.5rem);
-  color: var(--light);
-  margin-bottom: 1rem;
-}
-
-.hero__tagline {
-  font-size: 0.92rem;
-  line-height: 1.6;
-  color: var(--text-muted);
-  max-width: 42ch;
-  margin-bottom: 2rem;
-}
-
-.hero__stage {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  aspect-ratio: 1;
-  width: min(380px, 100%);
-  margin-inline: auto;
-}
-
-.hero__avatar-wrap {
-  position: relative;
-  width: 76%;
-  aspect-ratio: 1;
-  transition: transform 420ms var(--ease-smooth);
-  will-change: transform;
-}
-
-.hero__avatar-wrap svg {
-  width: 100%;
-  height: 100%;
-  filter: drop-shadow(0 20px 45px rgb(var(--light-rgb) / 0.16));
-}
-
-/* ── seed control + install snippet ── */
+/* ── seed control ──
+   The hero's one retained surface (boxless law's short exception list:
+   seed input, code blocks, nav scrolled state). Spline Sans Mono per the
+   "code/seed-input contexts only" rule for that font. */
 
 .seed-control {
   display: flex;
@@ -567,10 +480,11 @@ main {
   align-items: center;
   gap: 10px;
   padding: 6px 6px 6px 18px;
-  background: color-mix(in srgb, var(--surface-color) 50%, transparent);
+  background: var(--surface-color);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-interactive);
   max-width: 100%;
+  font-family: var(--font-mono);
 }
 
 .seed-control__prefix {
@@ -586,6 +500,7 @@ main {
   border: none;
   outline: none;
   color: var(--text-main);
+  font-family: inherit;
   font-size: 0.94rem;
   padding-block: 8px;
 }
@@ -607,7 +522,7 @@ main {
 }
 
 .seed-control__dice:hover {
-  color: var(--light);
+  color: var(--accent);
   background: rgb(var(--white-rgb) / 0.06);
 }
 
@@ -618,31 +533,88 @@ main {
 }
 
 .seed-hint strong {
-  color: var(--light);
+  color: var(--accent);
   font-weight: 700;
 }
 
+/* ── install snippet ──
+   Boxless per the hero spec: a quiet mono line, not a bordered chip. The
+   copy affordance below/beside it (`.copy-btn`) is the other place magnetic
+   hover is allowed. */
+
 .install-snip {
-  margin-top: 1.5rem;
+  margin-top: 1.25rem;
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 8px 10px 16px;
-  background: color-mix(in srgb, var(--surface-color) 50%, transparent);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-card);
-  font-size: 0.88rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-faint);
   max-width: 100%;
-  overflow: hidden;
 }
 
 .install-snip code {
-  color: var(--light);
+  color: var(--text-muted);
   overflow-x: auto;
   white-space: nowrap;
 }
 
-/* ── tile grid / cards (ported from ui/ProjectCard.astro) ── */
+/* ── hero stage (interim sizing) ──
+   Boxless law removed v1's `.hero` grid split entirely (the redesign kills
+   the side-by-side layout outright), but the avatar SVG mountEngine()
+   renders still needs an explicit box: without one it paints at its native
+   intrinsic size and the centered column below stacks to tens of thousands
+   of pixels tall. This is a plain centered-column placeholder, sized to the
+   spec's "min 44vh tall" hero blob number, not the finished hero: Agent B
+   owns Hero.astro and is expected to replace this with the real light-pool
+   composition. */
+
+.hero {
+  padding-top: calc(var(--nav-h) + clamp(32px, 6vw, 64px));
+  padding-bottom: var(--space-section);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: clamp(20px, 4vw, 36px);
+}
+
+.hero__title,
+.hero__subhead {
+  color: var(--text-main);
+}
+
+.hero__tagline {
+  max-width: 42ch;
+}
+
+.hero__stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero__avatar-wrap {
+  position: relative;
+  height: clamp(320px, 44vh, 620px);
+  aspect-ratio: 1;
+}
+
+.hero__avatar-wrap svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── tile grid (interim sizing) ──
+   Same story as `.hero__avatar-wrap` above: Determinism, States and
+   Sequences all still mount one avatar SVG per `.tile`/`.tile__avatar`
+   (via `--avatar-size`), and without an explicit box each one paints at
+   its intrinsic size and the grid stacks to an unusable page height. Layout
+   and sizing only, no border/background/shadow: the boxless law's card
+   chrome is gone, this is not a return of it. Agents B (Determinism proof
+   strip), C (States specimen grid) and D (Sequences stage) each replace
+   this with their own section-scoped layout per the spec. */
 
 .tile-grid {
   display: grid;
@@ -651,37 +623,17 @@ main {
 }
 
 .tile {
-  position: relative;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
   text-align: center;
-  padding: 1.5rem 0.9rem;
-  background: color-mix(in srgb, var(--surface-color) 40%, transparent);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-card);
-  transition: border-color 0.25s, box-shadow 0.25s, transform 80ms ease;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .tile:hover {
-    border-color: rgb(var(--light-rgb) / 0.4);
-    box-shadow: 0 15px 35px -15px rgb(var(--light-rgb) / 0.3);
-  }
 }
 
 .tile__avatar {
-  position: relative;
   width: var(--avatar-size, 56px);
   height: var(--avatar-size, 56px);
-}
-
-.tile__avatar svg {
-  width: 100%;
-  height: 100%;
 }
 
 .tile__label {
@@ -690,7 +642,13 @@ main {
   text-transform: capitalize;
 }
 
-/* ── expression picker ── */
+/* ── expression picker (interim, and mostly already the spec) ──
+   Circular tiles, ring-only selection state, no fill/border at rest: this
+   is not just a stopgap, it is close to the spec's own description
+   ("circular 65-70px tiles... selected = --accent ring + slight lift").
+   Agent C owns Expressions.astro and can restyle freely, but the ring
+   pattern here is meant to be a real starting point, not scaffolding to
+   throw away. */
 
 .picker {
   display: grid;
@@ -710,12 +668,10 @@ main {
   width: 58px;
   height: 58px;
   border-radius: 50%;
-  border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--surface-color) 40%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.25s, box-shadow 0.25s, transform 80ms ease;
+  transition: box-shadow 0.25s, transform 80ms ease;
 }
 
 .picker__circle span {
@@ -724,16 +680,16 @@ main {
 }
 
 .picker__item:hover .picker__circle {
-  border-color: rgb(var(--light-rgb) / 0.4);
+  box-shadow: 0 0 0 1px rgb(var(--light-rgb) / 0.4);
 }
 
 .picker__item.is-active .picker__circle {
-  border-color: var(--light);
-  box-shadow: 0 0 0 1px var(--light);
+  box-shadow: 0 0 0 1px var(--accent);
+  transform: translateY(-2px);
 }
 
 .picker__item.is-active .picker__label {
-  color: var(--light);
+  color: var(--accent);
 }
 
 .picker__label {
@@ -747,10 +703,6 @@ main {
   align-items: center;
   gap: 22px;
   margin-bottom: 3rem;
-  padding: 1.5rem;
-  background: color-mix(in srgb, var(--surface-color) 40%, transparent);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-card);
 }
 
 .picker-stage__avatar {
@@ -768,16 +720,73 @@ main {
   display: block;
   color: var(--text-main);
   font-family: var(--font-display);
+  font-weight: 500;
   font-size: 1.02rem;
   margin-bottom: 4px;
 }
 
-/* ── determinism panel ── */
+/* ── sequences timeline (interim sizing) ──
+   The spec replaces this whole widget with one theatrical stage; Agent D
+   owns Sequences.astro. Kept here, chrome-free, only so the section has a
+   sane height until that lands (see the tile-grid comment above for why). */
 
-.det-grid {
-  --tile-min: 200px;
-  margin-bottom: 18px;
+.timeline {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: clamp(20px, 4vw, 36px);
+  align-items: center;
+  margin-top: 3rem;
 }
+
+.timeline__avatar {
+  width: 104px;
+  height: 104px;
+}
+
+.timeline__meta {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.timeline__label {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.1rem;
+  color: var(--text-main);
+  margin-bottom: 10px;
+  text-transform: capitalize;
+}
+
+.timeline__track {
+  position: relative;
+  height: 3px;
+  background: var(--border-color);
+  border-radius: 4px;
+  margin-top: 16px;
+  overflow: hidden;
+}
+
+.timeline__track span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--progress, 0%);
+  background: var(--accent);
+  transition: width 260ms var(--ease-smooth);
+}
+
+@media (max-width: 640px) {
+  .timeline {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .timeline__avatar {
+    margin-inline: auto;
+  }
+}
+
+/* ── determinism status line ──
+   Plain colored text, no chrome; the proof strip's byte-check caption. */
 
 .det-status-row {
   display: flex;
@@ -798,85 +807,17 @@ main {
   color: var(--bad);
 }
 
-/* ── sequences ── */
-
-.seq-grid {
-  --tile-min: 170px;
-}
-
-.timeline {
-  margin-top: 3rem;
-  padding: clamp(20px, 4vw, 32px);
-  background: color-mix(in srgb, var(--surface-color) 40%, transparent);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-card);
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: clamp(20px, 4vw, 36px);
-  align-items: center;
-}
-
-.timeline__avatar {
-  width: 104px;
-  height: 104px;
-}
-
-.timeline__meta {
-  font-size: 0.86rem;
-  color: var(--text-muted);
-}
-
-.timeline__label {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.1rem;
-  color: var(--text-main);
-  margin-bottom: 10px;
-  text-transform: capitalize;
-}
-
-.timeline__track {
-  position: relative;
-  height: 3px;
-  background: var(--border-color);
-  border-radius: var(--radius-pill);
-  margin-top: 16px;
-  overflow: hidden;
-}
-
-.timeline__track span {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: var(--progress, 0%);
-  background: var(--light);
-  transition: width 260ms var(--ease-smooth);
-}
-
-@media (max-width: 640px) {
-  .timeline {
-    grid-template-columns: 1fr;
-    text-align: center;
-  }
-
-  .timeline__avatar {
-    margin-inline: auto;
-  }
-}
-
-/* ── API reference ── */
-
-.api-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
-  gap: 1rem;
-  align-items: start;
-}
+/* ── API reference code block ──
+   The reference section's one boxed surface, per the boxless law's short
+   exception list. Spline Sans Mono, a subtle top-edge inner glow standing
+   in for the border-glow v1's cards used more broadly. */
 
 .code-block {
   position: relative;
-  background: color-mix(in srgb, var(--surface-color) 40%, transparent);
+  background: var(--surface-color);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-code);
+  box-shadow: inset 0 1px 0 rgb(var(--light-rgb) / 0.12);
   overflow: hidden;
 }
 
@@ -886,6 +827,7 @@ main {
   justify-content: space-between;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-color);
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--text-faint);
 }
@@ -921,7 +863,7 @@ main {
 }
 
 .copy-btn:hover {
-  color: var(--light);
+  color: var(--accent);
 }
 
 .copy-btn svg {
@@ -933,46 +875,46 @@ main {
   color: var(--ok);
 }
 
-/* ── footer (ported from components/layout/Footer.astro) ── */
+/* ── footer ──
+   A single centered quiet column: wordmark, "A Luzir project", MIT
+   credits, GitHub link, copyright line. No etymology, no extra copy. */
 
 .footer {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 3rem;
   border-top: 1px solid var(--border-color);
   padding: 3rem 2rem 2rem;
-  max-width: var(--content-max);
-  margin: 0 auto;
+  text-align: center;
 }
 
-.footer__row {
+.footer__col {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 2rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 46ch;
 }
 
 .footer__brand {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1rem;
+  font-weight: 600;
+  font-size: 1.1rem;
   color: var(--text-main);
-  margin-bottom: 0.25rem;
 }
 
 .footer__tag {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: var(--text-faint);
-  max-width: 34ch;
-  line-height: 1.6;
 }
 
 .footer__credits {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--text-faint);
-  line-height: 1.9;
+  line-height: 1.8;
 }
 
 .footer__credits a {
@@ -981,44 +923,24 @@ main {
 }
 
 .footer__credits a:hover {
-  color: var(--light);
+  color: var(--accent);
 }
 
-.footer__links {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.footer__links a {
+.footer__gh {
   color: var(--text-muted);
-  transition: color 0.2s ease;
   display: inline-flex;
+  margin-top: 6px;
+  transition: color 200ms ease;
 }
 
-.footer__links a:hover {
+.footer__gh:hover {
   color: var(--text-main);
-}
-
-.footer hr {
-  border: none;
-  border-top: 1px solid var(--border-color);
-  margin: 2rem 0 1.5rem;
 }
 
 .footer small {
   display: block;
-  text-align: center;
   font-size: 0.7rem;
   color: var(--text-faint);
-}
-
-@media (max-width: 600px) {
-  .footer__row {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-  }
 }
 
 /* ── bagel easter egg ──
@@ -1072,27 +994,5 @@ main {
   100% {
     opacity: 0;
     transform: translate(-50%, calc(-50% + 20px)) scale(0.5) rotate(var(--rot));
-  }
-}
-
-/* ── responsive ── */
-
-@media (max-width: 900px) {
-  .hero {
-    grid-template-columns: 1fr;
-    text-align: center;
-  }
-
-  .hero__copy {
-    order: 2;
-  }
-
-  .hero__stage {
-    order: 1;
-  }
-
-  .seed-control,
-  .install-snip {
-    margin-inline: auto;
   }
 }

@@ -5,10 +5,12 @@
  * Astro component, is deliberate: the seed store in lib/seed-store.ts needs
  * to be a true singleton across every section, which native ESM module
  * caching only guarantees for modules reached through one shared import
- * graph. Scroll-triggered reveals are pure CSS (see [data-reveal] in
- * src/styles/global.css) and need no setup call here.
+ * graph. Scroll-triggered reveals are `setupReveal()` in lib/motion.ts,
+ * called once here same as the rest of the shared motion language: it
+ * discovers every `[data-reveal]` element on the page itself, so sections
+ * never need their own reveal wiring, just the attribute in their markup.
  */
-import { setupLenis, setupMagnetic, setupNav } from "./lib/motion";
+import { setupLenis, setupMagnetic, setupNav, setupReveal } from "./lib/motion";
 import { setupLightfield } from "./lib/lightfield";
 import { setupEasterEgg } from "./lib/easter-egg";
 import { setupCopyButtons } from "./lib/copy";
@@ -24,6 +26,7 @@ if (field) setupLightfield(field);
 setupNav();
 setupLenis();
 setupMagnetic();
+setupReveal();
 setupCopyButtons();
 setupEasterEgg();
 
