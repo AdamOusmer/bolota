@@ -376,14 +376,14 @@ describe("states completeness: nothing bloub ships can silently drop out", () =>
     expect(handle.states.sort()).toEqual(
       [
         "idle", "thinking", "wink", "wide", "alert", "notify", "exclaim",
-        "snooze", "egg", "hexagon", "play", "orbit", "swirl", "burst", "comet",
+        "snooze", "play", "orbit", "swirl", "burst", "comet",
       ].sort(),
     );
   });
 
   for (const state of [
     "idle", "thinking", "wink", "wide", "alert", "notify", "exclaim",
-    "snooze", "egg", "hexagon", "play", "orbit", "swirl", "burst", "comet",
+    "snooze", "play", "orbit", "swirl", "burst", "comet",
   ] as const) {
     test(`"${state}" renders a non-empty body and animates under the fixed clock`, () => {
       const { doc, svg, handle } = mount();
@@ -489,7 +489,10 @@ describe("body profile == seeded profile at all times (modulo scale/transform/co
   // different aspect ratio than at rest. That is a property of measuring
   // with a bbox, not a shape leak; orbit's own shape fidelity is exercised
   // by "wraps seamlessly" instead.
-  const STATES = ["idle", "egg", "hexagon", "play", "swirl"] as const;
+  // Not "egg"/"hexagon": removed from the catalog entirely (see
+  // bloub/states.ts) — they were the states this test's own invariant made
+  // meaningless, static named profiles with no radius variation.
+  const STATES = ["idle", "play", "swirl"] as const;
 
   for (const seed of SEEDS) {
     const stat = staticBbox(blobatar(seed, { background: false }));
