@@ -605,3 +605,148 @@ describe("wink — a real gesture, not a held pose", () => {
     }
   });
 });
+
+/**
+ * Eye GEOMETRY (size, not just center/alpha) tracking the body's own scale.
+ * Found only by actually rendering frames (a throwaway debug page, static
+ * SVG snapshots, screenshotted): every prior invariant in this file checked
+ * eye CENTER position (anchoring, containment-by-a-point) or alpha — none
+ * of them look at how big the eye capsule itself is, so a full-size eye on
+ * a shrunken body (`burst`/`comet` mid-collapse; `orbit`/`play`'s constant
+ * ~0.86 scale, both render bloub's own triangle profile) passed every
+ * existing check while reading as a giant dark mass in a screenshot. These
+ * two checks operate on the RENDERED capsule bbox (parsed from `eye.d` +
+ * `eye.matrix`, not reconstructed from the pose formula — reconstructing
+ * would just check the fix agrees with itself) against the RENDERED body
+ * bbox (parsed from `bodyPath`), so they'd have caught the regression bbox
+ * containment / alpha-only checks missed.
+ */
+describe("eye geometry scales with the body (bbox containment + area ratio)", () => {
+  /** Endpoints only (M/L points, A commands' arc ENDPOINT, not their r/r/rot/flags). */
+  function pathPoints(d: string): { x: number; y: number }[] {
+    const tokens = d.match(/[MLAZ][^MLAZ]*/g) ?? [];
+    const pts: { x: number; y: number }[] = [];
+    for (const tok of tokens) {
+      const nums = tok
+        .slice(1)
+        .trim()
+        .split(/[\s,]+/)
+        .filter(Boolean)
+        .map(Number);
+      if (nums.length < 2) continue;
+      if (tok[0] === "M" || tok[0] === "L") pts.push({ x: nums[0]!, y: nums[1]! });
+      else if (tok[0] === "A") pts.push({ x: nums[nums.length - 2]!, y: nums[nums.length - 1]! });
+    }
+    return pts;
+  }
+
+  function bbox(pts: { x: number; y: number }[]) {
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+  }
+
+  /** Local `eye.d` bbox, transformed by `eye.matrix` into world space. */
+  function eyeWorldBbox(eye: { d: string; matrix: string }) {
+    const [a, b, c, d, e, f] = eye.matrix.slice(7, -1).split(",").map(Number) as number[];
+    const local = pathPoints(eye.d);
+    const world = local.map((p) => ({ x: a! * p.x + c! * p.y + e!, y: b! * p.x + d! * p.y + f! }));
+    return bbox(world);
+  }
+
+  /**
+   * `bodyPath` is `closedPath`'s Catmull-Rom cubic beziers (`M`/`C`
+   * commands, `bloub/shape.ts`) — a different grammar than the eye
+   * capsule's `M`/`L`/`A`, so `pathPoints` above (which doesn't know about
+   * `C`) doesn't apply. Every number in the string, control points
+   * included, gives a bbox that's a close over-estimate of the true curve
+   * (control points sit near a Catmull-Rom curve, not the curve itself) —
+   * fine for a containment MARGIN check, and simpler than a second
+   * command-aware parser for one more curve type.
+   */
+  function bodyWorldBbox(bodyPath: string) {
+    const nums = [...bodyPath.matchAll(/-?\d+\.?\d*/g)].map((m) => Number(m[0]));
+    const pts: { x: number; y: number }[] = [];
+    for (let i = 0; i + 1 < nums.length; i += 2) pts.push({ x: nums[i]!, y: nums[i + 1]! });
+    return bbox(pts);
+  }
+
+  const area = (b: { minX: number; maxX: number; minY: number; maxY: number }) =>
+    Math.max(0, b.maxX - b.minX) * Math.max(0, b.maxY - b.minY);
+
+  test('"burst"/"comet": eye bbox stays inside the body bbox at every sampled t, collapse through regrow', () => {
+    for (const state of ["burst", "comet"] as const) {
+      // A seed is required here: the eye/body scaling fix lives in
+      // `bloub/engine.ts`'s `posed()`, gated on `shape` being truthy — a
+      // `BotEngine` built with no seed (`shape=null`) skips that branch
+      // entirely and would silently measure the UNFIXED behavior.
+      const engine = new BotEngine(R, state, superellipseProfile(3, 0.6, 1));
+      for (let t = 0; t <= 2.5; t += 0.05) {
+        const frame = engine.sample(t);
+        if (frame.eyes.length === 0) continue; // faded out — nothing to check
+        const body = bodyWorldBbox(frame.bodyPath);
+        // Small margin: body outline is a Catmull-Rom curve through 64
+        // sampled points, not the true smooth silhouette — its own control
+        // points can sit fractionally inside the visual curve.
+        const margin = 2;
+        for (const eye of frame.eyes) {
+          const eb = eyeWorldBbox(eye);
+          expect(eb.minX, `${state} t=${t} eye minX`).toBeGreaterThanOrEqual(body.minX - margin);
+          expect(eb.maxX, `${state} t=${t} eye maxX`).toBeLessThanOrEqual(body.maxX + margin);
+          expect(eb.minY, `${state} t=${t} eye minY`).toBeGreaterThanOrEqual(body.minY - margin);
+          expect(eb.maxY, `${state} t=${t} eye maxY`).toBeLessThanOrEqual(body.maxY + margin);
+        }
+      }
+    }
+  });
+
+  test('"burst"/"comet": eye bbox area / body bbox area ratio stays bounded through collapse', () => {
+    for (const state of ["burst", "comet"] as const) {
+      // A seed is required here: the eye/body scaling fix lives in
+      // `bloub/engine.ts`'s `posed()`, gated on `shape` being truthy — a
+      // `BotEngine` built with no seed (`shape=null`) skips that branch
+      // entirely and would silently measure the UNFIXED behavior.
+      const engine = new BotEngine(R, state, superellipseProfile(3, 0.6, 1));
+      let worst = 0;
+      let worstAt = 0;
+      for (let t = 0; t <= 2.5; t += 0.02) {
+        const frame = engine.sample(t);
+        if (frame.eyes.length === 0) continue;
+        const bodyArea = area(bodyWorldBbox(frame.bodyPath));
+        for (const eye of frame.eyes) {
+          const ratio = area(eyeWorldBbox(eye)) / bodyArea;
+          if (ratio > worst) {
+            worst = ratio;
+            worstAt = t;
+          }
+        }
+      }
+      // Regression measured: uncorrected eye size hit ~0.55-0.7 (an eye bbox
+      // more than half the body's own bbox area) mid-regrow. A resting,
+      // full-scale idle eye against its own full-scale body sits under 0.1
+      // (small capsules on a round ball) — 0.2 gives real margin above that
+      // baseline while still catching a giant-eye regression by a wide
+      // factor, not a hair-trigger on the exact resting ratio.
+      expect(worst, `${state} worst ratio at t=${worstAt}`).toBeLessThan(0.2);
+    }
+  });
+
+  test('"orbit"/"play": eye bbox stays inside the constant-scale body bbox', () => {
+    for (const state of ["orbit", "play"] as const) {
+      const engine = new BotEngine(R, state, superellipseProfile(3, 0.6, 1));
+      const margin = 2;
+      for (let t = 0; t <= 3.2; t += 0.05) {
+        const frame = engine.sample(t);
+        if (frame.eyes.length === 0) continue;
+        const body = bodyWorldBbox(frame.bodyPath);
+        for (const eye of frame.eyes) {
+          const eb = eyeWorldBbox(eye);
+          expect(eb.minX, `${state} t=${t}`).toBeGreaterThanOrEqual(body.minX - margin);
+          expect(eb.maxX, `${state} t=${t}`).toBeLessThanOrEqual(body.maxX + margin);
+          expect(eb.minY, `${state} t=${t}`).toBeGreaterThanOrEqual(body.minY - margin);
+          expect(eb.maxY, `${state} t=${t}`).toBeLessThanOrEqual(body.maxY + margin);
+        }
+      }
+    }
+  });
+});
