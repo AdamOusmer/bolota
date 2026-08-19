@@ -10,6 +10,29 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.1.2
+
+### Changed
+
+- **A one-shot state now dwells on its finished pose, then blends back into
+  the face it interrupted.** Two things were wrong with the hand-back. It
+  fired the instant the state's `duration` elapsed, which is the exact moment
+  the choreography settles, so the settled pose was never actually seen and a
+  burst or an orbit read as "it did something and immediately undid it". And
+  it handed back to a hard-coded `idle`, the still neutral, so a bot that was
+  alive before the gesture went static after it.
+
+  `play()` takes `hold` (seconds to dwell, default `STATE_HOLD`, 0.45) and
+  `rest` (where to settle, default: whatever was playing before). A looped
+  state becomes the resting face automatically, so `play("wander", { loop:
+  true })` followed by `play("burst")` returns to `wander` with the held
+  expression still on. `hold: 0` restores the old immediate hand-back.
+
+  The transition itself was already a cross-fade over the outgoing state's
+  own `morph` and stays one. A test now steps frame by frame across a whole
+  gesture, hand-back included, and fails on any single frame that moves the
+  eyes further than a morph would.
+
 ## 0.1.1
 
 ### Fixed

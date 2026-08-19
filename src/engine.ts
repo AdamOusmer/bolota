@@ -330,6 +330,20 @@ export const followEase = cubicBezierEase(0.25, 0.1, 0.25, 1);
 // feeds `setLook` the already-eased yaw/pitch (see `PASSTHROUGH_MORPH`
 // below), so `BotEngine`'s own `easeInOutCubic` retarget curve never runs
 // on the follow path at all.
+/**
+ * How long a one-shot state dwells on its finished pose before the engine
+ * morphs back to the resting state, in seconds.
+ *
+ * Without it a state handed back the instant its `duration` elapsed, which is
+ * the moment its own choreography settles — so the settled pose was never
+ * actually seen, and a burst or an orbit read as "it did something and
+ * immediately undid it". The dwell is the beat that makes a gesture legible.
+ *
+ * Overridable per call (`play(state, { hold })`), including to `0` for the
+ * old hand-back-at-once behaviour.
+ */
+export const STATE_HOLD = 0.45;
+
 export const FOLLOW_MORPH = 0.08;
 
 // A near-zero morph handed to `engine.setLook` once `aimGaze` has already
@@ -399,7 +413,24 @@ export function engineExpressions(): string[] {
 
 export interface EngineHandle {
   /** Plays a state by id (see `states`). Throws on an unknown id. */
-  play(state: string, opts?: { loop?: boolean }): void;
+  play(
+    state: string,
+    opts?: {
+      loop?: boolean;
+      /**
+       * Seconds to dwell on the finished pose before morphing back to the
+       * resting state (default `STATE_HOLD`). Ignored while looping.
+       */
+      hold?: number;
+      /**
+       * Which state to settle into afterwards. Defaults to whatever was
+       * playing before this call, so a one-shot fired over a looping
+       * `wander` returns to `wander` rather than dropping the bot into a
+       * different resting face than the one it left.
+       */
+      rest?: string;
+    },
+  ): void;
   /** Sugar for `play(state, { loop: true })`. */
   loop(state: string): void;
   /** Freezes the current frame; breathing/blinking/morph all pause. */
@@ -587,6 +618,11 @@ export function mountEngine(
   let loop = false;
   let stateStart = 0;
   let current: StateId = "idle";
+  // Where a one-shot settles when it finishes, and how long it dwells first.
+  // `restState` follows the last looping state the caller asked for, so the
+  // bot returns to the face it was wearing rather than a hard-coded `idle`.
+  let restState: StateId = "idle";
+  let hold = STATE_HOLD;
 
   // --- cursor-follow gaze (bloub port, src/bloub/gaze.ts) ------------------
   // Math (`followLook`) and the pointer-tracking constants below it are
@@ -790,7 +826,7 @@ export function mountEngine(
         engine.reset(current, clock);
         stateStart = clock;
       }
-    } else if (!loop && current !== "idle" && clock - stateStart >= def.duration) {
+    } else if (!loop && current !== restState && clock - stateStart >= def.duration + hold) {
       // This is the bug this whole block used to have, the other way
       // around: previously the loop branch above called `reset()` without
       // ever advancing `stateStart`, so once a looping state's `duration`
@@ -800,9 +836,11 @@ export function mountEngine(
       // this file's root cause for burst never exploding, orbit/comet never
       // looping, and thinking/alert/snooze/exclaim/notify/swirl reading as
       // static tiles: all of it was one missing assignment.
-      current = "idle";
+      current = restState;
       stateStart = clock;
-      engine.setState("idle", clock);
+      // `setState` cross-fades from the outgoing state over its own `morph`,
+      // so this hand-back is a blend, never a cut.
+      engine.setState(restState, clock);
     }
 
     aimGaze(clock);
@@ -825,6 +863,10 @@ export function mountEngine(
         throw new Error(`mountEngine: unknown bloub state "${state}"`);
       }
       const id = state as StateId;
+      const rest = o?.rest;
+      if (rest !== undefined && !STATE_BY_ID.has(rest as StateId)) {
+        throw new Error(`mountEngine: unknown bloub state "${rest}"`);
+      }
       if (reducedMotion) {
         engine.reset(id, 0);
         render(engine.sample(POSES[id]));
@@ -833,6 +875,10 @@ export function mountEngine(
       current = id;
       stateStart = clock;
       loop = !!o?.loop;
+      hold = Math.max(0, o?.hold ?? STATE_HOLD);
+      // A looped state IS the resting face from here on; a one-shot settles
+      // back into whatever was resting before it, unless told otherwise.
+      restState = (rest as StateId) ?? (loop ? id : restState);
       engine.setState(id, clock, loop);
       ensureRunning();
     },
