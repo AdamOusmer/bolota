@@ -132,15 +132,21 @@ your own renderer (React, Vue, Svelte, canvas, whatever) instead of taking the
 library's SVG string as-is:
 
 ```ts
-import { parts } from "bolota/blob";
+import { parts } from "bolota";
 
 const face = parts("alain@example.com");
-// { shape, hue, tone, eyes, mouth, background, ... }
+// { cls, bg, inner, vars }
+//   cls  — class list for the root <g> your adapter renders
+//   bg   — the backdrop plate, or undefined when background: false
+//   inner — everything under the root <g>; wire this through an
+//           innerHTML-style sink (nothing in it varies with `expression`,
+//           so a framework's diffing never has to replace it on a pose change)
+//   vars — CSS custom properties, only present when animating
 
 // Your own adapter owns the markup from here:
 function Avatar({ name }: { name: string }) {
-  const { shape, hue, eyes } = parts(name);
-  return <MyOwnSvgRenderer shape={shape} hue={hue} eyes={eyes} />;
+  const { cls, inner } = parts(name);
+  return <g class={cls} dangerouslySetInnerHTML={{ __html: inner }} />;
 }
 ```
 
@@ -189,9 +195,10 @@ avatar.stop();     // freeze on the current frame
 avatar.destroy();  // remove every node this call created
 ```
 
-15 states ship: `idle`, `thinking`, `wink`, `wide`, `alert`, `notify`,
-`exclaim`, `sleep`, `egg`, `hexagon`, `play`, `orbit`, `swirl`, `burst`,
-`comet` (`avatar.states` lists them at runtime). `bolota/sequences` groups
+14 states ship: `idle`, `wander`, `thinking`, `wink`, `wide`, `alert`,
+`notify`, `exclaim`, `snooze`, `play`, `orbit`, `burst`, `comet`, `swirl`
+(`avatar.states` lists them at runtime, so this list is a snapshot, not
+the contract — check there if it and the running library ever disagree). `bolota/sequences` groups
 related states into ready-made playlists if you'd rather drive a sequence
 than call `play()` state by state.
 
@@ -266,7 +273,7 @@ Exposed entry points:
 | Export             | What it is                                   |
 | ------------------- | --------------------------------------------- |
 | `bolota`          | `bolota()` — render straight to an SVG string, plus palette/trait utilities |
-| `bolota/blob`      | `parts()` — the structured renderer seam, on its own (saves ~1 KB if that's all you use) |
+| `bolota/blob`      | `bolota()` alone, without the colour/trait utilities the root barrel also carries (saves ~1 KB if that's all you use) |
 | `bolota/uri`       | `bolotaUri()` — wraps output in a `data:` URI |
 | `bolota/expression`| Named expression values (`happy`, `sad`, …)   |
 | `bolota/motion.css`| Required CSS for the static renderer's `animate` mode |
@@ -282,7 +289,8 @@ SVG `<defs>` at mount time, not CSS keyframes.
 ## v2 Breaking Changes
 
 - **React adapter removed.** `bolota/react` is gone; the `parts` seam
-  (`bolota/blob`) is the public replacement for building your own adapter.
+  (exported from the root `bolota` import) is the public replacement for
+  building your own adapter.
 - **Eyes reworked.** Always the fixed bloub-style black capsule — see
   [Eyes](#eyes) for the contrast-guarantee tradeoff this brings.
 - **Animation engine added.** `bolota/engine`, ported from bloub, alongside

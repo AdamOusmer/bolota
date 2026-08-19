@@ -1,9 +1,22 @@
 ---
 import SectionHead from "../ui/SectionHead.astro";
+import { engineExpressions } from "@luzir/bolota/engine";
 
 const K = "tok-kw";
 const S = "tok-str";
 const C = "tok-cm";
+
+// The `setExpression(...)` examples below need a real id shown, but the
+// expression roster isn't stable copy: ids get renamed/added/removed on
+// the library side (this is the second time — `heureux` was a pre-rename
+// French leftover this replaced). Reading `engineExpressions()[0]` here
+// means the id is real by construction, not typed by hand and hoped
+// current: whatever the roster's own first entry is at build time is what
+// prints, so a rename can't silently leave a dead id in the docs again.
+const EXAMPLE_EXPRESSION = engineExpressions()[0];
+if (!EXAMPLE_EXPRESSION) {
+  throw new Error("Api.astro: engineExpressions() returned no ids — the setExpression examples need at least one.");
+}
 
 /**
  * Redesign v2 (spec §6): a left sticky mini-list of symbols, one per code
@@ -82,7 +95,7 @@ container.innerHTML = svg;</code></pre>
 handle.loop(<span class={S}>"orbit"</span>);       <span class={C}>// sugar for play(id, {"{"} loop: <span class={K}>true</span> {"}"})</span>
 handle.stop();               <span class={C}>// freezes the current frame</span>
 handle.follow(<span class={S}>"window"</span>);    <span class={C}>// eyes track the pointer; false disables</span>
-handle.setExpression(<span class={S}>"heureux"</span>);</code></pre>
+handle.setExpression(<span class={S}>{JSON.stringify(EXAMPLE_EXPRESSION)}</span>);</code></pre>
       </div>
 
       <div class="code-block" id="ref-expressions" data-reveal style="--reveal-i:4">
@@ -91,7 +104,7 @@ handle.setExpression(<span class={S}>"heureux"</span>);</code></pre>
           <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
         </div>
         <pre><code>handle.expressions;            <span class={C}>// every id, stable order</span>
-handle.setExpression(<span class={S}>"heureux"</span>); <span class={C}>// held pose, only while idle/swirl</span>
+handle.setExpression(<span class={S}>{JSON.stringify(EXAMPLE_EXPRESSION)}</span>); <span class={C}>// held pose, only while idle/wander/swirl</span>
 handle.setExpression(<span class={K}>null</span>);      <span class={C}>// clears back to the playing state</span></code></pre>
       </div>
 
