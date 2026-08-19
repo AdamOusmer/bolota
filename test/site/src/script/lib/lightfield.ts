@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * The living light background, Luzir's signature: "luz" is Portuguese for
  * light, so the whole page sits on a drifting field of it instead of a flat

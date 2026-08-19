@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * The single client entry point for the whole page. Everything interactive
  * (the seed control, every live-engine demo, Lenis, the light field, the

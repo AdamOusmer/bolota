@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * Shared visibility gate for every live engine on the page. There is no
  * manual play/pause UI anywhere (by design, every demo is alive on its

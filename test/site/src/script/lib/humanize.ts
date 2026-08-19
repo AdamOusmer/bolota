@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * Turns an engine id into a display label without hand-maintaining a parallel
  * list that can drift out of sync with the engine's own roster, labels here
@@ -21,7 +23,7 @@ export function humanizeId(id: string): string {
  * lookup fell through to the `humanizeId` fallback anyway. Kept as its own
  * named export, not inlined at call sites, so a future bespoke label (or a
  * reintroduced non-English id) has somewhere to go without touching
- * scripts/sections/expressions.ts.
+ * script/sections/expressions.ts.
  */
 export function humanizeExpression(id: string): string {
   return humanizeId(id);

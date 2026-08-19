@@ -1,9 +1,10 @@
 ---
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 // The brand mark is a real bolota, not an icon: same static-first paint
 // as Hero (`components/sections/Hero.astro`'s own header explains the
 // technique in full) — `bolota()` is cheap enough to call inline at build
 // time, so the mark is real pixels in the initial HTML, then
-// `scripts/lib/brand-mark.ts` upgrades it to the live engine (on `"idle"`,
+// `script/lib/brand-mark.ts` upgrades it to the live engine (on `"idle"`,
 // bolota's calm neutral post idle/wander split) once the shared
 // `@luzir/bolota/engine` chunk resolves, crossfading exactly like the hero does.
 // Fixed seed (`curated-seeds.ts`'s `DEFAULT_SEED`, "bolota" — the same
@@ -11,7 +12,7 @@
 // face regardless of whatever seed a visitor has typed into the hero
 // control.
 import { bolota } from "@luzir/bolota";
-import { DEFAULT_SEED } from "../../scripts/lib/curated-seeds";
+import { DEFAULT_SEED } from "../../script/lib/curated-seeds";
 
 const brandStaticSvg = bolota(DEFAULT_SEED);
 

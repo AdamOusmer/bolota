@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * Regenerates public/favicon.svg from the real library — the same fixed
  * brand seed the nav mark uses (lib/curated-seeds.ts's DEFAULT_SEED,

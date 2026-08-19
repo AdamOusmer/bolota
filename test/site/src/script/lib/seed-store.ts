@@ -1,7 +1,9 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * The one piece of shared state on the page: the seed the visitor typed.
  *
- * Loaded once by src/scripts/site.ts, imported by every section module ,
+ * Loaded once by src/script/site.ts, imported by every section module ,
  * Vite/Rollup resolve all of those imports to the same chunk, and the
  * browser's native ESM module cache dedupes by that chunk's URL, so this is
  * a true singleton across the whole client bundle, no framework required.

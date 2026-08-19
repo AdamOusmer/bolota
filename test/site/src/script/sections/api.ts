@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * Reference section (spec §6): clicking a symbol in the left mini-list
  * scrolls its code block into view. Plain `Element.scrollIntoView`, not a

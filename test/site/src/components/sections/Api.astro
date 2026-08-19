@@ -1,4 +1,5 @@
 ---
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 import SectionHead from "../ui/SectionHead.astro";
 import { engineExpressions } from "@luzir/bolota/engine";
 
@@ -24,7 +25,7 @@ if (!EXAMPLE_EXPRESSION) {
  * own symbol set, in the order a reader hits them: the two static entry
  * points, the engine mount call, the handle's own methods, the expression
  * roster, then the sequence runner. `slug` doubles as the block's id and
- * the click target, `scripts/sections/api.ts` wires the click -> scroll.
+ * the click target, `script/sections/api.ts` wires the click -> scroll.
  * Every slug is `ref-`-prefixed: two of the bare names (`expressions`,
  * `sequences`) collide with those sections' own `id`, and a duplicate DOM
  * id breaks `getElementById` for both the click target and the

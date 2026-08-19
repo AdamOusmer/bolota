@@ -1,3 +1,5 @@
+/* Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE. */
+
 /*
  * bolota showcase, shared component styles.
  *
@@ -292,7 +294,7 @@ main {
 /* ── scroll reveal ──
    Content entrance, distinct from the kicker's decorative underline above.
    Base (pre-reveal) state only, CSS gives every `[data-reveal]` element the
-   spec's resting position: `src/scripts/lib/motion.ts`'s `setupReveal()`
+   spec's resting position: `src/script/lib/motion.ts`'s `setupReveal()`
    drives the actual 650ms/cubic-bezier(0.25,0.1,0.25,1) animation on
    intersection, reading each element's own `--reveal-i` for the 60ms
    sibling stagger (already the convention several sections use for their
@@ -444,7 +446,7 @@ main {
 
 /* ── magnetic ──
    No CSS transition here on purpose: the pull and the spring-back are both
-   driven by the `motion` package (src/scripts/lib/motion.ts), same as the
+   driven by the `motion` package (src/script/lib/motion.ts), same as the
    Portfolio's ui/Magnetic.astro. Redesign v2 scopes this to nav links and
    copy affordances only (see motion spec); it was never used more broadly
    than that. */
@@ -854,7 +856,7 @@ main {
 
 /* ── bagel easter egg ──
    Triggered by typing "bagel" anywhere on the page, or five clicks on the
-   nav wordmark. See src/scripts/lib/easter-egg.ts. Undocumented in the UI
+   nav wordmark. See src/script/lib/easter-egg.ts. Undocumented in the UI
    on purpose. */
 
 .bagel-cursor,

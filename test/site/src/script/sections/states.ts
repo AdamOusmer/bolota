@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 import { onSeedChange, getSeed } from "../lib/seed-store";
 import { curatedSeedAt } from "../lib/curated-seeds";
 import { ensureEngine, mountLiveTile } from "../lib/live-engine";

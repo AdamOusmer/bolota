@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 import type { EngineHandle } from "@luzir/bolota/engine";
 import { onVisible } from "./visibility";
 

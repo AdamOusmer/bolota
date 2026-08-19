@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 import type { EngineHandle } from "@luzir/bolota/engine";
 import { runSequence, type SequenceName } from "@luzir/bolota/sequences";
 import { ensureEngine } from "../lib/live-engine";

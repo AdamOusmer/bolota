@@ -1,4 +1,5 @@
 ---
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 // Redesign v2's hero: lamplight specimen stage. Centered column, boxless
 // except the one seed input the spec calls out as the hero's single
 // surface. Headline is split into `.hero__word` spans so hero.ts can play
@@ -19,7 +20,7 @@
 // A URL-hash seed is client-only, so it can only ever repaint after
 // hydration, that's unavoidable, but the *default* paint is instant.
 import { bolota } from "@luzir/bolota";
-import { DEFAULT_SEED } from "../../scripts/lib/curated-seeds";
+import { DEFAULT_SEED } from "../../script/lib/curated-seeds";
 
 const heroStaticSvg = bolota(DEFAULT_SEED);
 ---

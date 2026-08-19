@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /** Wires every `[data-copy]` button to copy its `data-copy` value (or, absent
  * that, its code-block sibling's text) to the clipboard, with a 2s "copied"
  * flash. Pattern from adam-ousmer.dev's `copy-code.js`. */

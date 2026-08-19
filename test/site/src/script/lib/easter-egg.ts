@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * Undocumented on purpose (that's the point of an easter egg), this comment
  * is the only place it's written down. Two triggers, either one works:

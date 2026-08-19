@@ -1,4 +1,5 @@
 ---
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 import SectionHead from "../ui/SectionHead.astro";
 import { engineExpressions } from "@luzir/bolota/engine";
 
@@ -71,6 +72,32 @@ const firstFace = engineExpressions()[0];
       text-align: center;
     }
 
+    /* Stacked, the picker sits below the stage and is taller than a phone
+       viewport, so scrolling to the tile you want scrolls the face you are
+       choosing for off the screen. The stage sticks under the nav instead,
+       and the veil keeps tiles legible as they pass beneath it. Sticky needs
+       every ancestor to avoid `overflow: hidden`; `body` uses `overflow-x:
+       clip`, which does not create a scroll container, so it holds. */
+    .expr__stage {
+      position: sticky;
+      top: calc(var(--nav-h) + 8px);
+      z-index: 2;
+      align-self: start;
+      padding-bottom: 14px;
+      background: linear-gradient(
+        to bottom,
+        var(--bg-color) 0%,
+        var(--bg-color) 76%,
+        transparent 100%
+      );
+    }
+
+    /* Smaller while it is pinned: at full size it would eat a third of the
+       viewport for the whole length of the picker. */
+    .expr__avatar {
+      width: clamp(132px, 34vw, 190px);
+    }
+
     .expr__picker {
       grid-template-columns: repeat(2, 1fr);
     }
@@ -79,7 +106,7 @@ const firstFace = engineExpressions()[0];
 
 <style is:global>
   /* Picker item chrome: kept global (not `.expr__` scoped) since the class
-     names are built in scripts/sections/expressions.ts, which has no Astro
+     names are built in script/sections/expressions.ts, which has no Astro
      scope hash to target. Sized to the spec's 65-70px round tile, ring +
      lift for the selected state, small-caps label underneath. */
   .picker__item {

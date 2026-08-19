@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * The site's shared motion language: Lenis smooth scroll, `[data-magnetic]`
  * hover pull, the sticky nav's scrolled/active-section state, and the
