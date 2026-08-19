@@ -370,6 +370,53 @@ function mountEngineSvg(container: HTMLElement, name: string, size: number, opts
   );
 }
 
+// ---- All 16 bloub expressions ----
+{
+  const c = card("All 16 bloub expressions (one engine, eased eye transition)", true);
+  const { handle } = mountEngineSvg(c, "expression-gallery", 96);
+  handle.play("idle", { loop: true });
+
+  // bloub's own French ids, labeled with the English names its face
+  // customizer shows -- same order as `handle.expressions`
+  // (`bloub/expressions.ts`'s `EXPRESSIONS` array), so this is a straight
+  // zip, not a lookup keyed off anything that could drift.
+  const LABELS = [
+    "Neutral", "Attentive", "Surprised", "Excited", "Happy", "Laughing",
+    "Angry", "Sad", "Scared", "Suspicious", "Confused", "Curious",
+    "Proud", "Shy", "Unimpressed", "Sleepy",
+  ];
+
+  const status = document.createElement("div");
+  status.className = "status";
+  status.textContent = `expression: ${LABELS[0]} (${handle.expressions[0]})`;
+  c.appendChild(status);
+
+  const row = document.createElement("div");
+  row.className = "row";
+  row.style.flexWrap = "wrap";
+  handle.expressions.forEach((id: string, i: number) => {
+    const btn = document.createElement("button");
+    btn.textContent = LABELS[i] ?? id;
+    btn.addEventListener("click", () => {
+      handle.setExpression(id);
+      status.textContent = `expression: ${LABELS[i] ?? id} (${id})`;
+    });
+    row.appendChild(btn);
+  });
+  c.appendChild(row);
+
+  if (handle.expressions.length !== LABELS.length) {
+    log(
+      `BUG: handle.expressions has ${handle.expressions.length} entries, LABELS has ${LABELS.length} -- ` +
+        `roster/label drift.`,
+    );
+  }
+  log(
+    `INFO: mounted 1 engine driving all ${handle.expressions.length} bloub face expressions via setExpression() -- ` +
+      `eased transition reuses BotEngine's own exprAtTime/blendExpression path, no new easing.`,
+  );
+}
+
 // ---- Morph slideshow (engine, auto-advancing idle -> state timeline) ----
 {
   const c = card("Morph slideshow -- idle -> state", true);

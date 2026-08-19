@@ -36,6 +36,7 @@
 import type { BlobatarOptions } from "./blobatar";
 import { _layout } from "./blobatar";
 import { BotEngine, type BotFrame } from "./bloub/engine";
+import { EXPRESSIONS, EXPRESSION_BY_ID } from "./bloub/expressions";
 import { PROFILE_SAMPLES } from "./bloub/profiles";
 import { POSES, STATE_BY_ID, type StateId } from "./bloub/states";
 import type { Body } from "./styles/shapes";
@@ -126,6 +127,14 @@ export function engineStates(): StateId[] {
   return [...STATE_BY_ID.keys()];
 }
 
+/** All 16 named eye expressions bloub's face customizer exposes — a separate
+ * axis from `states` above (see `bloub/expressions.ts`): a state is a
+ * time-bounded animation, an expression is a held pose that only shows on
+ * the states flagged `baseFace` (`idle`, `swirl` — `bloub/states.ts`). */
+export function engineExpressions(): string[] {
+  return EXPRESSIONS.map((e) => e.id);
+}
+
 export interface EngineHandle {
   /** Plays a state by id (see `states`). Throws on an unknown id. */
   play(state: string, opts?: { loop?: boolean }): void;
@@ -135,6 +144,17 @@ export interface EngineHandle {
   destroy(): void;
   /** Every playable state id, `bun test`-stable order (`bloub/states.ts`). */
   states: string[];
+  /**
+   * Sets (or, given `null`, clears) the held eye expression by id (see
+   * `expressions`). Throws on an unknown id. Only visible while the current
+   * state is `baseFace` (`idle`, `swirl`); the transition eases over
+   * `BotEngine.SHAPE_MORPH` via bloub's own `exprAtTime`/`blendExpression`
+   * path — the same eased in-out interpolation `setShape` already rides,
+   * not a new easing system.
+   */
+  setExpression(name: string | null): void;
+  /** Every expression id, `bun test`-stable order (`bloub/expressions.ts`). */
+  expressions: string[];
 }
 
 /**
@@ -429,6 +449,7 @@ export function mountEngine(
 
   return {
     states: engineStates(),
+    expressions: engineExpressions(),
     play(state, o) {
       if (!STATE_BY_ID.has(state as StateId)) {
         throw new Error(`mountEngine: unknown bloub state "${state}"`);
@@ -443,6 +464,23 @@ export function mountEngine(
       stateStart = clock;
       loop = !!o?.loop;
       engine.setState(id, clock);
+      ensureRunning();
+    },
+    setExpression(name) {
+      const expr = name === null ? null : EXPRESSION_BY_ID.get(name);
+      if (name !== null && !expr) {
+        throw new Error(`mountEngine: unknown bloub expression "${name}"`);
+      }
+      if (reducedMotion) {
+        // Same "one static frame, no loop" contract `play()` keeps above:
+        // back-date `exprAt` by the morph's own duration so `exprAtTime`
+        // reads `k >= 1` on the very next sample — snaps straight to the
+        // target pose instead of rendering a frozen mid-blend.
+        engine.setExpression(expr ?? null, clock - BotEngine.SHAPE_MORPH);
+        render(engine.sample(clock));
+        return;
+      }
+      engine.setExpression(expr ?? null, clock);
       ensureRunning();
     },
     stop() {
