@@ -572,7 +572,12 @@ looks like; the short version is that React replaces the subtree, a fresh
 element has no previous computed value, and a transition cannot run on one. So
 `makeParts` returns the root class as `cls` and the adapter renders the element.
 
-### 7.1 The React adapter
+### 7.1 The React adapter (historical — removed in this fork)
+
+This fork drops the bundled `blobatar/react` component; `parts` is public
+instead, so any framework's adapter can be built on it. Kept below for what it
+documents about that seam — the split, the invariant, and the failure modes —
+which is exactly what a new adapter (React or otherwise) needs to get right.
 
 `BlobatarProps extends ImgHTMLAttributes<HTMLImageElement>`. The inline path needs
 `SVGProps<SVGSVGElement>`, so the public prop type becomes a union discriminated
@@ -802,7 +807,7 @@ Two things kept the static path cheap and are worth not undoing:
 - `makeParts` takes a **motion factory as an argument** instead of importing
   `src/animate.ts`. A direct import puts the motion module in every bundle,
   animating or not (+189 B measured).
-- `_parts` builds its style table **per call** rather than hoisting it to module
+- `parts` builds its style table **per call** rather than hoisting it to module
   scope like `BLOBATARS`. A hoisted table is a top-level function call, which
   bundlers cannot prove is side-effect-free, so it survives tree-shaking and
   charges every static consumer (+145 B measured).

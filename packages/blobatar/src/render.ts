@@ -51,10 +51,10 @@ export interface BlobatarOptions {
    *
    * Requires `import "blobatar/motion.css"`, and requires the blobatar to be
    * inline SVG — content inside an `<img>` is an isolated document that hover
-   * cannot reach. `blobatar/react` switches rendering mode for you; the string
-   * API is already inline.
+   * cannot reach. A framework adapter built on `parts` switches rendering mode
+   * for you; the string API is already inline.
    *
-   * **Honored by `blobatar/react` only, for now.** `blobatar()` returns static
+   * **Honored by an adapter built on `parts` only, for now.** `blobatar()` returns static
    * markup regardless: a branch on `animate` inside it keeps the motion module
    * alive for every caller, animating or not, which measured at ~190 B. An
    * animated string API wants its own entry point, not a branch here.
@@ -164,9 +164,9 @@ export interface Backdrop {
 /**
  * The backdrop is the style's concern to default, not the renderer's.
  *
- * Returns the path rather than a serialized `<path>` because the React adapter
- * has to draw it as a real element: it sits *outside* the motion root, so it
- * cannot ride along in the innerHTML string that the root `<g>` now owns.
+ * Returns the path rather than a serialized `<path>` because a framework
+ * adapter has to draw it as a real element: it sits *outside* the motion root,
+ * so it cannot ride along in the innerHTML string that the root `<g>` now owns.
  */
 function backdrop<L>(
   style: Style<L>,
@@ -241,22 +241,23 @@ export function makeBlobatar<L>(style: Style<L>) {
 /**
  * The blobatar in the pieces a renderer that owns the outer element needs.
  *
- * Split out from `makeBlobatar` because the React adapter has to own the `<svg>`
- * when animating — it needs real JSX props on it — and recovering the inner
- * markup by regex-stripping a serialized `<svg>` is the kind of thing that
- * works until someone passes a `title` containing a `>`.
+ * Split out from `makeBlobatar` because a framework adapter has to own the
+ * `<svg>` when animating — it needs real props on it — and recovering the
+ * inner markup by regex-stripping a serialized `<svg>` is the kind of thing
+ * that works until someone passes a `title` containing a `>`.
  *
  * The split runs one level deeper than that, and this is the load-bearing part:
  * **nothing that varies with `expression` may appear in `inner`.** `inner` is
- * handed to `dangerouslySetInnerHTML`, so a single byte of drift makes React
- * replace the whole subtree — and a brand-new element has no previous computed
- * value, which is precisely the rule that stops transitions running on first
- * style resolution. The morph would not be slow or wrong; it would not exist,
- * and every idle animation underneath would restart from phase zero on top of
- * it. So the root class lives in `cls` and the pose lives in `vars`, both of
- * which land on real attributes that React can diff in place, and the backdrop
- * comes back as geometry because it belongs outside the root `<g>` — a plate
- * that hover-lifts with the creature stops being a plate.
+ * handed to an innerHTML-style sink, so a single byte of drift makes the
+ * framework replace the whole subtree — and a brand-new element has no
+ * previous computed value, which is precisely the rule that stops transitions
+ * running on first style resolution. The morph would not be slow or wrong; it
+ * would not exist, and every idle animation underneath would restart from
+ * phase zero on top of it. So the root class lives in `cls` and the pose
+ * lives in `vars`, both of which land on real attributes a framework can diff
+ * in place, and the backdrop comes back as geometry because it belongs
+ * outside the root `<g>` — a plate that hover-lifts with the creature stops
+ * being a plate.
  *
  * `test/expression.test.ts` pins the invariant directly.
  */

@@ -8,14 +8,13 @@
   "files": ["dist", "src", "README.md", "CHANGELOG.md", "LICENSE"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "//exports": "Built JS for everyone. What the workspace apps use in development is not this map — they alias `blobatar/*` back to `src` through tsconfig paths, so editing a curve shows up in the tuning grid on save. Keeping one resolution here means the published package resolves identically under every runtime and bundler.",
+  "//exports": "Framework-agnostic JS/TS-only source library. This fork ships `src` and resolves `exports` straight at TS — no build step between a consumer and the source. `dist` (see `main`/`types` below and `scripts/build.ts`) is kept only as an optional bundled fallback for tooling that needs it.",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./blob": { "types": "./dist/blob.d.ts", "default": "./dist/blob.js" },
-    "./uri": { "types": "./dist/uri.d.ts", "default": "./dist/uri.js" },
-    "./expression": { "types": "./dist/expression.d.ts", "default": "./dist/expression.js" },
-    "./react": { "types": "./dist/react.d.ts", "default": "./dist/react.js" },
-    "./motion.css": "./dist/motion.css",
+    ".": "./src/index.ts",
+    "./blob": "./src/blob.ts",
+    "./uri": "./src/uri.ts",
+    "./expression": "./src/expression.ts",
+    "./motion.css": "./src/motion.css",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -24,26 +23,14 @@
   "scripts": {
     "test": "bun test",
     "size": "bun scripts/size.ts",
-    "probe": "bun scripts/probe-compose.ts",
     "build": "bun scripts/build.ts",
-    "smoke": "node scripts/smoke.mjs",
     "//golden": "Regenerating is a deliberate act, so the script refuses without `--write` and says why. `check` does not call it — `bun test` already asserts against the fixture, which is the direction that matters.",
     "golden": "bun scripts/golden.ts",
-    "check": "bun test && bun run size && bun run probe && bun run build && bun run smoke",
+    "check": "bun test && bun run size && bun run build",
     "prepack": "bun run build"
   },
-  "peerDependencies": {
-    "react": ">=18"
-  },
-  "peerDependenciesMeta": {
-    "react": { "optional": true }
-  },
   "devDependencies": {
-    "@types/bun": "latest",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "react": "^19",
-    "react-dom": "^19"
+    "@types/bun": "latest"
   },
   "keywords": ["blobatar", "avatar", "identicon", "svg", "deterministic", "no-dependencies"],
   "license": "MIT",

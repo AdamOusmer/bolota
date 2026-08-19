@@ -62,10 +62,16 @@ const motion = (mode: Animate, e?: Expression) => (t: Traits, p: Palette) => {
 /**
  * The `<svg>` contents and its motion custom properties, separately.
  *
- * For renderers that own the outer element themselves — `blobatar/react` when
- * animating. Underscored because the shape of this object is not public API.
+ * Public: the seam a framework adapter builds on. A renderer that owns the
+ * outer element itself — a React/Vue/Svelte/vanilla wrapper when animating —
+ * wires `cls`, `bg`, and `vars` onto real attributes and only sends `inner`
+ * through an innerHTML-style sink.
+ *
+ * Load-bearing invariant, pinned by `test/expression.test.ts`: nothing that
+ * varies with `expression` appears in `inner`. An expression is style, not
+ * markup, so changing it changes zero bytes of `inner` and a morph can run.
  */
-export function _parts(name: string, opts: BlobatarOptions = {}) {
+export function parts(name: string, opts: BlobatarOptions = {}) {
   return makeParts(style)(
     name,
     opts,

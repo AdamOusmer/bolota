@@ -6,8 +6,8 @@
  * reports a flattering number that no real app ever sees.
  *
  * Budgets are per entry point. The core budget is the one that matters: it is
- * what stops a convenience import from quietly pulling in the React adapter, or
- * a palette tweak from doubling the color code.
+ * what stops a convenience import from quietly pulling in an optional feature,
+ * or a palette tweak from doubling the color code.
  */
 
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -92,30 +92,6 @@ const ENTRIES: {
     external: [],
     source: `import { blobatarUri } from "../../src/uri";
              globalThis.x = blobatarUri(String(globalThis.seed));`,
-  },
-  {
-    // Carries both rendering modes: the <img> path and the inline-SVG path that
-    // `animate` needs. The inline path is ~570 B of that — the motion traits,
-    // the parts builder, and the second branch of the component.
-    //
-    // Raised from 5650 by 80 B when the animated branch stopped being a single
-    // `dangerouslySetInnerHTML` and became three children: a `<title>`, the
-    // backdrop as a real `<path>`, and the root `<g>` whose class React now
-    // owns. That last one is the point — the root class varies with the
-    // expression, and a varying class inside an innerHTML string replaces the
-    // subtree on every change, which costs the morph and restarts every idle
-    // animation under it. 80 B is the price of the transition existing.
-    //
-    // Raised again from 5750 by 64 B for the colour channel: the 33 B the core
-    // pays (see "blob only") plus the animated path emitting the resolved fills
-    // as `--mo-head`/`--mo-eye`. Those go out on every animated `blob`, tinted
-    // or not, so the stylesheet's `fill` rules always resolve to something
-    // correct — a `var()` with nothing behind it makes `fill` inherit black.
-    name: "react",
-    budget: 5370,
-    external: ["react"],
-    source: `import { Blobatar } from "../../src/react";
-             globalThis.x = Blobatar;`,
   },
   {
     // The point of `blobatar/expression` being its own entry: importing one

@@ -22,7 +22,7 @@
  * function references rather than calls to a `make()` factory. A top-level
  * function call is not provably side-effect-free, so every expression would
  * survive tree-shaking whether or not it was imported — the same trap already
- * documented on `_parts` in `blobatar.ts`.
+ * documented on `parts` in `blobatar.ts`.
  */
 
 import {

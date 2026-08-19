@@ -1,18 +1,18 @@
 /**
- * Publish build.
+ * Optional bundled build.
  *
- * `exports` in package.json points at `dist`, because what goes to npm has to
- * be JS a plain Node resolver and a non-transpiling bundler can both read. This
- * script produces it. (The workspace apps do not wait on it — they alias
- * `blobatar/*` to `src` through tsconfig paths.)
+ * `exports` in package.json points straight at `src` — this fork is consumed
+ * as TS source, like a git dependency. This script is kept only for anyone who
+ * wants a standalone compiled `dist` (npm-style consumption, a non-transpiling
+ * bundler, etc.); nothing in this repo's own `exports` map or workspace apps
+ * reads its output.
  *
  * Each entry is bundled standalone. Code splitting is the obvious way to stop
  * `blob` and the barrel carrying private copies of the same renderer, and it
  * is unusable here: on Bun 1.3.14 a pure re-export barrel like `src/index.ts`
  * compiles to `import "./chunk.js"; export { palette, ... }` — names re-exported
  * out of a module that never imported them, which is a SyntaxError the moment
- * Node links it. `scripts/smoke.mjs` is what caught that, and is why it runs on
- * every build.
+ * Node links it. `VERSION` in `src/index.ts` is the workaround; see its comment.
  *
  * The cost of standalone entries is paid only by a consumer importing two of
  * them, who gets the shared core twice. That is the rarer case, and a wrong
@@ -22,13 +22,7 @@
 import { rmSync } from "node:fs";
 import { $ } from "bun";
 
-const ENTRIES = [
-  "src/index.ts",
-  "src/blob.ts",
-  "src/uri.ts",
-  "src/expression.ts",
-  "src/react.tsx",
-];
+const ENTRIES = ["src/index.ts", "src/blob.ts", "src/uri.ts", "src/expression.ts"];
 
 rmSync("dist", { recursive: true, force: true });
 
@@ -39,22 +33,6 @@ const build = await Bun.build({
   format: "esm",
   minify: true,
   sourcemap: "linked",
-  // React is a peer dependency and an optional one: never inline it, and never
-  // let the JSX runtime import get rewritten into the bundle either.
-  external: ["react", "react/jsx-runtime", "react/jsx-dev-runtime"],
-  // What selects the JSX runtime. Bun reads `process.env.NODE_ENV` to choose
-  // between `jsx` and `jsxDEV`, and a publish build run from a normal shell has
-  // it unset — so without this the package shipped `react/jsx-dev-runtime`
-  // calls. That resolves fine under Node, which is why `smoke.mjs` stayed green
-  // on it, and dies in any consumer bundling for production, where that
-  // specifier carries no `jsxDEV`: every animated blobatar throws
-  // `jsxDEV is not a function` on first render.
-  //
-  // Stated here rather than as an env var on the script so that `bun run build`
-  // yields the same package whatever the shell or CI has set. The failure is
-  // invisible locally and only reaches a consumer, so it cannot be left to
-  // ambient state.
-  define: { "process.env.NODE_ENV": '"production"' },
 });
 
 if (!build.success) {

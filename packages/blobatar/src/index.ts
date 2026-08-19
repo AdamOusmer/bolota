@@ -5,6 +5,20 @@ export {
   type BlobatarOptions,
   type Expression,
 } from "./blobatar";
+
+/**
+ * The `<svg>` contents and its motion custom properties, separately.
+ *
+ * The seam a framework adapter builds on: a React/Vue/Svelte/vanilla wrapper
+ * owns the outer element and wires `cls`, `bg`, and `vars` onto real
+ * attributes, sending only `inner` through an innerHTML-style sink. Returns
+ * `{ cls, bg, inner, vars }`.
+ *
+ * Load-bearing invariant, pinned by `test/expression.test.ts`: nothing that
+ * varies with `expression` appears in `inner` — an expression is style, not
+ * markup, so changing it changes zero bytes of `inner` and a morph can run.
+ */
+export { parts } from "./blobatar";
 export {
   palette,
   ramp,
