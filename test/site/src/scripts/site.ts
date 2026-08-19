@@ -19,6 +19,7 @@ import { setupDeterminism } from "./sections/determinism";
 import { setupExpressions } from "./sections/expressions";
 import { setupStates } from "./sections/states";
 import { setupSequences } from "./sections/sequences";
+import { setupApi } from "./sections/api";
 
 const field = document.querySelector<HTMLElement>("[data-lightfield]");
 if (field) setupLightfield(field);
@@ -35,3 +36,4 @@ setupDeterminism();
 setupExpressions();
 setupStates();
 setupSequences();
+setupApi();
