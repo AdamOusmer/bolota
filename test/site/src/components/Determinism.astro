@@ -1,21 +1,52 @@
 ---
 import SectionHead from "./SectionHead.astro";
+import { bolota, parts, normalizeSeed } from "bolota";
+import { DEFAULT_SEED } from "../scripts/lib/curated-seeds";
+
+// Static-first paint here too, same reasoning as Hero.astro: `bolota()`
+// (and `parts()`, its framework-adapter twin) are near-free string
+// functions, so there is no reason the proof strip's default state should
+// wait on client JS at all. This mirrors determinism.ts's `partsSvg()`
+// helper and its render()'s two checks exactly (kept as a small duplicate,
+// not a shared import, since determinism.ts's copy is written for a
+// browser module and this one runs at build time in Astro's frontmatter);
+// if either changes, update both. determinism.ts's own render() on hydrate
+// reproduces this same output for the default seed (or repaints for a
+// URL-hash seed, client-only, unavoidable), so there is no flash between
+// the SSR'd and hydrated states in the common case.
+function partsSvg(name: string, size: number): string {
+  const p = parts(name, { size });
+  const dim = ` width="${size}" height="${size}"`;
+  const bg = p.bg ? `<path d="${p.bg.d}" fill="${p.bg.fill}"/>` : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"${dim}>${bg}<g class="${p.cls ?? ""}">${p.inner}</g></svg>`;
+}
+
+const face1 = bolota(DEFAULT_SEED, { size: 72 });
+const face2 = bolota(DEFAULT_SEED, { size: 72 });
+const face3 = partsSvg(DEFAULT_SEED, 72);
+
+const bytesEqual = face1 === face2;
+const norm = normalizeSeed(DEFAULT_SEED);
+const normIdempotent = bolota(DEFAULT_SEED, { size: 24 }) === bolota(norm, { size: 24 });
+const ok = bytesEqual && normIdempotent;
+const glyph = ok ? "✓" : "✗";
+const caption = ok ? "Three renders. Byte-identical." : "Three renders. Mismatch detected.";
 ---
 
 <section class="section wrap" id="demo">
   <SectionHead title="Determinism" description="Same seed. Same bytes. Every time." />
 
   <div class="proof-strip" data-reveal style="--reveal-i:1">
-    <div class="proof-strip__face" data-det-slot="1"></div>
+    <div class="proof-strip__face" data-det-slot="1" set:html={face1} />
     <span class="proof-strip__eq" aria-hidden="true">=</span>
-    <div class="proof-strip__face" data-det-slot="2"></div>
+    <div class="proof-strip__face" data-det-slot="2" set:html={face2} />
     <span class="proof-strip__eq" aria-hidden="true">=</span>
-    <div class="proof-strip__face" data-det-slot="3"></div>
+    <div class="proof-strip__face" data-det-slot="3" set:html={face3} />
   </div>
 
   <p class="proof-strip__caption" data-reveal style="--reveal-i:2">
-    <span class="proof-strip__glyph" data-det-glyph aria-hidden="true"></span>
-    <span data-det-text>checking…</span>
+    <span class:list={["proof-strip__glyph", ok ? "is-ok" : "is-bad"]} data-det-glyph aria-hidden="true">{glyph}</span>
+    <span data-det-text>{caption}</span>
   </p>
 </section>
 

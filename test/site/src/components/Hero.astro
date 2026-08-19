@@ -6,6 +6,22 @@
 // light-pool/blob fades up, then the rest) instead of the flat per-element
 // stagger the interim version used; the visible text still reads as one
 // continuous sentence to assistive tech, spans don't break that.
+//
+// Static-first paint (perf): `bolota()` is a plain string function, ~14us
+// per call, cheap enough to run inline at build time, so the hero's specimen
+// is rendered here, server-side, with the default seed and dropped straight
+// into the HTML via `set:html`. That's real pixels in the initial response,
+// zero JS wait, instead of the empty placeholder `<svg>` the live engine
+// host used to be alone on the page. hero.ts layers the live engine host
+// (`[data-hero-avatar-live]`) on top of this static one and crossfades once
+// `bolota/engine` (the heavy part, now a dynamically-imported chunk of its
+// own rather than bundled eagerly into site.ts) has its first frame ready.
+// A URL-hash seed is client-only, so it can only ever repaint after
+// hydration, that's unavoidable, but the *default* paint is instant.
+import { bolota } from "bolota";
+import { DEFAULT_SEED } from "../scripts/lib/curated-seeds";
+
+const heroStaticSvg = bolota(DEFAULT_SEED);
 ---
 
 <noscript>
@@ -41,7 +57,10 @@
   <div class="hero__stage" data-hero-pool>
     <div class="light-pool hero__pool" aria-hidden="true"></div>
     <div class="hero__avatar-wrap" data-hero-avatar>
-      <svg viewBox="0 0 100 100"></svg>
+      <div class="hero__avatar-static" data-hero-avatar-static set:html={heroStaticSvg} />
+      <div class="hero__avatar-live" data-hero-avatar-live>
+        <svg viewBox="0 0 100 100"></svg>
+      </div>
     </div>
   </div>
 
@@ -109,6 +128,46 @@
      stage's one specimen rather than an interim placeholder. */
   .hero__avatar-wrap {
     height: clamp(360px, 46vh, 680px);
+  }
+
+  /* Static-first paint: the SSR'd face and the live engine host stack in
+     the same box (`.hero__avatar-wrap` is already `position: relative` in
+     global.css, its `svg { width/height: 100% }` rule sizes either one
+     identically) so swapping between them is opacity only, never a layout
+     shift. Both sides get their own transition, a real crossfade rather
+     than the live layer (later in source order, so it paints on top by
+     default) hard-snapping over the static one the instant mountEngine
+     populates it: static starts opaque/live starts transparent, hero.ts
+     flips both by toggling one `.is-live` class on the shared wrap once
+     the engine's first frame is in. */
+  .hero__avatar-static,
+  .hero__avatar-live {
+    position: absolute;
+    inset: 0;
+    transition: opacity 420ms var(--ease-smooth);
+  }
+
+  .hero__avatar-static {
+    opacity: 1;
+  }
+
+  .hero__avatar-live {
+    opacity: 0;
+  }
+
+  .hero__avatar-wrap.is-live .hero__avatar-static {
+    opacity: 0;
+  }
+
+  .hero__avatar-wrap.is-live .hero__avatar-live {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero__avatar-static,
+    .hero__avatar-live {
+      transition: none;
+    }
   }
 
   /* Bigger pool than the shared default: a 44vh+ blob needs a wider, softer
