@@ -1,0 +1,19 @@
+---
+import SectionHead from "./SectionHead.astro";
+---
+
+<section class="section wrap" id="sequences">
+  <SectionHead title="Sequences" description="Four moves. Never twice at once." />
+
+  <div class="tile-grid seq-grid" data-sequences-grid data-reveal></div>
+
+  <p class="subhead" data-reveal>Composed sequence</p>
+  <div class="timeline" data-reveal>
+    <div class="timeline__avatar" data-timeline-avatar></div>
+    <div class="timeline__meta">
+      <div class="timeline__label" data-timeline-label>idle</div>
+      <p>Built straight from <code>handle.states</code>. It never drifts from the engine's own roster.</p>
+      <div class="timeline__track" data-timeline-track><span></span></div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,17 @@
+---
+import SectionHead from "./SectionHead.astro";
+---
+
+<section class="section wrap" id="expressions" data-expressions>
+  <SectionHead title="Expressions" description="Sixteen faces. Pick one, or let it wander." />
+
+  <div class="picker-stage" data-reveal style="--reveal-i:1">
+    <div class="picker-stage__avatar" data-expr-stage></div>
+    <div class="picker-stage__meta">
+      <strong data-expr-label>Neutral</strong>
+      <span>setExpression(), a held pose, not a state</span>
+    </div>
+  </div>
+
+  <div class="picker" data-expr-picker data-reveal style="--reveal-i:2"></div>
+</section>

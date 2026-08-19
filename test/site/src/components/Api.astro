@@ -1,0 +1,74 @@
+---
+import SectionHead from "./SectionHead.astro";
+
+const K = "tok-kw";
+const S = "tok-str";
+const C = "tok-cm";
+---
+
+<section class="section wrap" id="api">
+  <SectionHead title="Reference" description="Five imports. That's the whole surface." />
+
+  <div class="api-grid">
+    <div class="code-block" data-reveal>
+      <div class="code-block__head">
+        <span>install</span>
+        <button class="copy-btn" data-copy="npm install bolota" aria-label="Copy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span class="copy-btn__label">copy</span>
+        </button>
+      </div>
+      <pre><code>npm install bolota</code></pre>
+    </div>
+
+    <div class="code-block" data-reveal style="--reveal-i:1">
+      <div class="code-block__head">
+        <span>static render</span>
+        <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
+      </div>
+      <pre><code><span class={K}>import</span> {"{"} bolota {"}"} <span class={K}>from</span> <span class={S}>"bolota"</span>;
+
+<span class={C}>// deterministic: same seed, same bytes, always</span>
+<span class={K}>const</span> svg = bolota(<span class={S}>"any-string"</span>, {"{"} size: <span class={S}>64</span> {"}"});
+container.innerHTML = svg;</code></pre>
+    </div>
+
+    <div class="code-block" data-reveal style="--reveal-i:2">
+      <div class="code-block__head">
+        <span>bloub engine</span>
+        <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
+      </div>
+      <pre><code><span class={K}>import</span> {"{"} mountEngine {"}"} <span class={K}>from</span> <span class={S}>"bolota/engine"</span>;
+
+<span class={K}>const</span> handle = mountEngine(svgEl, <span class={S}>"any-string"</span>);
+handle.play(<span class={S}>"burst"</span>);       <span class={C}>// one-shot, auto-returns to idle</span>
+handle.play(<span class={S}>"orbit"</span>, {"{"} loop: <span class={K}>true</span> {"}"});
+handle.setExpression(<span class={S}>"heureux"</span>);
+handle.stop();      <span class={C}>// freezes the current frame</span>
+handle.destroy();   <span class={C}>// unmounts</span></code></pre>
+    </div>
+
+    <div class="code-block" data-reveal style="--reveal-i:3">
+      <div class="code-block__head">
+        <span>sequences</span>
+        <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
+      </div>
+      <pre><code><span class={K}>import</span> {"{"} runSequence {"}"} <span class={K}>from</span> <span class={S}>"bolota/sequences"</span>;
+
+<span class={C}>// "entrance" | "burst" | "orbit" | "comet"</span>
+runSequence(handle, <span class={S}>"entrance"</span>);</code></pre>
+    </div>
+
+    <div class="code-block" data-reveal style="--reveal-i:4">
+      <div class="code-block__head">
+        <span>framework adapter</span>
+        <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
+      </div>
+      <pre><code><span class={K}>import</span> {"{"} parts {"}"} <span class={K}>from</span> <span class={S}>"bolota"</span>;
+
+<span class={C}>// {"{"} cls, bg, inner, vars {"}"}: build your own element,</span>
+<span class={C}>// wire `inner` through an innerHTML-style sink</span>
+<span class={K}>const</span> {"{"} cls, inner, vars {"}"} = parts(seed, opts);</code></pre>
+    </div>
+  </div>
+</section>
