@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * The trait keys shared by Bolota 2's silhouette families.
  *

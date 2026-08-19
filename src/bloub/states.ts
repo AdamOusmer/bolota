@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+// Ported from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
+
 /**
  * Ported verbatim from bloub (https://github.com/jeremyPerret/bloub),
  * MIT License, Copyright (c) 2026 Jérémy Perret.
@@ -31,7 +34,6 @@ import {
   circle,
   hullOfCircles,
   polyPath,
-  profileFromPolygon,
   silhouette,
   type Silhouette
 } from './shape'
@@ -78,6 +80,17 @@ const pair = (w: number, h: number): [EyeCfg, EyeCfg] => [
   { w, h, open: 1 }
 ]
 
+/**
+ * Dead-ahead gaze: yaw/pitch/roll all zero. `base()`'s own default gaze is
+ * `REST_GAZE` instead (bloub's measured resting pose, a sideways glance —
+ * see `../bloub/expressions.ts`'s header comment), which is correct for the
+ * `wander` STATE right below and the `wander` EXPRESSION
+ * (`../bloub/expressions.ts` — yes, same id, deliberately, see that file's
+ * header comment) but NOT for `idle` — see `idle`'s own doc comment below
+ * for why it overrides to this instead of taking `base()`'s default.
+ */
+const NEUTRAL_GAZE: HeadGaze = { yaw: 0, pitch: 0, roll: 0 }
+
 function base(over: Partial<Pose> = {}): Pose {
   return {
     sil: circle(1),
@@ -98,47 +111,29 @@ function base(over: Partial<Pose> = {}): Pose {
 
 /* ---------------------------------------------------------- non-radial shapes */
 
-/**
- * Vertical "!" bar: convex hull of two circles.
- * Measured: top circle (0, -0.505) r 0.132, bottom circle (0, +0.130) r
- * 0.075, straight sides. So it's conical (top/bottom ratio 1.76).
- */
-const BAR_UPRIGHT_CY = -0.1875
-const BAR_UPRIGHT = profileFromPolygon(
-  hullOfCircles(0, -0.505, 0.132, 0, 0.13, 0.075),
-  0,
-  BAR_UPRIGHT_CY
-)
-
-/** Tilted "!" bar: a pure capsule (constant width 0.269, length 0.776). */
-const BAR_ITALIC = profileFromPolygon(hullOfCircles(0, -0.2535, 0.1345, 0, 0.2535, 0.1345), 0, 0)
-
-const barUpright = (pose: Partial<Silhouette> = {}): Silhouette => ({
-  radii: [...BAR_UPRIGHT],
-  rot: 0,
-  cx: 0,
-  cy: BAR_UPRIGHT_CY,
-  sx: 1,
-  sy: 1,
-  ...pose
-})
-
-const barItalic = (pose: Partial<Silhouette> = {}): Silhouette => ({
-  radii: [...BAR_ITALIC],
-  rot: 0,
-  cx: 0,
-  cy: 0,
-  sx: 1,
-  sy: 1,
-  ...pose
-})
 
 /**
- * The tilted "!"'s dot isn't a disk: it's a drop, round end (r 0.118) on
- * the bar's side and a tapered point on the other, length 0.300 along the
- * glyph's axis. Centered on the round end's centroid.
+ * bolota redesign (owner's call): `alert` and `exclaim` used to morph the
+ * BODY into the "!"'s bar and draw the dot as a decor blob — the body was
+ * the tail. Read as the blob folding into a stick. Inverted here: the blob
+ * IS the dot, keeping its seeded silhouette and its face, and the bar is
+ * decor drawn above it.
+ *
+ * Both bars keep bloub's own measured proportions, scaled to sit above a
+ * dot the size of a real body rather than the 0.118 disk they were drawn
+ * for: upright stays conical (top/bottom ratio 1.76, bloub's own), italic
+ * stays a constant-width capsule. Both paths are centered on the origin,
+ * as `DotRender.d` requires, and placed via the dot's own `x`/`y`.
  */
-const TEAR = polyPath(hullOfCircles(0, 0, 0.118, 0, 0.172, 0.012))
+const GLYPH_BAR_UPRIGHT = polyPath(hullOfCircles(0, -0.5, 0.145, 0, 0.5, 0.082))
+const GLYPH_BAR_ITALIC = polyPath(hullOfCircles(0, -0.5, 0.12, 0, 0.5, 0.12))
+/** body radius while folded into the glyph's dot */
+const GLYPH_DOT_R = 0.34
+/** dot (body) center, and the bar's, measured down/up from the ball's own */
+const GLYPH_DOT_CY = 0.42
+const GLYPH_BAR_CY = -0.55
+/** center-to-center along the glyph's axis, dot to bar */
+const GLYPH_AXIS = GLYPH_DOT_CY - GLYPH_BAR_CY
 
 /**
  * The triangle doesn't spin on itself: its center traces a circle of
@@ -155,6 +150,22 @@ const TRI_ORBIT = 0.213
  * rest of the mechanism this feeds.
  */
 export const ORBIT_PERIOD = 4 / 1.25
+
+/**
+ * bolota addition: amplitude, in degrees, of `orbit`'s eye jostle — see the
+ * `gaze:` line in the `orbit` entry below for the full history/reasoning.
+ * Picked to read as visibly "shaken" (well above blink/breath-scale noise)
+ * while staying inside the SAME bbox-containment margin
+ * `test/eyefit.test.ts` already holds every orbit seed to — not eyeballed,
+ * checked against that exact test. Yaw and pitch ride `rot` directly (`sin`/
+ * `cos`, 90deg out of phase so the jostle traces an ellipse rather than a
+ * straight line); roll rides `rot * 2` — a faster, independent axis is what
+ * makes the read "shaken" rather than "sliding" (a single-frequency
+ * yaw/pitch wobble alone reads as the eyes drifting, not being jolted).
+ */
+const ORBIT_JOSTLE_YAW = 16
+const ORBIT_JOSTLE_PITCH = 10
+const ORBIT_JOSTLE_ROLL = 6
 
 function spinningTriangle(rot: number): Silhouette {
   return silhouette('triangle', {
@@ -237,6 +248,22 @@ export interface StateDef {
    */
   baseFace: boolean
   /**
+   * bolota addition (not from bloub): true = this state's own `pose.gaze`/
+   * `split`/`eyes` are replaceable by a chosen expression too, same as
+   * `baseFace`, WITHOUT taking on `baseFace`'s other two meanings —
+   * cursor-follow eligibility (`engine.ts`'s `stateOwnsGaze`) and the
+   * "resting face" identity `eyefit.ts`'s doc comments tie to it. A state
+   * flagged here keeps driving its own body motion, decor and timing (and,
+   * for `burst`/`comet`, its own collapse/regrow `eyeAlpha` — see each
+   * one's own comment: only eye POSE changes hands, not visibility) — the
+   * expression only ever wins the eyes' pose, on top of everything else
+   * this state already owns. `play`/`burst`/`comet` set it; every other
+   * non-`baseFace` state (the ones that actually choreograph their own
+   * gaze/eyes as part of the gesture — `wander`, `wink`, `thinking`, ...)
+   * leaves it unset and keeps full, uncontested ownership of its eyes.
+   */
+  acceptsExpression?: boolean
+  /**
    * bolota addition (not from bloub — every other flag on this interface
    * is verbatim): true = idle's background liveliness (`face.ts`'s
    * wander/drift — NOT blink or breathing, see below) must contribute
@@ -302,28 +329,41 @@ export const STATES: StateDef[] = [
     baseFace: true,
     baseBody: true,
     // bolota divergence, user-defined: `idle` is now the "no-state" neutral
-    // — gaze fixed dead ahead (`base()`'s own `REST_GAZE` default, already
-    // exactly this, so `pose` itself is untouched), NO wander, NO position
-    // drift. Blink and breathing stay alive regardless (`face.ts`'s
-    // `liveliness`, both gated on `alive`/`blink` now, not on the wander
-    // suppression `ownsLiveliness` below triggers — see that flag's own doc
-    // comment and `liveliness`'s breath comment). Cursor-follow composes
-    // normally on top when active (`look.mix`, a separate channel `wander`
-    // never touched) — follow owns gaze while it's on, this state's own
+    // — gaze fixed dead ahead, NO wander, NO position drift. This is
+    // ALSO the static renderer's own default (`../bolota.ts`/`../render.ts`
+    // draw the seeded eye anchors with gaze untouched): overriding to
+    // `NEUTRAL_GAZE` here, rather than taking `base()`'s own `REST_GAZE`
+    // default, is what makes an idle-frame sample reproduce exactly what
+    // the static renderer draws for the same seed (`test/eye-static-parity
+    // .test.ts` pins this). `base()`'s default stayed `REST_GAZE` — it's
+    // still correct for `wander` right below and for the `wander`
+    // EXPRESSION (`../bloub/expressions.ts` — same id as this STATE,
+    // deliberately, see that file's header comment) — only `idle` diverges
+    // from it, and only on this one field.
+    //
+    // Blink and breathing stay alive regardless (`face.ts`'s `liveliness`,
+    // both gated on `alive`/`blink` now, not on the wander suppression
+    // `ownsLiveliness` below triggers — see that flag's own doc comment and
+    // `liveliness`'s breath comment). Cursor-follow composes normally on
+    // top when active (`look.mix`, a separate channel `wander` never
+    // touched) — follow owns gaze while it's on, this state's own
     // straight-ahead gaze is only what shows when it's off.
     //
     // The wandering-gaze choreography this state USED to be is `wander`
-    // now (below) — same pose, id split so both meanings can coexist.
+    // now (below) — same `REST_GAZE` base, id split so both meanings can
+    // coexist.
     ownsLiveliness: true,
-    pose: () => base()
+    pose: () => base({ gaze: { ...NEUTRAL_GAZE } })
   },
 
   {
     // bolota addition: `idle`'s own former self — see its doc comment for
-    // the split. Byte-identical StateDef otherwise (duration, morph,
-    // blinkIn, baseFace, baseBody, pose all unchanged), minus the
-    // wander-suppression flag, so idle's ambient gaze drift/blink/breathe
-    // life is exactly what this state now carries under its own name.
+    // the split. Same `duration`/`morph`/`blinkIn`/`baseFace`/`baseBody` as
+    // `idle`, and the same `base()` this whole file's other states use
+    // (still `REST_GAZE`, unlike `idle`'s own override right above) — only
+    // the wander-suppression flag differs, so idle's former ambient gaze
+    // drift/blink/breathe life is exactly what this state now carries
+    // under its own name, REST_GAZE base included.
     id: 'wander',
     duration: 2.4,
     morph: 0.45,
@@ -454,29 +494,31 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // bolota eye-visibility audit: left at `eyeAlpha: 0`. `sil` here is
-    // `barItalic` — a thin italic glyph bar, not a round body — there is no face
-    // plane for a pair of capsule eyes to sit on. Truly impossible, not overlooked;
-    // covered by the same cross-fade as `thinking` above.
+    // bolota redesign: the body is the glyph's DOT now (see
+    // `GLYPH_BAR_ITALIC` above), so it keeps the seed's own silhouette and
+    // its face — `eyeAlpha` stays at `base()`'s 1, where this state used to
+    // force 0 because a thin italic bar had no face plane to sit on.
     pose: (t) => {
       // Measured travel: -0.087 -> +0.732 over 1.5s, ease-in-out, micro-overshoot.
       const p = clamp(t / 1.5)
       const travel = easings.easeInOutCubic(p) * 0.82 - 0.087
       const back = t > 1.6 ? clamp((t - 1.6) / 0.4) : 0
       const x = travel * (1 - back) + 0.1 * back
-      // Secondary vibration at 2.5Hz, bar and dot in phase opposition.
+      // Secondary vibration at 2.5Hz, dot and bar in phase opposition.
       const buzz = Math.sin(t * 2.5 * TAU) * 0.005
       const tilt = (17.7 * Math.PI) / 180
+      const dotY = GLYPH_DOT_CY + buzz * 2.8
       return base({
-        sil: barItalic({ rot: tilt, cx: x, cy: -0.325 - buzz }),
-        eyeAlpha: 0,
+        gaze: { ...NEUTRAL_GAZE },
+        sil: circle(GLYPH_DOT_R, { cx: x, cy: dotY }),
         dots: [
           {
-            // the dot follows the glyph's axis, 0.580 from the bar's center
-            x: x - Math.sin(tilt) * 0.58,
-            y: -0.325 + Math.cos(tilt) * 0.58 + buzz * 2.8,
-            r: 0.118,
-            d: TEAR,
+            // up the glyph's axis from the dot: same offset the dot used to
+            // take from the bar, sign flipped now that the roles swapped
+            x: x + Math.sin(tilt) * GLYPH_AXIS,
+            y: dotY - Math.cos(tilt) * GLYPH_AXIS - buzz,
+            r: 0.12,
+            d: GLYPH_BAR_ITALIC,
             rot: (tilt * 180) / Math.PI,
             opacity: 1
           }
@@ -520,13 +562,14 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // bolota eye-visibility audit: left at `eyeAlpha: 0` — same reasoning as
-    // `alert`, `sil` is `barUpright()`, a bar glyph with no face plane.
+    // bolota redesign: same inversion as `alert` above — the body is the
+    // glyph's dot (seeded silhouette, face visible), the upright bar is
+    // decor standing above it.
     pose: () =>
       base({
-        sil: barUpright(),
-        eyeAlpha: 0,
-        dots: [{ x: -0.012, y: 0.526, r: 0.113, opacity: 1 }]
+        gaze: { ...NEUTRAL_GAZE },
+        sil: circle(GLYPH_DOT_R, { cy: GLYPH_DOT_CY }),
+        dots: [{ x: 0, y: GLYPH_BAR_CY, r: 0.145, d: GLYPH_BAR_UPRIGHT, opacity: 1 }]
       })
   },
 
@@ -574,6 +617,10 @@ export const STATES: StateDef[] = [
     duration: 2,
     morph: 0.5,
     baseFace: false,
+    // Body/decor/timing (the triangle, the sweeping bouquet) stay this
+    // state's own; a chosen expression is free to drive the eyes on top
+    // (`acceptsExpression`'s own doc comment, `StateDef`).
+    acceptsExpression: true,
     baseBody: false,
     blinkIn: true,
     pose: (t) => {
@@ -603,10 +650,12 @@ export const STATES: StateDef[] = [
     baseBody: false,
     blinkIn: false,
     // bolota addition: see `StateDef.ownsLiveliness`'s own comment — this
-    // state drives body center (`sil.cx/cy` via `spinningTriangle`) itself,
-    // so idle's wander/drift/breath must not also compose on top of it. Gaze
-    // no longer needs the same guard: see `ORBIT_PERIOD`'s comment below,
-    // the eyes are calm and no longer a moving channel to protect.
+    // state drives body center (`sil.cx/cy` via `spinningTriangle`) AND its
+    // own eye jostle (`gaze:`, below — restored, see that line's own
+    // history) itself, so idle's wander/drift/breath must not also compose
+    // on top of either: a second, uncoordinated motion source on the same
+    // channel is the exact bug this flag exists to prevent, whether that
+    // channel is currently flat or, as now, moving.
     ownsLiveliness: true,
     // bolota addition: whole revolutions (1.25 rev/s below) of the
     // rotation's own rate — 4 turns at 1.25 rev/s. `rot`'s value at
@@ -663,23 +712,57 @@ export const STATES: StateDef[] = [
       const fade = clamp(t / 0.8) * clamp((ORBIT_PERIOD - t) / 0.9)
       return base({
         sil,
-        // bolota divergence from verbatim bloub (user-sanctioned, see
-        // src/engine.ts's header): bloub's own reference had the eyes race
-        // around the sphere ~3x faster than the silhouette (+-65deg yaw,
-        // its own separate 6.5rad/s sweep, no relation to `rot`'s 0.8s
-        // period or `ORBIT_PERIOD`) — a THIRD independent frequency, and
-        // reintroducing it here would put right back the exact class of bug
-        // `period` above exists to kill: another channel wrapping (or not
-        // wrapping) on its own schedule. It also read as chaotic on its own
-        // merits, independent of any phase bug — measured before removal,
-        // a single 1/60s frame during the sweep moved an eye center 16+
-        // viewBox units on a R=100 ball. Calm, forward, level eyes while
-        // the body drifts and the rings do the spectacle instead: fewer
-        // moving parts to desync, and readable.
-        gaze: { ...REST_GAZE },
-        // Constant too (was `0.34 + back * 0.07`, another `back`-driven
-        // grow that would have reset every loop) — same reasoning as `rot`
-        // and `sil` above, one fewer channel with a start/end to desync.
+        // Three rounds on this line, and this round is a partial revert of
+        // round B, not a new idea. Round A tried restoring bloub's verbatim
+        // sweep (+-65deg yaw, `sin(t*6.5)`, `pitch` ramping via `back`) —
+        // real bloub choreography (`../../bloub`'s own `states.ts`, still
+        // unrenamed and unflattened there today), but `back` (the
+        // spinning-triangle -> settled-ball transient the sweep's
+        // amplitude/pitch rode) has no loop-safe analog in a state that
+        // repeats forever (`back(0) = 0`, `back(ORBIT_PERIOD) = 1`, no
+        // "settled" to actually reach), and the amplitude alone was enough
+        // to swing an eye behind the head's own depth cull (`engine.ts`,
+        // `e.depth <= 0.02`) on every pass — real bloub behavior (verbatim,
+        // same formula, same cull) but a busier read than intended for a
+        // state that also has to carry the rings. Round B then went too far
+        // the other way: a flat `NEUTRAL_GAZE` constant, matching `idle`'s
+        // own neutral exactly — calm, but "the eyes sit still while the
+        // whole body visibly tumbles" read as broken in its own right (user
+        // report), not merely simplified.
+        //
+        // Round C (this one, user call): bring the JOSTLE back — the body
+        // shakes the eyes around — without either of round A's two actual
+        // problems. Both are solved the same way: stop borrowing bloub's
+        // own `back`-driven, 6.5rad/s-unsynced sweep and instead ride the
+        // SAME already-periodic signal `sil.cx/cy` above already rides,
+        // `rot` (`-TAU*1.25*t`, exact whole turns at `t = ORBIT_PERIOD` by
+        // construction — see this state's own `period` comment). A pure
+        // function of `rot` cannot desync from anything else this state
+        // animates, the same reason `sil.cx/cy` itself is loop-safe, so
+        // there is no `back`-shaped discontinuity to reintroduce. And its
+        // amplitude is picked to read as "shaken," not "swung to profile":
+        // well under round A's +-65deg (measured against the SAME bbox
+        // containment margin `test/eyefit.test.ts` already holds every
+        // orbit seed to, not just eyeballed) and, critically, zero-mean
+        // over a whole `ORBIT_PERIOD` (a plain sin/cos of `rot`, which
+        // itself averages to zero across whole turns) — so this "composes
+        // with neutral gaze direction" exactly as asked: `NEUTRAL_GAZE` is
+        // the CENTER the jostle oscillates around, not a separate value it
+        // replaces. `roll` jostles too, at twice `rot`'s own rate (still
+        // zero-mean over `ORBIT_PERIOD`, still an exact whole number of
+        // cycles at the wrap) — a single-frequency wobble on yaw/pitch
+        // alone read as sliding, not shaking; adding a faster, independent
+        // roll term is what actually sells "jostled," the same way a real
+        // camera shake stacks more than one axis. `ownsLiveliness` (above)
+        // stays on regardless: idle's wander/drift/breath still must not
+        // compose on top of this state's OWN motion, jostle included — this
+        // is a bigger `gaze` term than round B's constant, not a reason to
+        // let a second, uncoordinated motion source back in.
+        gaze: {
+          yaw: NEUTRAL_GAZE.yaw + Math.sin(rot) * ORBIT_JOSTLE_YAW,
+          pitch: NEUTRAL_GAZE.pitch + Math.cos(rot) * ORBIT_JOSTLE_PITCH,
+          roll: NEUTRAL_GAZE.roll + Math.sin(rot * 2) * ORBIT_JOSTLE_ROLL
+        },
         eyes: pair(0.18, 0.34),
         // the rings enter one by one over 0.8s
         arcs: RINGS.map((s, i) => ({
@@ -726,6 +809,18 @@ export const STATES: StateDef[] = [
     blinkIn: true,
     pose: (t) =>
       base({
+        // bolota gaze policy: neutral is this library's base for every
+        // state that owns its own choreography, `swirl` included. bloub's
+        // own `arrival` entrance (this state's upstream original) inherits
+        // `base()`'s `REST_GAZE` sideways glance instead, and a pass on
+        // this branch restored that for fidelity — reverted again here on
+        // the owner's call: the showcase reads the whole grid at once, and
+        // one state resting off-axis next to thirteen neutral ones reads
+        // as the odd tile, not as upstream fidelity. `burst`/`comet`
+        // already carry `NEUTRAL_GAZE` for the same reason; this makes the
+        // set consistent.
+        gaze: { ...NEUTRAL_GAZE },
+        //
         // three of `orbit`'s six rings: half the bouquet is enough to
         // recognize it, and that's fewer arcs to rasterize per frame
         arcs: RINGS.slice(0, 3).map((s, i) => ({
@@ -746,6 +841,11 @@ export const STATES: StateDef[] = [
     minDuration: 2.4,
     morph: 0.4,
     baseFace: false,
+    // Body/decor/timing (the collapse, the particles) and the collapse-fade
+    // `eyeAlpha` below stay this state's own; a chosen expression is free
+    // to drive the eyes' POSE on top (`acceptsExpression`'s own doc
+    // comment, `StateDef`) — visibility during the collapse is unaffected.
+    acceptsExpression: true,
     baseBody: false,
     blinkIn: false,
     // bolota eye-visibility audit, user-reversed: an earlier pass kept the
@@ -781,6 +881,11 @@ export const STATES: StateDef[] = [
       const bodyScale = collapse + (1 - collapse) * regrow
       return base({
         sil: circle(bodyScale),
+        // bolota gaze sweep (owner directive, scoped to swirl/burst/comet
+        // only): was `base()`'s own default `REST_GAZE` -- swept to
+        // `NEUTRAL_GAZE`, visible whenever `eyeAlpha` is above 0
+        // (start/end of the collapse).
+        gaze: { ...NEUTRAL_GAZE },
         eyeAlpha: t < 1.7 ? 1 - collapseFrac : regrow,
         dots: particles(t, 1),
         dotsBehind: true
@@ -797,6 +902,10 @@ export const STATES: StateDef[] = [
     minDuration: 2.4,
     morph: 0.45,
     baseFace: false,
+    // Same as `burst` above: body/decor/timing and the collapse-fade
+    // `eyeAlpha` stay this state's own, a chosen expression only drives
+    // eye POSE (`acceptsExpression`'s own doc comment, `StateDef`).
+    acceptsExpression: true,
     baseBody: false,
     blinkIn: false,
     // bolota eye-visibility audit, user-reversed: same case as `burst`
@@ -818,6 +927,10 @@ export const STATES: StateDef[] = [
         sil: circle(bodyScale, {
           cy: Math.sin(clamp(t / 1.7) * Math.PI) * 0.035
         }),
+        // bolota gaze sweep (owner directive, scoped to swirl/burst/comet
+        // only): was `base()`'s own default `REST_GAZE` -- swept to
+        // `NEUTRAL_GAZE`.
+        gaze: { ...NEUTRAL_GAZE },
         eyeAlpha: t < 1.85 ? 1 - collapseFrac : regrow,
         arcs: COMET_RIBBONS.map((s, i) => ({ id: `cm${i}`, seed: s, t, opacity: fade }))
       })

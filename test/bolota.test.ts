@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 import { describe, expect, test } from "bun:test";
 import { bolota } from "../src/bolota";
 import { VERSION } from "../src/index";

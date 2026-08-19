@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+// Ported from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
+
 /**
  * Ported verbatim from bloub (https://github.com/jeremyPerret/bloub),
  * MIT License, Copyright (c) 2026 Jérémy Perret.
@@ -35,9 +38,9 @@ export const PITCH_MAX = 13
  * equator, which reads as an attentive bot rather than a vacant one.
  *
  * This is an ABSOLUTE value, and that's the whole point: as a relative one,
- * eye height used to follow each expression's own, and since "neutral" looks
- * at +28.6deg while the moods sit between -9 and +9, the eyes would jump the
- * instant a mood changed.
+ * eye height used to follow each expression's own, and since the `wander`
+ * expression (`./expressions.ts`) looks at +28.6deg while the moods sit
+ * between -9 and +9, the eyes would jump the instant a mood changed.
  */
 export const PITCH = 10
 

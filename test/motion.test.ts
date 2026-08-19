@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { motionVars } from "../src/animate";

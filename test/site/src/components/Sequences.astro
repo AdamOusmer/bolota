@@ -1,0 +1,65 @@
+---
+import SectionHead from "./SectionHead.astro";
+---
+
+<!--
+  Redesign v2 (spec §5): one theatrical stage replaces the old four-tile
+  signature grid + timeline widget entirely. A single specimen stands in the
+  biggest `.light-pool` on the page and auto-rotates through
+  entrance -> burst -> orbit -> comet forever, with an idle beat between each
+  move; the running move's name crossfades in the kicker-style label above
+  it. Nothing else in the section besides SectionHead. Driven by
+  scripts/sections/sequences.ts.
+-->
+<section class="section wrap" id="sequences">
+  <SectionHead title="Sequences" description="Four signature moves, one stage, looping on its own." />
+
+  <div class="seq-stage" data-reveal>
+    <p class="kicker seq-stage__label" data-seq-label>Idle</p>
+    <div class="seq-stage__pool">
+      <div class="light-pool seq-stage__glow" aria-hidden="true"></div>
+      <div class="seq-stage__avatar" data-seq-avatar></div>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* The section's one composition: label, then stage. `.seq-stage__pool` is
+     the `position: relative` ancestor `.light-pool` needs (global.css); the
+     glow itself is stretched well past the shared default so this reads as
+     the biggest pool on the page, matching the "single large blob
+     center-stage" framing in spec §5. */
+  .seq-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(28px, 5vw, 48px);
+    text-align: center;
+  }
+
+  .seq-stage__label {
+    min-width: 8ch;
+    transition: opacity 260ms var(--ease-smooth);
+  }
+
+  .seq-stage__label.is-fading {
+    opacity: 0;
+  }
+
+  .seq-stage__pool {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .seq-stage__glow {
+    inset: -60%;
+    filter: blur(clamp(36px, 6vw, 84px));
+  }
+
+  .seq-stage__avatar {
+    width: clamp(260px, 32vw, 440px);
+    aspect-ratio: 1;
+  }
+</style>

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * The bridge between bolota's seeded body and bloub's animation engine.
  *
@@ -44,6 +46,7 @@ import { _layout } from "./bolota";
 import { BotEngine, type BotFrame, type Look } from "./bloub/engine";
 import { EXPRESSIONS, EXPRESSION_BY_ID } from "./bloub/expressions";
 import { MAX_PITCH_DRIFT, MAX_YAW_DRIFT } from "./bloub/face";
+import { HALF_VIEWBOX, RADIUS } from "./bloub/frame";
 import { PITCH } from "./bloub/gaze";
 import { clamp, lerp } from "./bloub/math";
 import { PROFILE_SAMPLES } from "./bloub/profiles";
@@ -348,10 +351,19 @@ export function engineStates(): StateId[] {
   return [...STATE_BY_ID.keys()];
 }
 
-/** All 16 named eye expressions bloub's face customizer exposes — a separate
- * axis from `states` above (see `bloub/expressions.ts`): a state is a
- * time-bounded animation, an expression is a held pose that only shows on
- * the states flagged `baseFace` (`idle`, `swirl` — `bloub/states.ts`). */
+/** All 17 named eye expressions -- bloub's own 16 plus bolota's `love`
+ * (ported from `./expression.ts`'s own `love`, this fork's separate
+ * pre-bloub expression system, still live there today -- see
+ * `bloub/expressions.ts`'s entry for `love`'s full provenance) -- a
+ * separate axis from `states` above (see `bloub/expressions.ts`): a state is a
+ * time-bounded animation, an expression is a held pose that only shows on a
+ * state that accepts one — `baseFace` (`idle`, `wander`, `swirl`: the
+ * "resting face" states) or the bolota-added `acceptsExpression` (`play`,
+ * `burst`, `comet`: states that keep driving their own body/decor/timing —
+ * and, for `burst`/`comet`, their own collapse/regrow eye alpha — but hand
+ * the eyes' POSE to the expression when one is set — `bloub/states.ts`,
+ * each flag's own doc comment). Every other state choreographs its own
+ * gaze/eyes as part of the gesture and ignores `setExpression` entirely. */
 export function engineExpressions(): string[] {
   return EXPRESSIONS.map((e) => e.id);
 }
@@ -377,11 +389,14 @@ export interface EngineHandle {
   states: string[];
   /**
    * Sets (or, given `null`, clears) the held eye expression by id (see
-   * `expressions`). Throws on an unknown id. Only visible while the current
-   * state is `baseFace` (`idle`, `swirl`); the transition eases over
-   * `BotEngine.SHAPE_MORPH` via bloub's own `exprAtTime`/`blendExpression`
-   * path — the same eased in-out interpolation `setShape` already rides,
-   * not a new easing system.
+   * `expressions`). Throws on an unknown id. Only visible on a state that
+   * accepts one (`idle`/`wander`/`swirl` via `baseFace`, `play`/`burst`/
+   * `comet` via `acceptsExpression` — see `engineExpressions`'s own doc
+   * comment); ignored on every other state, which keeps full ownership of
+   * its own eyes. The transition eases over `BotEngine.SHAPE_MORPH` via
+   * bloub's own `exprAtTime`/`blendExpression` path — the same eased
+   * in-out interpolation `setShape` already rides, not a new easing
+   * system.
    */
   setExpression(name: string | null): void;
   /** Every expression id, `bun test`-stable order (`bloub/expressions.ts`). */
@@ -414,6 +429,34 @@ export function mountEngine(
 
   const engine = new BotEngine(body.rx, "idle", seededSilhouette(body, draw, petals, extra), null);
   const uid = Math.random().toString(36).slice(2, 8);
+
+  // bolota divergence found by rendering, not by reading `sample()`'s numbers
+  // (which are viewBox-agnostic and looked fine): every caller of `mountEngine`
+  // sets `viewBox="0 0 100 100"` on `svgRoot` (the same box the static
+  // `parts()`/`bolota()` core uses, `render.ts`'s own convention) and this
+  // function never touched it — but that box is sized to fit the BODY alone,
+  // with the body itself occupying up to ~80% of the half-box (`body.rx` up to
+  // ~41 against a ~49-unit margin, measured across a wide seed sample). Bloub's
+  // own player never reuses its body's box this tightly: `bot/repere.ts`'s
+  // `DEMI_VIEWBOX` (158) against `RAYON` (100) is a DELIBERATE, CONSTANT 1.58x
+  // margin beyond the ball's own radius, "loge[ant] les anneaux" in its own
+  // words — orbit's rings and comet's ribbons reach 1.4x the ball's radius,
+  // and bloub reserves headroom for that at every viewBox, not only while a
+  // decorated state happens to be playing (the state can change at any time;
+  // shrinking the box only on entry would resize the avatar out from under
+  // the caller's rAF loop). This function had no equivalent, so an unmargined
+  // seed's rings rendered mostly outside the caller's viewBox and got clipped
+  // by it — the reported "no orbiting rings, a few scattered dots" (the
+  // fragments of each ring's arc that happened to still fall inside `0 0 100
+  // 100`). Fix: claim the same margin bloub's own `HALF_VIEWBOX/RADIUS`
+  // (`bloub/frame.ts`, already ported verbatim and already used by
+  // `eyefit.ts`'s containment solve, just never applied to an actual
+  // mounted `<svg>` before now) reserves, centered on the body exactly like
+  // `root`'s own translate below, overriding whatever box the caller
+  // pre-set — the static core (`render.ts`) is untouched, this function
+  // owns this box from here on.
+  const vb = body.rx * (HALF_VIEWBOX / RADIUS)
+  svgRoot.setAttribute("viewBox", `${body.cx - vb} ${body.cy - vb} ${vb * 2} ${vb * 2}`)
 
   const root = el(doc, "g", { transform: `translate(${body.cx} ${body.cy})` });
   const defs = el(doc, "defs");

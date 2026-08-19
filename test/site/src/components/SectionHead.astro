@@ -1,0 +1,19 @@
+---
+// Redesign v2's shared section opener: an optional kicker, a
+// `.display-section` title, one `.lead` sentence. No explainer paragraphs,
+// per the redesign's benefit-led copy voice, `description` is a single
+// sentence, not a paragraph. `kicker` is opt-in for sections that want the
+// small uppercase label above the title (see global.css's `.kicker`).
+interface Props {
+  kicker?: string;
+  title: string;
+  description: string;
+}
+const { kicker, title, description } = Astro.props;
+---
+
+<div class="section-head" data-reveal>
+  {kicker && <p class="kicker">{kicker}</p>}
+  <h2 class="display-section">{title}</h2>
+  <p class="lead">{description}</p>
+</div>

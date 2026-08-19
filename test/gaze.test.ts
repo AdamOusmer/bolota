@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 import { describe, expect, test } from "bun:test";
 import { BotEngine } from "../src/bloub/engine";
 import { EXPRESSIONS, EXPRESSION_BY_ID, type ExpressionId } from "../src/bloub/expressions";
@@ -35,8 +37,8 @@ describe("gaze target", () => {
 
     // what matters isn't the field values but the rendered image: at the
     // start, it must be that of a bot that isn't driven at all
-    const bare = new BotEngine(100, "idle", circle(), EXPRESSION_BY_ID.get("neutral")!);
-    const start = new BotEngine(100, "idle", circle(), EXPRESSION_BY_ID.get("neutral")!);
+    const bare = new BotEngine(100, "idle", circle(), null);
+    const start = new BotEngine(100, "idle", circle(), null);
     start.setLook(target, 0);
     expect(start.sample(1).eyes[0]!.matrix).toBe(bare.sample(1).eyes[0]!.matrix);
   });
@@ -89,7 +91,7 @@ describe("both eyes stay visible", () => {
 
   test("keeps a margin: the follow doesn't go all the way to the breaking point", () => {
     // if this margin disappears, YAW_MAX or TURN has been pushed too far
-    const engine = new BotEngine(100, "idle", circle(), EXPRESSION_BY_ID.get("neutral")!);
+    const engine = new BotEngine(100, "idle", circle(), null);
     engine.setLook({ yaw: -(TURN + YAW_MAX) - 25, pitch: 0, mix: 1, spin: 0, wander: 0 }, 0);
     expect(engine.sample(1).eyes).toHaveLength(2);
   });
@@ -105,7 +107,7 @@ describe("the turn on itself", () => {
      * place.
      */
     const frameAt = (tour: number) => {
-      const engine = new BotEngine(100, "idle", circle(), EXPRESSION_BY_ID.get("neutral")!);
+      const engine = new BotEngine(100, "idle", circle(), null);
       engine.setLook(lookTarget(aim({ tour })), 0);
       return engine.sample(1);
     };
@@ -117,14 +119,19 @@ describe("the turn on itself", () => {
     // ...and a full turn settles the eyes exactly where a plain half-turn
     // would have put them: that's what makes the landing exact with no tuning
     const full = frameAt(1).eyes[0]!.matrix;
-    const noTour = new BotEngine(100, "idle", circle(), EXPRESSION_BY_ID.get("neutral")!);
+    const noTour = new BotEngine(100, "idle", circle(), null);
     noTour.setLook({ yaw: -TURN, pitch: PITCH, mix: 1, spin: 0, wander: 0 }, 0);
     expect(full).toBe(noTour.sample(1).eyes[0]!.matrix);
   });
 });
 
 describe("arrival turn on the site", () => {
-  const bot = (id: ExpressionId) => new BotEngine(100, "idle", circle(), EXPRESSION_BY_ID.get(id)!);
+  // `id: null` means no expression forced -- `idle`'s own resting gaze
+  // (dead ahead, zero roll) is what shows, which is what "neutral" used to
+  // mean before that expression was collapsed into `idle` itself (see
+  // `../src/bloub/expressions.ts`'s header comment).
+  const bot = (id: ExpressionId | null) =>
+    new BotEngine(100, "idle", circle(), id === null ? null : EXPRESSION_BY_ID.get(id)!);
 
   /**
    * THE rule of a gaze script, and what makes it maintenance-free: it ends
@@ -163,16 +170,16 @@ describe("arrival turn on the site", () => {
     // -360deg is the same angle as 0: the first frame is already settled
     // correctly, and that's what lands the turn with no tuning
     expect(tourLook(0).spin).toBe(SPIN);
-    const start = bot("neutral");
+    const start = bot(null);
     start.setLook(tourLook(0), 0);
-    expect(start.sample(1).eyes[0]!.matrix).toBe(bot("neutral").sample(1).eyes[0]!.matrix);
+    expect(start.sample(1).eyes[0]!.matrix).toBe(bot(null).sample(1).eyes[0]!.matrix);
   });
 
   test("the turn sends the eyes BEHIND the ball", () => {
     // at the halfway point they've crossed the limb, so the engine no
     // longer draws them at all: that's proof the turn is a real trip
     // AROUND THE SPHERE and not a slide across the face
-    const mid = bot("neutral");
+    const mid = bot(null);
     mid.setLook(tourLook(TOUR_TIME / 2), 0);
     expect(mid.sample(1).eyes).toHaveLength(0);
   });
@@ -190,7 +197,7 @@ describe("arrival turn on the site", () => {
    */
   test("can't anticipate roll, hence an arrival with no state change", () => {
     expect(STATE_BY_ID.get("wink")!.pose(0).gaze.roll).not.toBe(
-      EXPRESSION_BY_ID.get("neutral")!.gaze.roll,
+      STATE_BY_ID.get("idle")!.pose(0).gaze.roll,
     );
     expect(tourLook(0)).not.toHaveProperty("roll");
   });

@@ -1,0 +1,107 @@
+---
+import SectionHead from "./SectionHead.astro";
+import { bolota, parts, normalizeSeed } from "@luzir/bolota";
+import { DEFAULT_SEED } from "../scripts/lib/curated-seeds";
+
+// Static-first paint here too, same reasoning as Hero.astro: `bolota()`
+// (and `parts()`, its framework-adapter twin) are near-free string
+// functions, so there is no reason the proof strip's default state should
+// wait on client JS at all. This mirrors determinism.ts's `partsSvg()`
+// helper and its render()'s two checks exactly (kept as a small duplicate,
+// not a shared import, since determinism.ts's copy is written for a
+// browser module and this one runs at build time in Astro's frontmatter);
+// if either changes, update both. determinism.ts's own render() on hydrate
+// reproduces this same output for the default seed (or repaints for a
+// URL-hash seed, client-only, unavoidable), so there is no flash between
+// the SSR'd and hydrated states in the common case.
+function partsSvg(name: string, size: number): string {
+  const p = parts(name, { size });
+  const dim = ` width="${size}" height="${size}"`;
+  const bg = p.bg ? `<path d="${p.bg.d}" fill="${p.bg.fill}"/>` : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"${dim}>${bg}<g class="${p.cls ?? ""}">${p.inner}</g></svg>`;
+}
+
+const face1 = bolota(DEFAULT_SEED, { size: 72 });
+const face2 = bolota(DEFAULT_SEED, { size: 72 });
+const face3 = partsSvg(DEFAULT_SEED, 72);
+
+const bytesEqual = face1 === face2;
+const norm = normalizeSeed(DEFAULT_SEED);
+const normIdempotent = bolota(DEFAULT_SEED, { size: 24 }) === bolota(norm, { size: 24 });
+const ok = bytesEqual && normIdempotent;
+const glyph = ok ? "✓" : "✗";
+const caption = ok ? "Three renders. Byte-identical." : "Three renders. Mismatch detected.";
+---
+
+<section class="section wrap" id="demo">
+  <SectionHead title="Determinism" description="Same seed. Same bytes. Every time." />
+
+  <div class="proof-strip" data-reveal style="--reveal-i:1">
+    <div class="proof-strip__face" data-det-slot="1" set:html={face1} />
+    <span class="proof-strip__eq" aria-hidden="true">=</span>
+    <div class="proof-strip__face" data-det-slot="2" set:html={face2} />
+    <span class="proof-strip__eq" aria-hidden="true">=</span>
+    <div class="proof-strip__face" data-det-slot="3" set:html={face3} />
+  </div>
+
+  <p class="proof-strip__caption" data-reveal style="--reveal-i:2">
+    <span class:list={["proof-strip__glyph", ok ? "is-ok" : "is-bad"]} data-det-glyph aria-hidden="true">{glyph}</span>
+    <span data-det-text>{caption}</span>
+  </p>
+</section>
+
+<style>
+  /* Boxless proof strip: three faces, thin "=" glyphs between them, nothing
+     else. Faces need an explicit box for the same reason global.css's
+     `.hero__avatar-wrap`/`.tile__avatar` comments give, an SVG paints at
+     its intrinsic size without one. */
+  .proof-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(14px, 3vw, 28px);
+    flex-wrap: wrap;
+  }
+
+  .proof-strip__face {
+    width: clamp(64px, 9vw, 96px);
+    height: clamp(64px, 9vw, 96px);
+    flex: none;
+  }
+
+  .proof-strip__eq {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    font-size: clamp(18px, 2.6vw, 28px);
+    line-height: 1;
+    color: var(--text-faint);
+    user-select: none;
+  }
+
+  /* One caption line under the strip. The byte-check result is the glyph,
+     nothing else, per the spec: no separate status line. */
+  .proof-strip__caption {
+    margin-top: clamp(20px, 3vw, 32px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--text-faint);
+    text-align: center;
+  }
+
+  .proof-strip__glyph {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  .proof-strip__glyph.is-ok {
+    color: var(--ok);
+  }
+
+  .proof-strip__glyph.is-bad {
+    color: var(--bad);
+  }
+</style>

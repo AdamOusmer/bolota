@@ -8,11 +8,11 @@
     "preview": "astro preview",
     "typecheck": "astro check",
     "favicon": "bun scripts/gen-favicon.ts",
-    "lib:pack": "cd ../.. && bun run build && bun pm pack --destination test/site/.lib && cd test/site && bun add ./.lib/luzir-bolota-*.tgz"
+    "lib:build": "cd ../.. && bun run build"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.7.3",
-    "@luzir/bolota": "./.lib/luzir-bolota-2.0.0.tgz",
+    "@luzir/bolota": "file:../..",
     "astro": "^7",
     "lenis": "^1.3.19",
     "motion": "^12"

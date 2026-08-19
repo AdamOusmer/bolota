@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+// Derived from blobatar (c) 2026 Alain, MIT. See LICENSE.
+
 import { motionVars, rootClass, type Animate } from "./animate";
 import type { Palette } from "./color";
 import type { Expression } from "./expression";

@@ -1,0 +1,133 @@
+name: Release
+
+# Fires when a GitHub Release is published (the tag, e.g. `v2.0.1`, drives the
+# version-match check below). `workflow_dispatch` with `dry-run: true` runs the
+# same gate + pack + verify steps, for testing the pipeline itself. Publishing
+# uses npm Trusted Publishing (OIDC) — no long-lived npm token stored anywhere;
+# see the "Releasing" section in README.md for the one-time npmjs.com setup.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Dry run (npm publish --dry-run, no publish permissions needed)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write # required: this is what npm's OIDC trusted publishing exchanges for a publish token — no NPM_TOKEN secret anywhere.
+
+jobs:
+  publish:
+    name: publish
+    runs-on: ubuntu-latest
+    # Optional GitHub Environment, matched by name in the trusted publisher
+    # config on npmjs.com. Not required for OIDC to work, but scoping it to an
+    # environment lets the repo add protection rules (required reviewers,
+    # branch restrictions) around who can trigger an actual publish. Create
+    # this environment under Settings > Environments if you want that; if you
+    # don't, remove this block and the "Environment name" field on npmjs.com.
+    environment:
+      name: npm-release
+      url: https://www.npmjs.com/package/@luzir/bolota
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # setup-node provides Node + npm, since npm's OIDC trusted-publishing
+      # flow (the `id-token: write` permission above) is an npm CLI feature —
+      # bun does not implement it. Every build/test/pack step below still
+      # runs through bun, matching ci.yml; node/npm exist here only to run
+      # `npm publish` itself.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1 (and Node >= 22.14.0, already
+      # satisfied by node-version 22 above) — npmjs.com docs, "Trusted
+      # publishing requires npm CLI version 11.5.1 or later and Node version
+      # 22.14.0 or higher." The npm bundled with setup-node's Node 22 image
+      # can lag behind that, so pin it explicitly rather than hoping.
+      - name: Update npm for trusted publishing (OIDC) support
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - run: bun install --frozen-lockfile
+
+      # `prepare` (bun run build) fires again here as an install side effect,
+      # and `prepack` will fire it a third and fourth time below (bun pm pack,
+      # npm publish). All harmless: scripts/build.ts starts with
+      # `rmSync("dist", { recursive: true, force: true })`, so each rebuild is
+      # a clean, deterministic overwrite, not an accumulation. ci.yml already
+      # lives with the install-triggered rebuild; this job just inherits it.
+
+      - name: Typecheck
+        run: bunx tsc --noEmit
+
+      - name: Tests
+        run: bun test
+
+      - name: Size budgets
+        run: bun run size
+
+      - name: Build
+        run: bun run build
+
+      - name: Version safety — tag must match package.json
+        if: github.event_name == 'release'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "::error::Release tag '${GITHUB_REF_NAME}' (-> version '${TAG}') does not match package.json version '${PKG_VERSION}'. Refusing to publish."
+            exit 1
+          fi
+          echo "Tag ${GITHUB_REF_NAME} matches package.json version ${PKG_VERSION}."
+
+      - name: Pack tarball
+        run: bun pm pack --destination /tmp/pack
+
+      - name: Verify tarball contents
+        run: |
+          TARBALL="$(ls /tmp/pack/*.tgz)"
+          echo "Inspecting ${TARBALL}"
+          FILES="$(tar -tzf "$TARBALL")"
+          echo "$FILES"
+
+          echo "$FILES" | grep -q '^package/dist/' \
+            || { echo "::error::tarball has no dist/ — build output missing"; exit 1; }
+          echo "$FILES" | grep -q '^package/src/' \
+            && { echo "::error::tarball contains src/ — should ship dist only"; exit 1; } || true
+          echo "$FILES" | grep -q '^package/LICENSE$' \
+            || { echo "::error::tarball missing LICENSE"; exit 1; }
+          echo "$FILES" | grep -q '^package/README.md$' \
+            || { echo "::error::tarball missing README.md"; exit 1; }
+
+          echo "Tarball contents look right: dist present, src absent, LICENSE + README present."
+
+      - name: Publish (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry-run
+        run: npm publish --dry-run
+
+      # Real publish is gated to the `release` event only — a manual dispatch
+      # has no release tag to run the version-safety check against, so it
+      # never gets to actually publish, regardless of the dry-run input.
+      # `dry-run: false` on workflow_dispatch just skips both publish steps:
+      # useful for exercising the gate + pack + verify steps alone.
+      #
+      # No NPM_TOKEN / NODE_AUTH_TOKEN: npm exchanges the GitHub OIDC token
+      # (from `id-token: write` above) for a short-lived publish token at
+      # publish time, provided the trusted publisher is configured on
+      # npmjs.com for this repo + workflow filename (+ environment, if used).
+      # Provenance attestation is automatic under trusted publishing — no
+      # `--provenance` flag needed.
+      - name: Publish
+        if: github.event_name == 'release'
+        run: npm publish --access public
