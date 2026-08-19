@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "bolota": "file:../.."
+    "@luzir/bolota": "file:../.."
   },
   "devDependencies": {
     "vite": "^7",

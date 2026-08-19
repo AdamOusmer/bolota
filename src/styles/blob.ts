@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+// Derived from blobatar (c) 2026 Alain, MIT. See LICENSE.
+
 import { compose, faceFit, type Band } from "./compose";
 import {
   boxy, capsule, cloud, droplet, hexagon, nub, organic, round, sun, triangle,

@@ -1,11 +1,12 @@
 {
-  "name": "bolota",
-  "version": "2.0.0",
-  "description": "Deterministic geometric bolotas from any string. No dependencies.",
+  "name": "@luzir/bolota",
+  "version": "0.1.0",
+  "description": "Deterministic avatars from any string, with a live animation engine. No dependencies.",
   "type": "module",
-  "//sideEffects": "Not `false`. That would license bundlers to drop `import \"bolota/motion.css\"` as dead weight, and animated bolotas would silently render static for everyone shipping through a bundler.",
+  "//sideEffects": "Not `false`. That would license bundlers to drop `import \"@luzir/bolota/motion.css\"` as dead weight, and animated bolotas would silently render static for everyone shipping through a bundler.",
   "sideEffects": ["*.css"],
-  "files": ["dist", "README.md", "LICENSE"],
+  "//files": "Source maps are built but not shipped: they weigh 3x everything else in the tarball, and they map back to sources `files` deliberately excludes, so an installer would pay for them and still not be able to read them.",
+  "files": ["dist", "!dist/**/*.map", "README.md", "LICENSE"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "//exports": "Compiled package: `exports` resolves every subpath to `dist` (see `scripts/build.ts`). `main`/`types` above are the pre-`exports`-map fallback for older resolvers, pointed at the same compiled entry. `src` is not part of what ships (see `files` below) — it is source for this repo, not for a consumer's install.",
@@ -57,11 +58,11 @@
   },
   "keywords": ["bolota", "avatar", "identicon", "svg", "deterministic", "no-dependencies"],
   "license": "MIT",
-  "author": "Alain",
+  "author": "Adam Ousmer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Alain00/blobatar.git"
+    "url": "git+https://github.com/AdamOusmer/bolota.git"
   },
-  "homepage": "https://github.com/Alain00/blobatar#readme",
-  "bugs": "https://github.com/Alain00/blobatar/issues"
+  "homepage": "https://github.com/AdamOusmer/bolota#readme",
+  "bugs": "https://github.com/AdamOusmer/bolota/issues"
 }

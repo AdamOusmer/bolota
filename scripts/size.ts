@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * Bundle size gate.
  *
@@ -187,7 +189,10 @@ const ENTRIES: {
     // tracking that drives them, and the tightened rAF delta clamp.
     // Raised from 15850 to 17400 (2026-08-19): loop-phase timeline, wink
     // gesture timeline, and follow-vs-idle arbitration — deliberate feature
-    // growth (measured 16640), not creep; ~5% headroom on top.
+    // growth (measured 16640), not creep. The headroom on top also absorbs
+    // cross-platform gzip variance: `Bun.gzipSync` on CI's linux/x64 runners
+    // lands ~100 B above the same bundle gzipped on macOS/arm64 for identical
+    // input bytes, which once failed this row on CI with no source change.
     name: "engine",
     budget: 17400,
     external: [],

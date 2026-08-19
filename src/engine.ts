@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /**
  * The bridge between bolota's seeded body and bloub's animation engine.
  *

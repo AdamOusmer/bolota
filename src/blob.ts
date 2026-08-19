@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+// Derived from blobatar (c) 2026 Alain, MIT. See LICENSE.
+
 import { makeBolota, type BolotaOptions } from "./render";
 import { style } from "./styles/blob";
 import type { Layout } from "./styles/compose";

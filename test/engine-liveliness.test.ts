@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 import { describe, expect, test } from "bun:test";
 import { _layout, bolota } from "../src/bolota";
 import { engineStates, mountEngine, type EngineHandle } from "../src/engine";

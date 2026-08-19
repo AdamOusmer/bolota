@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+// Derived from blobatar (c) 2026 Alain, MIT. See LICENSE.
+
 export {
   bolota,
   _layout,
@@ -44,4 +47,4 @@ export { normalizeSeed } from "./hash";
  * whole graph being dropped. `scripts/smoke.mjs` links the built barrel under
  * Node on every build and is what will tell you if this stops being true.
  */
-export const VERSION = "2.0.0";
+export const VERSION = "0.1.0";

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 /** Bolota 2's frozen seed→markup contract. A failure is not a fixture update. */
 
 import { describe, expect, test } from "bun:test";
