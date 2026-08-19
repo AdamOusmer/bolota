@@ -468,3 +468,43 @@ describe("motion blur decays when velocity drops", () => {
     expect(settled).toBeLessThanOrEqual(midway);
   });
 });
+
+describe("body profile == seeded profile at all times (modulo scale/transform/collapse), every state", () => {
+  // Structural, not per-state: BotEngine.posed() (bloub/engine.ts) now
+  // discards the angular shape of every non-baseBody state's own pose --
+  // bloub's built-in profiles (the spinning triangle in orbit/play, egg,
+  // hexagon, every `circle(k)` collapse/regrow and decorative-dot state) --
+  // and rebuilds `sil.radii` from the seed's own profile scaled by that
+  // pose's mean radius. One choke point: no state's `pose()` can put its own
+  // angular shape on screen anymore, so this holds for the whole catalog
+  // without per-state coverage. Aspect ratio is the discriminator: a leaked
+  // triangle/egg/hexagon has a very different width/height ratio than an
+  // organic/round/cloud/etc. seed, so a leak shows up as a large deviation
+  // here even without comparing exact point-by-point radii.
+  const SEEDS = ["anna", "alain", "mavey", "engine-liveliness-seed"];
+  // Not "orbit": it's the one state that actually rotates the body (`rot`
+  // grows unbounded by design, see the "loop:true wraps seamlessly" suite
+  // above), and an axis-aligned bbox is not rotation-invariant -- a
+  // perfectly preserved seed shape at 20 degrees of spin legitimately has a
+  // different aspect ratio than at rest. That is a property of measuring
+  // with a bbox, not a shape leak; orbit's own shape fidelity is exercised
+  // by "wraps seamlessly" instead.
+  const STATES = ["idle", "egg", "hexagon", "play", "swirl"] as const;
+
+  for (const seed of SEEDS) {
+    const stat = staticBbox(blobatar(seed, { background: false }));
+    const staticAspect = stat.w / stat.h;
+
+    for (const state of STATES) {
+      test(`"${seed}" in "${state}": aspect ratio stays the seed's own`, () => {
+        const { doc, svg, handle } = mount(seed);
+        handle.play(state, { loop: true });
+        run(doc, 300); // past blinkIn/morph, into the state's own hold
+        const b = bbox(parts(svg as unknown as FakeElement).bodyPath.getAttribute("d")!);
+        const aspect = b.w / b.h;
+        expect(aspect, `${seed}/${state}`).toBeGreaterThan(staticAspect * 0.75);
+        expect(aspect, `${seed}/${state}`).toBeLessThan(staticAspect * 1.25);
+      });
+    }
+  }
+});
