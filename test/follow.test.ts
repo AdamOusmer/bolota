@@ -125,9 +125,9 @@ function run(doc: FakeDocument, totalMs: number, frameMs = 16) {
 }
 
 /** The eyes `<g>`'s children — same slot `engine-liveliness.test.ts`'s
- * `parts()` reads (filterDefs, defs, back, bodyPath, eyes, front). */
+ * `parts()` reads (defs, back, bodyPath, eyes, front). */
 function eyes(svg: FakeElement) {
-  return svg.children[0]!.children[4]!.children;
+  return svg.children[0]!.children[3]!.children;
 }
 
 /** x/y-translate (5th/6th `matrix(...)` components) of the first rendered
@@ -379,7 +379,7 @@ describe("handle.follow — composes with idle life", () => {
     handle.follow("window");
     move(doc, doc.defaultView, 700, 300);
 
-    const bodyPath = () => svg.children[0]!.children[3]!.getAttribute("d");
+    const bodyPath = () => svg.children[0]!.children[2]!.getAttribute("d");
     run(doc, 500);
     const a = bodyPath();
     run(doc, 1000);

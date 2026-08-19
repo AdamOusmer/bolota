@@ -95,7 +95,7 @@ function partsSvg(name: string, opts: BlobatarOptions = {}): string {
 
 /**
  * bloub engine adapter: `mountEngine` owns and draws the whole `<svg>`
- * subtree itself (body path, eyes, decor, blur filters) -- unlike
+ * subtree itself (body path, eyes, decor) -- unlike
  * `parts()`, there is no markup for the caller to assemble, only an empty
  * `<svg viewBox="0 0 100 100">` to hand it.
  *

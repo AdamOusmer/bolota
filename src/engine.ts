@@ -11,27 +11,24 @@
  * (`BloubBot.vue`'s `tick()` — read for reference, not ported: it is Vue
  * component code, out of scope per the porting instructions).
  *
- * Two things this file deliberately does NOT do, both to keep the port
- * verbatim rather than merely inspired-by:
+ * This file deliberately does NOT re-smooth `BotEngine.sample(t)`'s own pose
+ * numbers (eye matrices, the body path, decor params), to keep the port
+ * verbatim rather than merely inspired-by: `sample` is already a continuous,
+ * eased function of time — `easeOutQuint` throughout, no snapping, "moteur
+ * sans horloge" by its own doc comment — and reaching into a 64-point path
+ * string or an eye's serialized `matrix()` to filter its numbers a second
+ * time would mean parsing bloub's own output back apart, then re-adding lag
+ * on top of curves already tuned against the reference video. Rendering here
+ * is otherwise a direct, unfiltered pass-through of whatever `sample`
+ * returns — no motion blur or other post-processing (a prior version had a
+ * velocity-driven `feGaussianBlur` on the body/rings/particles/eyes; user
+ * call was to drop it and render sharp always, so it's gone rather than
+ * dormant).
  *
- * - It does not re-smooth `BotEngine.sample(t)`'s own pose numbers (eye
- *   matrices, the body path, decor params). `sample` is already a continuous,
- *   eased function of time — `easeOutQuint` throughout, no snapping, "moteur
- *   sans horloge" by its own doc comment — and reaching into a 64-point path
- *   string or an eye's serialized `matrix()` to filter its numbers a second
- *   time would mean parsing bloub's own output back apart, then re-adding
- *   lag on top of curves already tuned against the reference video. What
- *   *is* new and *is* damped below is this file's own addition: the blur
- *   amount (next point).
- * - Motion blur is `feGaussianBlur`, not afterimage copies. Trails need N
- *   retained historical nodes per fast element, which is exactly the
- *   per-frame allocation the "~20 engines at 60fps" budget rules out; a
- *   filter is one attribute toggle, zero extra nodes.
- *
- * `<filter>`/`<defs>` ids are namespaced per instance (`uid` below) — the
- * static core (`blobatar()`, `parts()`) guarantees no element ids at all, a
- * guarantee this file does not extend and does not need to: its ids never
- * leave the `<g>` this call to `mountEngine` owns.
+ * `<defs>` ids are namespaced per instance (`uid` below) — the static core
+ * (`blobatar()`, `parts()`) guarantees no element ids at all, a guarantee
+ * this file does not extend and does not need to: its ids never leave the
+ * `<g>` this call to `mountEngine` owns.
  */
 import type { BlobatarOptions } from "./blobatar";
 import { _layout } from "./blobatar";
@@ -185,52 +182,6 @@ function seededSilhouette(
   return radii;
 }
 
-/**
- * Critically-damped exponential approach: moves `from` toward `to` by the
- * fraction of the remaining gap that `dt/tau` of real time covers, frame
- * rate independent (halves the gap every `tau * ln 2` seconds regardless of
- * how `dt` is chopped up). Used below only for the blur amount — see the
- * file header for why it stops there.
- */
-const damp = (from: number, to: number, dt: number, tau: number) =>
-  to + (from - to) * Math.exp(-dt / tau);
-
-/** Leading `M<x> <y>` of a path string — the cheapest stable point on a body
- * outline to track frame-to-frame, without reparsing the other 63. */
-const START_POINT = /^M(-?[\d.]+) (-?[\d.]+)/;
-function firstPoint(d: string, out: { x: number; y: number }): boolean {
-  const m = START_POINT.exec(d);
-  if (!m) return false;
-  out.x = +m[1]!;
-  out.y = +m[2]!;
-  return true;
-}
-
-/** Translate (`e`, `f`) of an eye's `matrix(a,b,c,d,e,f)` transform — the
- * same "one representative point drives the whole zone's blur" idea as
- * `firstPoint` above, applied to the eyes so a fast cursor-follow sweep
- * (see `aimGaze` below) gets the same velocity-proportional blur treatment
- * as the body/arcs/dots already do. */
-const MATRIX_TRANSLATE = /matrix\([^,]+,[^,]+,[^,]+,[^,]+,(-?[\d.]+),(-?[\d.]+)\)/;
-function eyeTranslate(matrix: string, out: { x: number; y: number }): boolean {
-  const m = MATRIX_TRANSLATE.exec(matrix);
-  if (!m) return false;
-  out.x = +m[1]!;
-  out.y = +m[2]!;
-  return true;
-}
-
-/**
- * Speed-to-blur curve, shared by every fast element: 0 at rest, saturating
- * at `MAX_BLUR` once `speed` (viewBox units/second) clears `SATURATE`.
- * `SATURATE` is pitched at roughly an orbit ring's own linear speed
- * (~1.25 rev/s around a body-radius-scale orbit), so rings and spin sit near
- * the top of the curve while idle drift and ordinary morphs stay at zero.
- */
-const MAX_BLUR = 2.2;
-const SATURATE = 140; // viewBox units / second
-const blurFor = (speed: number) => Math.min(1, speed / SATURATE) * MAX_BLUR;
-
 // --- cursor-follow gaze (bloub port, src/bloub/gaze.ts) --------------------
 //
 // bloub's own `lookTarget` (BloubBot.vue's `aim()`) bakes in two things that
@@ -282,7 +233,7 @@ export function followLook(nx: number, ny: number): Look {
  * `BotEngine`'s own curves, untouched below). Not `bloub/math.ts`'s
  * `easings` — that file is a verbatim port and this curve has no bloub
  * equivalent, so it lives here instead, beside the rest of this bridge's
- * own math (`followLook` above, `damp`/`blurFor` earlier in this file).
+ * own math (`followLook` above).
  *
  * Standard cubic-bezier solve: `x(t)`/`y(t)` are the same third-degree
  * Bernstein form `easings.easeOutCubic` etc. expand from by hand, but a
@@ -449,60 +400,16 @@ export function mountEngine(
   const engine = new BotEngine(body.rx, "idle", seededSilhouette(body, draw, petals, extra), null);
   const uid = Math.random().toString(36).slice(2, 8);
 
-  // Three independent blur filters — body, rings, particles — each a single
-  // `feGaussianBlur` whose `stdDeviation` is the only thing that ever
-  // changes after mount. Built once, referenced by `url(#id)`, never
-  // rebuilt: a group either carries the `filter` attribute or does not.
-  const filterDefs = el(doc, "defs");
-  const mkFilter = (tag: string) => {
-    const fe = el(doc, "feGaussianBlur", { stdDeviation: 0 });
-    const filter = el(doc, "filter", {
-      id: `${uid}-${tag}`,
-      x: "-60%", y: "-60%", width: "220%", height: "220%",
-    });
-    filter.appendChild(fe);
-    filterDefs.appendChild(filter);
-    return fe;
-  };
-  const bodyBlurEl = mkFilter("blur-body");
-  const arcBlurEl = mkFilter("blur-arcs");
-  const dotBlurEl = mkFilter("blur-dots");
-  const eyeBlurEl = mkFilter("blur-eyes");
-
   const root = el(doc, "g", { transform: `translate(${body.cx} ${body.cy})` });
   const defs = el(doc, "defs");
   const back = el(doc, "g", { fill: "none", "stroke-linecap": "round" });
   const bodyPath = el(doc, "path", { fill: head });
   const eyes = el(doc, "g");
   const front = el(doc, "g", { fill: "none", "stroke-linecap": "round" });
-  root.append(filterDefs, defs, back, bodyPath, eyes, front);
+  root.append(defs, back, bodyPath, eyes, front);
   svgRoot.appendChild(root);
 
-  // Velocity bookkeeping, reused every frame rather than reallocated. Only
-  // one representative point per zone is tracked — the body's own leading
-  // path point (`firstPoint`, above), and the *first* arc's and *first*
-  // dot's own reference point — one number per zone is enough to drive one
-  // shared blur filter per zone, and it is the zone's blur that moves, not
-  // each element's individually.
-  const bodyPt = { x: 0, y: 0 };
-  let bodyPtValid = false;
-  let bodyBlur = 0;
-  const arcPt = { x: 0, y: 0 };
-  let arcPtValid = false;
-  let arcBlur = 0;
-  const dotPt = { x: 0, y: 0 };
-  let dotPtValid = false;
-  let dotBlur = 0;
-  // Only the first eye's own translate is tracked — same "one point per
-  // zone" budget as arcs/dots above, and both eyes move together (they
-  // share the same `Look`), so one is enough to drive a shared filter.
-  const eyePt = { x: 0, y: 0 };
-  let eyePtValid = false;
-  let eyeBlur = 0;
-
   const arcGroup = (frame: BotFrame, half: "back" | "front", group: SVGGElement) => {
-    const attrs: Record<string, string | number> = {};
-    if (arcBlur > 0.05) attrs.filter = `url(#${uid}-blur-arcs)`;
     group.replaceChildren(
       ...frame.arcs.map((a) =>
         el(doc, "path", {
@@ -510,15 +417,12 @@ export function mountEngine(
           stroke: `url(#${uid}-${a.id})`,
           "stroke-width": a.width,
           opacity: a.opacity,
-          ...attrs,
         }),
       ),
     );
   };
 
   const dotGroup = (frame: BotFrame, group: SVGGElement) => {
-    if (dotBlur > 0.05) group.setAttribute("filter", `url(#${uid}-blur-dots)`);
-    else group.removeAttribute("filter");
     group.replaceChildren(
       ...frame.dots.map((d) =>
         d.d
@@ -535,79 +439,6 @@ export function mountEngine(
 
   let dotsBack: SVGGElement | null = null;
   let dotsFront: SVGGElement | null = null;
-
-  /**
-   * Updates the three damped blur amounts from this frame's motion, given
-   * how much real time (`dt`, seconds) passed since the last one. Zero
-   * allocation: `bodyPt`/`arcPt`/`dotPt` are overwritten in place, never
-   * replaced. Only meaningful on the animated path (`tick`) — the reduced-
-   * motion static render never calls this, so its filters stay at 0 and are
-   * simply never attached (see `arcGroup`/`dotGroup`/body below).
-   */
-  const scratch = { x: 0, y: 0 };
-
-  const updateBlur = (frame: BotFrame, dt: number) => {
-    const speed = (prev: { x: number; y: number }, cur: { x: number; y: number }) =>
-      dt > 0 ? Math.hypot(cur.x - prev.x, cur.y - prev.y) / dt : 0;
-
-    if (firstPoint(frame.bodyPath, scratch)) {
-      if (dt > 0 && bodyPtValid) bodyBlur = damp(bodyBlur, blurFor(speed(bodyPt, scratch)), dt, 0.08);
-      bodyPt.x = scratch.x;
-      bodyPt.y = scratch.y;
-      bodyPtValid = true;
-    }
-
-    const a0 = frame.arcs[0];
-    if (dt > 0 && arcPtValid && a0) {
-      const cur = { x: a0.grad.x1, y: a0.grad.y1 };
-      arcBlur = damp(arcBlur, blurFor(speed(arcPt, cur)), dt, 0.08);
-      arcPt.x = cur.x;
-      arcPt.y = cur.y;
-    } else if (a0) {
-      arcPt.x = a0.grad.x1;
-      arcPt.y = a0.grad.y1;
-      arcPtValid = true;
-    } else {
-      arcPtValid = false;
-      arcBlur = damp(arcBlur, 0, Math.max(dt, 0.001), 0.08);
-    }
-
-    const d0 = frame.dots[0];
-    if (dt > 0 && dotPtValid && d0) {
-      const cur = { x: d0.x, y: d0.y };
-      dotBlur = damp(dotBlur, blurFor(speed(dotPt, cur)), dt, 0.08);
-      dotPt.x = cur.x;
-      dotPt.y = cur.y;
-    } else if (d0) {
-      dotPt.x = d0.x;
-      dotPt.y = d0.y;
-      dotPtValid = true;
-    } else {
-      dotPtValid = false;
-      dotBlur = damp(dotBlur, 0, Math.max(dt, 0.001), 0.08);
-    }
-
-    // Fast cursor-follow retargets (`aimGaze`) are the main source of eye
-    // speed here — idle wander and blink never move the eye centers this
-    // fast — so this is deliberately the same damped speed->blur curve as
-    // body/arcs/dots, not a bespoke one: a quick sweep gets a *subtle* blur
-    // (see `MAX_BLUR`/`SATURATE`'s own doc comment), never a heavy smear.
-    const e0 = frame.eyes[0];
-    if (e0 && eyeTranslate(e0.matrix, scratch)) {
-      if (dt > 0 && eyePtValid) eyeBlur = damp(eyeBlur, blurFor(speed(eyePt, scratch)), dt, 0.08);
-      eyePt.x = scratch.x;
-      eyePt.y = scratch.y;
-      eyePtValid = true;
-    } else {
-      eyePtValid = false;
-      eyeBlur = damp(eyeBlur, 0, Math.max(dt, 0.001), 0.08);
-    }
-
-    bodyBlurEl.setAttribute("stdDeviation", String(Math.round(bodyBlur * 100) / 100));
-    arcBlurEl.setAttribute("stdDeviation", String(Math.round(arcBlur * 100) / 100));
-    dotBlurEl.setAttribute("stdDeviation", String(Math.round(dotBlur * 100) / 100));
-    eyeBlurEl.setAttribute("stdDeviation", String(Math.round(eyeBlur * 100) / 100));
-  };
 
   const render = (frame: BotFrame) => {
     defs.replaceChildren(
@@ -647,11 +478,7 @@ export function mountEngine(
 
     bodyPath.setAttribute("d", frame.bodyPath);
     bodyPath.setAttribute("opacity", String(frame.bodyAlpha));
-    if (bodyBlur > 0.05) bodyPath.setAttribute("filter", `url(#${uid}-blur-body)`);
-    else bodyPath.removeAttribute("filter");
 
-    if (eyeBlur > 0.05) eyes.setAttribute("filter", `url(#${uid}-blur-eyes)`);
-    else eyes.removeAttribute("filter");
     eyes.replaceChildren(
       ...frame.eyes.map((e) =>
         el(doc, "path", { d: e.d, transform: e.matrix, opacity: e.alpha, fill: eye }),
@@ -842,8 +669,7 @@ export function mountEngine(
   function tick(ms: number) {
     raf = doc.defaultView!.requestAnimationFrame(tick);
     // Tighter than bloub's own 64ms: a hitch slows time down instead of
-    // jumping the pose forward, which reads as a stutter rather than a snap
-    // — the same "nothing ever snaps" goal the blur/damping above serves.
+    // jumping the pose forward, which reads as a stutter rather than a snap.
     // Still bounded, for the same reason bloub bounds it: a backgrounded tab
     // resumes without a multi-second leap when rAF comes back.
     const dt = last ? Math.min((ms - last) / 1000, 0.034) : 0;
@@ -891,7 +717,6 @@ export function mountEngine(
 
     aimGaze(clock);
     const frame = engine.sample(clock);
-    updateBlur(frame, dt);
     render(frame);
   }
 
@@ -919,15 +744,6 @@ export function mountEngine(
       stateStart = clock;
       loop = !!o?.loop;
       engine.setState(id, clock);
-      // A state switch can jump the body's/arcs'/dots' leading reference
-      // point discontinuously (e.g. orbit's spinning-triangle point to
-      // idle's resting seeded-body point) — invalidating the velocity
-      // trackers here means that jump is never read as one frame of
-      // enormous speed, which would otherwise spike the damped blur high
-      // right as the state settles down, the opposite of what it should do.
-      bodyPtValid = false;
-      arcPtValid = false;
-      dotPtValid = false;
       ensureRunning();
     },
     setExpression(name) {

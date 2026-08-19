@@ -95,15 +95,15 @@ function run(doc: FakeDocument, totalMs: number, frameMs = 16) {
 }
 
 /** The root `<g>`'s children, in the fixed order `mountEngine` appends
- * them: filterDefs, defs, back, bodyPath, eyes, front. White-box, and
- * deliberately so — this suite exists to look inside the render output. */
+ * them: defs, back, bodyPath, eyes, front. White-box, and deliberately so —
+ * this suite exists to look inside the render output. */
 function parts(svg: FakeElement) {
   const root = svg.children[0]!;
   return {
-    back: root.children[2]!,
-    bodyPath: root.children[3]!,
-    eyes: root.children[4]!,
-    front: root.children[5]!,
+    back: root.children[1]!,
+    bodyPath: root.children[2]!,
+    eyes: root.children[3]!,
+    front: root.children[4]!,
   };
 }
 
@@ -437,36 +437,6 @@ describe("engine idle silhouette matches the static renderer, every shape family
       expect(engine.h, `${seed} (${shape}) height`).toBeLessThan(stat.h * 1.1);
     });
   }
-});
-
-describe("motion blur decays when velocity drops", () => {
-  function bodyStdDev(svg: FakeElement): number {
-    const filterDefs = svg.children[0]!.children[0]!;
-    const bodyFilter = filterDefs.children[0]!;
-    const fe = bodyFilter.children[0]!;
-    return Number(fe.getAttribute("stdDeviation") ?? "0");
-  }
-
-  test("orbit's body blur ramps up while spinning, then decays to ~0 once velocity is actually low", () => {
-    const { doc, svg, handle } = mount();
-    handle.play("orbit", { loop: true });
-    run(doc, 600); // several fast frames — enough for the damper to climb
-    const spinning = bodyStdDev(svg as unknown as FakeElement);
-    expect(spinning).toBeGreaterThan(0.3);
-
-    handle.play("idle"); // velocity drops hard: breathing/blinking only —
-    // but not instantly. `setState` crossfades over idle's own `morph`
-    // (0.45s), and the body is still blending *from* orbit's fast pose for
-    // that whole window, which is genuine motion, not the bug — the 300ms
-    // budget applies from the point velocity is actually low, so this
-    // clears the morph window first.
-    run(doc, 500);
-    const midway = bodyStdDev(svg as unknown as FakeElement);
-    run(doc, 300);
-    const settled = bodyStdDev(svg as unknown as FakeElement);
-    expect(settled).toBeLessThan(0.05);
-    expect(settled).toBeLessThanOrEqual(midway);
-  });
 });
 
 describe("body profile == seeded profile at all times (modulo scale/transform/collapse), every state", () => {
