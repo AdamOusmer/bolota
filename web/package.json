@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "//prebuild": "The site links the library through `file:..`, and bun does not run a file: dependency's own prepare script, so nothing else creates the dist/ the exports map points at. A clean checkout (CI, a Pages build) therefore fails to resolve @luzir/bolota until the library is built, which is what this does. Bun runs pre<script> automatically before `build`. The install here is deliberately not --frozen-lockfile: the deploy host runs an older bun than this repo's CI, and its job is only to make the library buildable. CI enforces the lockfile on its own.",
-    "prebuild": "cd .. && bun install && bun run build",
+    "//prebuild": "The site links the library through `file:..`, and bun does not run a file: dependency's own prepare script, so nothing else creates the dist/ the exports map points at. A clean checkout (CI, a Pages build) therefore fails to resolve @luzir/bolota until the library is built, which is what this does. Bun runs pre<script> automatically before `build`. The install here is deliberately not --frozen-lockfile: the deploy host runs an older bun than this repo's CI, and its job is only to make the library buildable. CI enforces the lockfile on its own. NODE_ENV is forced too: the deploy host sets it to production, under which bun prunes devDependencies and the library's own build loses the TypeScript it compiles declarations with.",
+    "prebuild": "cd .. && NODE_ENV=development bun install && bun run build",
     "build": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check",

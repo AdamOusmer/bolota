@@ -10,6 +10,13 @@
     // consumer's "go to definition" at a path that does not exist in their
     // node_modules. `declaration` alone is everything type resolution needs.
     "declarationMap": false,
+    // Empty, overriding the root config's ["bun"]: this project only compiles
+    // `src`, which uses no Bun globals (they live in `test` and `scripts`), so
+    // requiring @types/bun here made the declaration emit fail wherever dev
+    // dependencies are pruned. A deploy host that sets NODE_ENV=production
+    // gets a devDependency-free install, and the build died on a type package
+    // the output never needed.
+    "types": [],
     "rootDir": "src",
     "outDir": "dist"
   },
