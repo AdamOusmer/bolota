@@ -221,6 +221,31 @@ export const FOLLOW_MAX_YAW = MAX_YAW_DRIFT;
 export const FOLLOW_MAX_PITCH = MAX_PITCH_DRIFT;
 
 /**
+ * How far the tracked gaze reaches at the top and the bottom of the viewport.
+ *
+ * The rest bias (`PITCH`, 10deg above the equator, bloub's own "attentive
+ * rather than absent" number) used to be the CENTER of a symmetric deflection:
+ * `PITCH +- FOLLOW_MAX_PITCH`, i.e. +26deg looking up but only -6deg looking
+ * down. Rendered, that is 57px of travel above the eyes' rest height against
+ * 10px below it on a 100-unit body: the eyes visibly climbed to the top of the
+ * head and then barely acknowledged a pointer at the bottom of the screen.
+ * Reported as "the eyes have difficulty going down", and it was never the
+ * containment solve — `eyefit.ts` clears -30deg with the worst seed at 0.68 of
+ * the local body radius, nowhere near the edge.
+ *
+ * bloub has the same shape of bug and worse numbers (`PITCH 10 +- PITCH_MAX
+ * 13`, so -3deg down against +23deg up), which is why porting it verbatim
+ * carried this over. It matters less there: bloub's bot sits in a settings
+ * panel it is looking at, not on a page whose content is mostly BELOW it.
+ *
+ * So the deflection is two half-ranges now, each a lerp from the rest bias out
+ * to its own extreme, symmetric in absolute terms rather than around the bias.
+ * Up is unchanged at +26deg; down reaches its mirror at -26deg.
+ */
+export const FOLLOW_PITCH_UP = PITCH + FOLLOW_MAX_PITCH;
+export const FOLLOW_PITCH_DOWN = -FOLLOW_PITCH_UP;
+
+/**
  * Pure pointer-position -> gaze-target math, no DOM: `nx`/`ny` are already
  * normalized to [-1, 1] (see `aimGaze`, below, for how a raw pointer
  * position becomes these). Exported for direct testing of the deflection
@@ -228,10 +253,14 @@ export const FOLLOW_MAX_PITCH = MAX_PITCH_DRIFT;
  * "test the pure rule on its own" split `gaze.ts`'s own `lookTarget` uses.
  */
 export function followLook(nx: number, ny: number): Look {
+  // positive pitch = looking up, while screen y goes down, so `ny <= 0` is the
+  // upper half of the viewport. Each half is its own lerp out of the rest bias
+  // (see `FOLLOW_PITCH_UP`/`FOLLOW_PITCH_DOWN`): one shared amplitude around
+  // the bias is what made the downward half almost inert.
+  const extreme = ny <= 0 ? FOLLOW_PITCH_UP : FOLLOW_PITCH_DOWN;
   return {
     yaw: nx * FOLLOW_MAX_YAW,
-    // positive pitch = looking up, while screen y goes down
-    pitch: PITCH - ny * FOLLOW_MAX_PITCH,
+    pitch: PITCH + Math.abs(ny) * (extreme - PITCH),
     mix: 1,
     spin: 0,
     wander: 0,
