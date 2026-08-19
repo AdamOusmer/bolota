@@ -203,7 +203,7 @@ describe("the tinted palettes", () => {
 
   test("heat 0 is the palette untouched", () => {
     // The morph runs *through* here on the way out, so a tint that does not
-    // resolve to exactly the resting colour would leave the blobatar a shade off
+    // resolve to exactly the resting colour would leave the bolota a shade off
     // its own identity every time it stopped being angry.
     for (const [name, tint] of TINTS) {
       for (const h of HUES) {
@@ -216,7 +216,7 @@ describe("the tinted palettes", () => {
   });
 
   test("the tone set survives the trip rather than collapsing onto one colour", () => {
-    // Half the point of deriving the pair per seed. If every angry blobatar
+    // Half the point of deriving the pair per seed. If every angry bolota
     // converged on the same colour, the grid would stop reading as a crowd at
     // precisely the moment it is loudest.
     for (const [name, tint] of TINTS) {

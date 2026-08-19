@@ -1,4 +1,4 @@
-/** Blobatar 2's frozen seed→markup contract. A failure is not a fixture update. */
+/** Bolota 2's frozen seed→markup contract. A failure is not a fixture update. */
 
 import { describe, expect, test } from "bun:test";
 import { HISTOGRAM_SEEDS, cases, histogram, markup } from "./golden/corpus";

@@ -243,8 +243,8 @@ describe("handle.follow — pointer moves the eyes", () => {
     const right = eyeAt(600, 100).x; // nx = +1
 
     // Sign of screen-space x per yaw is an engine-internal projection detail
-    // (pinned separately by `test/gaze.test.ts`'s "suit le curseur dans le
-    // bon sens" against `lookTarget` itself) — what this test owns is that
+    // (pinned separately by `test/gaze.test.ts`'s "follows the cursor in the
+    // right sense" against `lookTarget` itself) — what this test owns is that
     // the bridge actually wires pointer input through to a visible,
     // monotonic response, in one consistent direction across the whole
     // sweep.
@@ -440,7 +440,7 @@ describe("handle.follow — composes with idle life", () => {
     // `play()` only calls `engine.setState`, never `engine.setLook` — the
     // Look/gaze subsystem and the state/pose subsystem are independent in
     // `BotEngine` (see `bloub/engine.ts`: `setState` touches `cur`/`prev`/
-    // `tCur`/`departFige` only). Re-playing the *same already-looping*
+    // `tCur`/`frozenStart` only). Re-playing the *same already-looping*
     // state mid-track should therefore leave the tracked target untouched.
     const { doc, svg, handle } = mount();
     handle.play("idle", { loop: true });

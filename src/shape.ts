@@ -236,7 +236,7 @@ export function taper(cx: number, cy: number, rx: number, ry: number, tip: numbe
 
 /**
  * Capsule (stadium) at `(cx, cy)`, width `w`, height `h`, rotated `rot`
- * degrees — bloub's own measured eye shape, ported into blobatar's own
+ * degrees — bloub's own measured eye shape, ported into bolota's own
  * calling convention. Ported from bloub
  * (https://github.com/jeremyPerret/bloub), MIT License, Copyright (c) 2026
  * Jérémy Perret: `capsulePath(w, h)` in its `src/bot/shape.ts` (defined

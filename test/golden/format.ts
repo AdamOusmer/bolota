@@ -23,7 +23,7 @@ export function hash(markup: string): string {
   return new Bun.CryptoHasher("sha256").update(markup).digest("hex").slice(0, 16);
 }
 
-const HEADER = (gen: string) => `# blobatar — ${gen} golden fixture
+const HEADER = (gen: string) => `# bolota — ${gen} golden fixture
 #
 # Every line here is a promise: this seed renders this markup, and it always
 # will. A diff in this file is a *breaking change* — it means somebody's avatar

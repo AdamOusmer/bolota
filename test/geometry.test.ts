@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { blobatar } from "../src/blobatar";
+import { bolota } from "../src/bolota";
 import { blobPath, polygon, superellipse } from "../src/shape";
 import { style } from "../src/styles/blob";
 import type { Layout } from "../src/styles/compose";
@@ -32,7 +32,7 @@ function corners(e: { cx: number; cy: number; rx: number; ry: number; rot: numbe
 describe("the frame", () => {
   test("all geometry stays inside the viewBox", () => {
     for (const s of SEEDS) {
-      const svg = blobatar(s, { background: false });
+      const svg = bolota(s, { background: false });
       for (const m of svg.matchAll(/ d="([^"]+)"/g)) {
         for (const n of m[1]!.match(/-?\d+\.?\d*/g)!.map(Number)) {
           expect(n).toBeGreaterThanOrEqual(0);
@@ -87,10 +87,10 @@ describe("path emission", () => {
 });
 
 /**
- * Blobatar 2's containment, which is a different proof from the previous generation's.
+ * Bolota 2's containment, which is a different proof from the previous generation's.
  *
  * gen1 could measure the eye cluster against the body radius because all six of
- * its silhouettes were roughly round and roughly centred. Half of Blobatar 2's are
+ * its silhouettes were roughly round and roughly centred. Half of Bolota 2's are
  * not — a triangle's usable interior is a fraction of its circumradius, a
  * capsule's is squat, a droplet's is not centred on the frame — so the layout
  * states a `face` and everything below checks that the face is honest: that it
@@ -233,7 +233,7 @@ describe("blob", () => {
 
   test("all geometry stays inside the viewBox", () => {
     for (const s of SEEDS) {
-      const svg = blobatar(s, { background: false });
+      const svg = bolota(s, { background: false });
       for (const m of svg.matchAll(/ d="([^"]+)"|<circle ([^>]+)>/g)) {
         const src = m[1] ?? m[2]!;
         for (const n of src.match(/-?\d+\.?\d*/g)!.map(Number)) {
@@ -247,7 +247,7 @@ describe("blob", () => {
   /**
    * The same invariants under configuration rather than under seeds — the
    * corners a hashed sweep barely samples and an editor's sliders reach in one
-   * drag. Same construction as the previous generation's block above, over Blobatar 2's key list.
+   * drag. Same construction as the previous generation's block above, over Bolota 2's key list.
    */
   describe("under trait overrides", () => {
     const MAPS: Record<string, number>[] = [];
@@ -284,7 +284,7 @@ describe("blob", () => {
 
     test("all geometry stays inside the viewBox", () => {
       for (const m of MAPS) {
-        const svg = blobatar("cfg", { traits: m, background: false });
+        const svg = bolota("cfg", { traits: m, background: false });
         expect(svg).not.toContain("NaN");
         for (const g of svg.matchAll(/ d="([^"]+)"|<circle ([^>]+)>/g)) {
           for (const n of (g[1] ?? g[2]!).match(/-?\d+\.?\d*/g)!.map(Number)) {
@@ -337,7 +337,7 @@ describe("polygon", () => {
 
   test("full rounding drops the straight runs instead of emitting empty ones", () => {
     // At round: 1 the two cuts on an edge meet at its midpoint, so every `L`
-    // would be zero-length. One per side, on a shape drawn once per blobatar.
+    // would be zero-length. One per side, on a shape drawn once per bolota.
     expect(polygon({ cx: 50, cy: 50, rx: 20, ry: 20, sides: 6, round: 1 })).not.toContain("L");
     expect(polygon({ cx: 50, cy: 50, rx: 20, ry: 20, sides: 6, round: 0.9 })).toContain("L");
   });

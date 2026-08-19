@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { _layout, blobatar } from "../src/blobatar";
+import { _layout, bolota } from "../src/bolota";
 import { engineStates, mountEngine, type EngineHandle } from "../src/engine";
 import { runSequence } from "../src/sequences";
 
@@ -425,7 +425,7 @@ describe("engine idle silhouette matches the static renderer, every shape family
       const { doc, svg } = mount(seed);
       run(doc, 50); // a couple of idle frames, well inside one breath cycle
       const engine = bbox(parts(svg as unknown as FakeElement).bodyPath.getAttribute("d")!);
-      const stat = staticBbox(blobatar(seed, { background: false }));
+      const stat = staticBbox(bolota(seed, { background: false }));
 
       // Tight on purpose: this is the exact bug that shipped. A tolerance
       // loose enough to hide a wrong-aspect reconstruction defeats the
@@ -465,7 +465,7 @@ describe("body profile == seeded profile at all times (modulo scale/transform/co
   const STATES = ["idle", "play", "swirl"] as const;
 
   for (const seed of SEEDS) {
-    const stat = staticBbox(blobatar(seed, { background: false }));
+    const stat = staticBbox(bolota(seed, { background: false }));
     const staticAspect = stat.w / stat.h;
 
     for (const state of STATES) {

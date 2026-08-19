@@ -1,17 +1,17 @@
 /**
- * What Blobatar 2's golden fixture covers.
+ * What Bolota 2's golden fixture covers.
  *
  * Shared by the writer and the test so they cannot drift into recording one
  * corpus and checking another. The contract is seed→markup: bands, geometry
  * ranges, tone edges, expression geometry, and every rendering option below.
  */
 
-import { blobatar } from "../../src/blobatar";
+import { bolota } from "../../src/bolota";
 import { layout } from "../../src/blob";
 import {
   happy, idle, love, mad, sad, scared, shy, sick, sleepy, smug, surprised, unsure, wink,
 } from "../../src/expression";
-import type { BlobatarOptions } from "../../src/render";
+import type { BolotaOptions } from "../../src/render";
 import { traits } from "../../src/traits";
 
 const TEMPLATES: ((i: number) => string)[] = [
@@ -34,7 +34,7 @@ export const SEEDS = Array.from(
 
 const SWEEP_SEEDS = SEEDS.slice(0, 12);
 
-const OPTION_CASES: [string, BlobatarOptions][] = [
+const OPTION_CASES: [string, BolotaOptions][] = [
   ["bg:none", { background: false }],
   ["bg:square", { background: "square" }],
   ["bg:circle", { background: "circle" }],
@@ -50,7 +50,7 @@ const OPTION_CASES: [string, BlobatarOptions][] = [
   ["normalize:false", { normalize: false }],
   ...Object.entries({
     idle, happy, sad, mad, surprised, wink, sleepy, smug, unsure, scared, love, shy, sick,
-  }).map(([name, e]) => [`expression:${name}`, { expression: e }] as [string, BlobatarOptions]),
+  }).map(([name, e]) => [`expression:${name}`, { expression: e }] as [string, BolotaOptions]),
 ];
 
 /** Midpoints of gen2's bands, duplicated deliberately to catch moved bands. */
@@ -70,26 +70,26 @@ const SHAPES: [string, number][] = [
 export function markup(): [string, string][] {
   const out = SHAPES.map(([shape, v]) => [
     `shape:${shape}`,
-    blobatar("alain", { traits: { shape: v } }),
+    bolota("alain", { traits: { shape: v } }),
   ] as [string, string]);
   out.push(
-    ["plain", blobatar("alain")],
-    ["backdrop", blobatar("alain", { background: "squircle" })],
-    ["posed", blobatar("alain", { expression: happy })],
-    ["tinted", blobatar("alain", { expression: mad })],
-    ["titled", blobatar("alain", { title: "Alain" })],
-    ["sized", blobatar("alain", { size: 64 })],
-    ["configured", blobatar("alain", { traits: { shape: 0.96, "eye.ratio": 0, hue: 0.5 } })],
-    ["astral", blobatar("🦊")],
+    ["plain", bolota("alain")],
+    ["backdrop", bolota("alain", { background: "squircle" })],
+    ["posed", bolota("alain", { expression: happy })],
+    ["tinted", bolota("alain", { expression: mad })],
+    ["titled", bolota("alain", { title: "Alain" })],
+    ["sized", bolota("alain", { size: 64 })],
+    ["configured", bolota("alain", { traits: { shape: 0.96, "eye.ratio": 0, hue: 0.5 } })],
+    ["astral", bolota("🦊")],
   );
   return out;
 }
 
 export function* cases(): Generator<[string, string]> {
-  for (const seed of SEEDS) yield [seed, blobatar(seed)];
+  for (const seed of SEEDS) yield [seed, bolota(seed)];
   for (const seed of SWEEP_SEEDS) {
     for (const [label, opts] of OPTION_CASES) {
-      yield [`${seed}\0${label}`, blobatar(seed, opts)];
+      yield [`${seed}\0${label}`, bolota(seed, opts)];
     }
   }
 }

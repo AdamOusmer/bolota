@@ -2,52 +2,56 @@
  * Ported verbatim from bloub (https://github.com/jeremyPerret/bloub),
  * MIT License, Copyright (c) 2026 Jérémy Perret.
  *
- * Named face expressions (gaze, eye shape) and their blending. Not adapted — see ../engine.ts for the blobatar-specific bridge
+ * Named face expressions (gaze, eye shape) and their blending. Not adapted — see ../engine.ts for the bolota-specific bridge
  * (seed-to-silhouette conversion, DOM mounting, rAF loop). This file's
- * own logic, comments and variable names (French, in the original) are
- * untouched beyond TS-strict fixes and import paths.
+ * own logic and structure are untouched beyond TS-strict fixes, import
+ * paths, and translating the original French comments/identifiers to
+ * English (see ../engine.ts's header for the provenance note) — including
+ * the `ExpressionId` picker names, now the English names below rather than
+ * the French originals (`neutre`, `attentif`, `surpris`, `excite`,
+ * `heureux`, `hilare`, `colere`, `triste`, `effraye`, `mefiant`, `confus`,
+ * `curieux`, `fier`, `timide`, `blase`, `somnolent`).
  */
 import { EYE_H, EYE_SPLIT, EYE_W, REST_GAZE, type HeadGaze } from './face'
 import { lerp } from './math'
 import type { EyeCfg } from './states'
 
 /**
- * Expression de repos du bot.
+ * The bot's resting expression.
  *
- * Le visage ne tient qu'à deux gélules, donc tout se joue sur quatre leviers :
- * l'orientation de la tête, l'écart des yeux, leurs proportions, et
- * l'inclinaison propre de chaque œil. C'est ce dernier qui permet la colère et
- * la tristesse : elles demandent des inclinaisons EN MIROIR (les hauts qui
- * convergent ou divergent), impossible avec le seul roulis de tête qui incline
- * les deux yeux du même côté.
+ * The face is only two capsules, so everything rides on four levers: head
+ * orientation, eye separation, their proportions, and each eye's own tilt.
+ * It's this last one that makes anger and sadness possible: they need
+ * MIRRORED tilts (the tops converging or diverging), which is impossible
+ * with head roll alone, since that tilts both eyes the same way.
  *
- * Seul l'état de repos porte cette expression. Les états expressifs de la vidéo
- * (clin d'œil, yeux écarquillés, notification) gardent la leur : c'est elle
- * qu'on est venu reproduire.
+ * Only the resting state carries this expression. The video's expressive
+ * states (wink, wide eyes, notification) keep their own: that's the one
+ * we came to reproduce.
  *
- * Les amplitudes s'appuient sur bible-strong-avatar-lab, qui expose le même
- * modèle (tête X/Y/Z, largeur et hauteur par œil, écart, angle par œil) : chez
- * eux la largeur va de 0,8 à 2,7 fois le neutre, la hauteur de 0,3 à 1,5, et
- * les angles jusqu'à ±80°. On reste dans cette enveloppe.
+ * The amplitudes lean on bible-strong-avatar-lab, which exposes the same
+ * model (head X/Y/Z, width and height per eye, separation, angle per eye):
+ * there, width ranges 0.8 to 2.7 times neutral, height 0.3 to 1.5, and
+ * angles up to ±80°. This stays within that envelope.
  */
-/** Enumeres pour que la couche i18n verifie leurs traductions a la compilation. */
+/** Enumerated so the i18n layer checks their translations at compile time. */
 export type ExpressionId =
-  | 'neutre'
-  | 'attentif'
-  | 'surpris'
-  | 'excite'
-  | 'heureux'
-  | 'hilare'
-  | 'colere'
-  | 'triste'
-  | 'effraye'
-  | 'mefiant'
-  | 'confus'
-  | 'curieux'
-  | 'fier'
-  | 'timide'
-  | 'blase'
-  | 'somnolent'
+  | 'neutral'
+  | 'attentive'
+  | 'surprised'
+  | 'excited'
+  | 'happy'
+  | 'laughing'
+  | 'angry'
+  | 'sad'
+  | 'scared'
+  | 'suspicious'
+  | 'confused'
+  | 'curious'
+  | 'proud'
+  | 'shy'
+  | 'unimpressed'
+  | 'sleepy'
 
 export interface BotExpression {
   id: ExpressionId
@@ -56,10 +60,10 @@ export interface BotExpression {
   eyes: [EyeCfg, EyeCfg]
 }
 
-/** `tilt` en degrés, positif = le haut de la gélule part vers la droite. */
+/** `tilt` in degrees, positive = the top of the capsule leans right. */
 const eye = (w: number, h: number, tilt = 0, open = 1): EyeCfg => ({ w, h, tilt, open })
 
-/** Les deux yeux identiques, inclinaisons en miroir si `tilt` est fourni. */
+/** Both eyes identical, mirrored tilts if `tilt` is given. */
 const pair = (w: number, h: number, tilt = 0, open = 1): [EyeCfg, EyeCfg] => [
   eye(w, h, tilt, open),
   eye(w, h, -tilt, open)
@@ -67,109 +71,109 @@ const pair = (w: number, h: number, tilt = 0, open = 1): [EyeCfg, EyeCfg] => [
 
 export const EXPRESSIONS: BotExpression[] = [
   {
-    // la pose relevée image par image sur la vidéo de référence
-    id: 'neutre',
+    // the pose measured frame by frame off the reference video
+    id: 'neutral',
     gaze: { ...REST_GAZE },
     split: EYE_SPLIT,
     eyes: [eye(EYE_W, EYE_H), eye(EYE_W, EYE_H)]
   },
   {
-    id: 'attentif',
+    id: 'attentive',
     gaze: { yaw: 4, pitch: 5, roll: -4 },
     split: 16,
     eyes: pair(0.21, 0.44)
   },
   {
-    id: 'surpris',
+    id: 'surprised',
     gaze: { yaw: 3, pitch: -3, roll: 0 },
     split: 19,
     eyes: pair(0.45, 0.47)
   },
   {
-    id: 'excite',
+    id: 'excited',
     gaze: { yaw: 6, pitch: -14, roll: 0 },
     split: 19.5,
     eyes: pair(0.4, 0.56, -10)
   },
   {
-    // yeux plissés en arc : les hauts convergent légèrement
-    id: 'heureux',
+    // eyes squinted into an arc: the tops converge slightly
+    id: 'happy',
     gaze: { yaw: 5, pitch: 9, roll: 0 },
     split: 17,
     eyes: pair(0.27, 0.17, 14)
   },
   {
-    id: 'hilare',
+    id: 'laughing',
     gaze: { yaw: 4, pitch: 14, roll: 0 },
     split: 18,
     eyes: pair(0.34, 0.13, 20)
   },
   {
-    // hauts des yeux qui convergent fort vers le centre + yeux étrécis
-    id: 'colere',
+    // eye tops converge sharply toward center + eyes narrowed
+    id: 'angry',
     gaze: { yaw: 3, pitch: 7, roll: 0 },
     split: 17,
     eyes: pair(0.34, 0.15, 30)
   },
   {
-    // l'inverse : les hauts divergent, et le regard tombe
-    id: 'triste',
+    // the opposite: the tops diverge, and the gaze drops
+    id: 'sad',
     gaze: { yaw: 3, pitch: -13, roll: 0 },
     split: 16,
     eyes: pair(0.22, 0.4, -28)
   },
   {
-    id: 'effraye',
+    id: 'scared',
     gaze: { yaw: 2, pitch: -20, roll: 0 },
     split: 20.5,
     eyes: pair(0.4, 0.6)
   },
   {
-    // un œil franchement plus fermé que l'autre
-    id: 'mefiant',
+    // one eye noticeably more closed than the other
+    id: 'suspicious',
     gaze: { yaw: 12, pitch: 6, roll: -6 },
     split: 16,
     eyes: [eye(0.21, 0.4), eye(0.22, 0.15)]
   },
   {
-    // asymétrique sur les deux axes : tailles ET inclinaisons dépareillées.
-    // L'œil plissé est volontairement plat (rapport 1,6) : à un rapport proche
-    // de 1 il serait rond, et son inclinaison ne se verrait pas.
-    id: 'confus',
+    // asymmetric on both axes: sizes AND tilts mismatched.
+    // The squinted eye is deliberately flat (ratio 1.6): at a ratio close
+    // to 1 it would read round, and its tilt wouldn't show.
+    id: 'confused',
     gaze: { yaw: -14, pitch: 3, roll: 8 },
     split: 16.5,
     eyes: [eye(0.2, 0.44, -18), eye(0.28, 0.17, 14)]
   },
   {
-    // la tête penche : c'est le roulis qui porte la curiosité
-    id: 'curieux',
+    // the head tilts: it's the roll that carries the curiosity
+    id: 'curious',
     gaze: { yaw: 16, pitch: -9, roll: -15 },
     split: 16.5,
     eyes: [eye(0.24, 0.46, -8), eye(0.2, 0.38, -8)]
   },
   {
-    id: 'fier',
+    id: 'proud',
     gaze: { yaw: 5, pitch: 17, roll: 0 },
     split: 17,
     eyes: pair(0.3, 0.15, 18)
   },
   {
-    id: 'timide',
+    id: 'shy',
     gaze: { yaw: -19, pitch: -14, roll: -7 },
     split: 14,
     eyes: pair(0.17, 0.3)
   },
   {
-    // fentes horizontales et regard qui part sur le côté
-    id: 'blase',
+    // horizontal slits and a gaze that drifts to the side
+    id: 'unimpressed',
     gaze: { yaw: -22, pitch: 2, roll: 0 },
     split: 16,
     eyes: pair(0.3, 0.12)
   },
   {
-    // paupières à moitié tombées : on passe par `open`, donc l'écrasement
-    // vertical à l'écran, le même mécanisme que le clignement
-    id: 'somnolent',
+    // half-lowered eyelids: routed through `open`, so the same vertical
+    // on-screen squash mechanism as blinking
+    id: 'sleepy',
     gaze: { yaw: 6, pitch: -9, roll: -3 },
     split: 16,
     eyes: pair(0.2, 0.42, 0, 0.42)
@@ -177,7 +181,7 @@ export const EXPRESSIONS: BotExpression[] = [
 ]
 
 export const EXPRESSION_BY_ID = new Map<string, BotExpression>(EXPRESSIONS.map((e) => [e.id, e]))
-export const DEFAULT_EXPRESSION = 'neutre'
+export const DEFAULT_EXPRESSION = 'neutral'
 
 const lerpEyeCfg = (a: EyeCfg, b: EyeCfg, t: number): EyeCfg => ({
   w: lerp(a.w, b.w, t),
@@ -186,7 +190,7 @@ const lerpEyeCfg = (a: EyeCfg, b: EyeCfg, t: number): EyeCfg => ({
   open: lerp(a.open, b.open, t)
 })
 
-/** Interpolation de deux expressions : le changement se fait en glissant. */
+/** Interpolates two expressions: the change happens as a glide. */
 export function blendExpression(a: BotExpression, b: BotExpression, t: number): BotExpression {
   return {
     id: b.id,

@@ -1,13 +1,13 @@
-import { makeBlobatar, type BlobatarOptions } from "./render";
+import { makeBolota, type BolotaOptions } from "./render";
 import { style } from "./styles/blob";
 import type { Layout } from "./styles/compose";
 import type { Traits } from "./traits";
 
-export type { BlobatarOptions };
+export type { BolotaOptions };
 export type { TraitOverrides } from "./traits";
 
 /**
- * Every silhouette name Blobatar 2 can produce.
+ * Every silhouette name Bolota 2 can produce.
  *
  * Hand-written because which names are possible is a property of the private
  * band table, not of the generic composer. Kept narrow because callers use the
@@ -22,7 +22,7 @@ export type Shape =
  * The renderer alone, without the colour and trait utilities the barrel also
  * carries. Import this when all you do is render.
  */
-export const blobatar = makeBlobatar(style);
+export const bolota = makeBolota(style);
 
 /**
  * The numeric layout for a set of traits, without resolving a palette or

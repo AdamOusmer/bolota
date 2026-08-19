@@ -2,10 +2,11 @@
  * Ported verbatim from bloub (https://github.com/jeremyPerret/bloub),
  * MIT License, Copyright (c) 2026 Jérémy Perret.
  *
- * The 14-state animation catalog (idle, thinking, orbit, burst, comet, ...). Not adapted — see ../engine.ts for the blobatar-specific bridge
+ * The 13-state animation catalog (idle, thinking, orbit, burst, comet, ...). Not adapted — see ../engine.ts for the bolota-specific bridge
  * (seed-to-silhouette conversion, DOM mounting, rAF loop). This file's
- * own logic, comments and variable names (French, in the original) are
- * untouched beyond TS-strict fixes and import paths.
+ * own logic and structure are untouched beyond TS-strict fixes, import
+ * paths, and translating the original French comments/identifiers to
+ * English (see ../engine.ts's header for the provenance note).
  */
 import {
   COMET_DOT,
@@ -36,39 +37,39 @@ import {
 } from './shape'
 
 export interface EyeCfg {
-  /** largeur locale (axe court de la gelule), en unites de rayon de boule */
+  /** local width (capsule's short axis), in units of ball radius */
   w: number
-  /** hauteur locale (axe long) */
+  /** local height (long axis) */
   h: number
-  /** 1 = ouvert, 0 = ferme */
+  /** 1 = open, 0 = closed */
   open: number
   /**
-   * Inclinaison propre de la gelule, en degres, positif = le haut part a
-   * droite. Appliquee APRES le repere tangent de la sphere. Sans elle, les deux
-   * yeux penchent forcement du meme cote (le roulis de tete) et la colere comme
-   * la tristesse, qui demandent des inclinaisons en miroir, sont hors de portee.
+   * Capsule's own tilt, in degrees, positive = the top leans right. Applied
+   * AFTER the sphere's tangent frame. Without it, both eyes are forced to
+   * lean the same way (the head roll), and anger and sadness, which need
+   * mirrored tilts, are out of reach.
    */
   tilt?: number
 }
 
 export interface Pose {
-  /** silhouette du corps, en unites de rayon de boule */
+  /** body silhouette, in units of ball radius */
   sil: Silhouette
-  /** decalage global du corps ET des yeux */
+  /** global offset of the body AND the eyes */
   offX: number
   offY: number
   gaze: HeadGaze
-  /** demi-ecart des yeux sur la sphere, en degres */
+  /** half-separation of the eyes on the sphere, in degrees */
   split: number
-  /** [oeil interieur, oeil exterieur] */
+  /** [inner eye, outer eye] */
   eyes: [EyeCfg, EyeCfg]
-  /** opacite des yeux : sert aux etats sans visage */
+  /** eye opacity: used by states with no face */
   eyeAlpha: number
   bodyAlpha: number
   dots: DotRender[]
   arcs: ArcSpec[]
   notif: { x: number; y: number; r: number; notch: number } | null
-  /** true = le decor passe derriere le corps (particules de l'eclatement) */
+  /** true = the decor passes behind the body (burst particles) */
   dotsBehind: boolean
 }
 
@@ -95,12 +96,12 @@ function base(over: Partial<Pose> = {}): Pose {
   }
 }
 
-/* --------------------------------------------------- formes non radiales */
+/* ---------------------------------------------------------- non-radial shapes */
 
 /**
- * Barre du "!" vertical : enveloppe convexe de deux cercles.
- * Mesure : cercle haut (0, -0.505) r 0.132, cercle bas (0, +0.130) r 0.075,
- * flancs rectilignes. Elle est donc tronconique (rapport haut/bas 1.76).
+ * Vertical "!" bar: convex hull of two circles.
+ * Measured: top circle (0, -0.505) r 0.132, bottom circle (0, +0.130) r
+ * 0.075, straight sides. So it's conical (top/bottom ratio 1.76).
  */
 const BAR_UPRIGHT_CY = -0.1875
 const BAR_UPRIGHT = profileFromPolygon(
@@ -109,7 +110,7 @@ const BAR_UPRIGHT = profileFromPolygon(
   BAR_UPRIGHT_CY
 )
 
-/** Barre du "!" penche : capsule pure (largeur constante 0.269, longueur 0.776). */
+/** Tilted "!" bar: a pure capsule (constant width 0.269, length 0.776). */
 const BAR_ITALIC = profileFromPolygon(hullOfCircles(0, -0.2535, 0.1345, 0, 0.2535, 0.1345), 0, 0)
 
 const barUpright = (pose: Partial<Silhouette> = {}): Silhouette => ({
@@ -133,21 +134,21 @@ const barItalic = (pose: Partial<Silhouette> = {}): Silhouette => ({
 })
 
 /**
- * Le point du "!" penche n'est pas un disque : c'est une goutte, bout rond
- * (r 0.118) du cote de la barre et pointe effilee a l'oppose, longueur 0.300
- * dans l'axe du glyphe. Centree sur le barycentre du bout rond.
+ * The tilted "!"'s dot isn't a disk: it's a drop, round end (r 0.118) on
+ * the bar's side and a tapered point on the other, length 0.300 along the
+ * glyph's axis. Centered on the round end's centroid.
  */
 const TEAR = polyPath(hullOfCircles(0, 0, 0.118, 0, 0.172, 0.012))
 
 /**
- * Le triangle ne tourne pas sur lui-meme : son centre decrit un cercle de
- * rayon 0.213 autour de l'origine (mesure). C'est ce decalage qui donne
- * l'impression qu'il bascule au lieu de pivoter sur place.
+ * The triangle doesn't spin on itself: its center traces a circle of
+ * radius 0.213 around the origin (measured). It's this offset that makes
+ * it look like it's tumbling instead of pivoting in place.
  */
 const TRI_ORBIT = 0.213
 
 /**
- * blobatar addition: `orbit`'s loop phase — 4 whole revolutions at the
+ * bolota addition: `orbit`'s loop phase — 4 whole revolutions at the
  * state's own measured 1.25 rev/s (`4 / 1.25`), so `rot` (and everything
  * trig-derived from it) is back at its `t = 0` value, exactly, when the
  * phase wraps. See `StateDef.period` and the `orbit` entry below for the
@@ -163,7 +164,7 @@ function spinningTriangle(rot: number): Silhouette {
   })
 }
 
-/* ------------------------------------------------------------------ etats */
+/* ---------------------------------------------------------------------- states */
 
 export type StateId =
   | 'idle'
@@ -178,39 +179,40 @@ export type StateId =
   | 'orbit'
   | 'burst'
   | 'comet'
-  /** transition d'interface, pas une animation du catalogue : hors `SEQUENCE` */
+  /** interface transition, not a catalog animation: outside `SEQUENCE` */
   | 'swirl'
 
 export interface StateDef {
   id: StateId
-  /** duree de maintien quand la sequence complete est jouee */
+  /** hold duration when the full sequence is played */
   duration: number
   /**
-   * duree en dessous de laquelle l'animation est coupee avant d'aboutir : le
-   * "!" ne revient pas, le corps reste eclate. Elle se lit dans les constantes
-   * de `pose` ci-dessous, elle ne se choisit pas. Absente = l'etat ignore le
-   * temps ou boucle, n'importe quelle duree lui va (voir `MIN_BLOCK`).
+   * duration below which the animation is cut off before completing: the
+   * "!" doesn't come back, the body stays burst. Read off the constants in
+   * `pose` below, not something to choose freely. Absent = the state
+   * ignores time or loops, any duration suits it (see `MIN_BLOCK`).
    */
   minDuration?: number
-  /** duree du morph d'entree */
+  /** duration of the entrance morph */
   morph: number
-  /** true = l'entree est masquee par un clignement, comme dans la video */
+  /** true = the entrance is masked by a blink, as in the video */
   blinkIn: boolean
   /**
-   * true = le corps est la silhouette "au repos", donc remplacable par la forme
-   * choisie dans le personnalisateur. Les etats qui dessinent leur propre forme
-   * (le "!", les points, l'oeuf, le triangle...) valent false : c'est cette forme
-   * la qui EST l'animation.
+   * true = the body is the "resting" silhouette, so replaceable by the
+   * shape chosen in the personalizer. States that draw their own shape
+   * (the "!", the dots, the egg, the triangle...) are false: that shape IS
+   * the animation.
    */
   baseBody: boolean
   /**
-   * true = l'etat porte le visage "au repos", donc remplacable par l'expression
-   * choisie. Seul `idle` : les autres etats a visage ont une expression relevee
-   * sur la video, c'est precisement ce qu'on reproduit.
+   * true = the state carries the "resting" face, so replaceable by the
+   * chosen expression. Only `idle`: the other face-bearing states have an
+   * expression lifted off the video, which is precisely what's being
+   * reproduced.
    */
   baseFace: boolean
   /**
-   * blobatar addition (not from bloub — every other flag on this interface
+   * bolota addition (not from bloub — every other flag on this interface
    * is verbatim): true = this state's own `pose(t)` already animates gaze
    * and/or body position (`sil.cx/cy` via `offX/offY`) itself, so idle's
    * background liveliness (`face.ts`'s wander/drift/breath) must contribute
@@ -233,7 +235,7 @@ export interface StateDef {
    */
   ownsLiveliness?: boolean
   /**
-   * blobatar addition (not from bloub): the phase length this state repeats
+   * bolota addition (not from bloub): the phase length this state repeats
    * on when played with `loop: true`. Absent = not loop-safe as a single
    * timeline (the caller's existing periodic-`reset()` bridge mechanism
    * still handles it, unchanged); present = `BotEngine.sample()` itself
@@ -256,7 +258,7 @@ export interface StateDef {
   pose(local: number): Pose
 }
 
-/** Onde de pulsation qui parcourt les trois points de gauche a droite. */
+/** Pulse wave that travels across the three dots left to right. */
 function dotPulse(t: number, index: number): number {
   const p = ((((t - index * 0.5) / 1.5) % 1) + 1) % 1
   const k = p < 0.5 ? 0.5 - 0.5 * Math.cos(p * TAU) : 0
@@ -281,7 +283,7 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: true,
-    // blobatar eye-visibility audit (see `burst`/`comet` below for the cases that
+    // bolota eye-visibility audit (see `burst`/`comet` below for the cases that
     // DID change): left at `eyeAlpha: 0`, deliberately. The body does not shrink
     // toward a face here, it BECOMES one of the three dots (comment below, and
     // `sil` reuses the dot's own radius/position) — same size and shape as its two
@@ -296,11 +298,11 @@ export const STATES: StateDef[] = [
     // the eyes back on.
     pose: (t) => {
       const mid = dotPulse(t, 1)
-      // Les points lateraux sortent des flancs de la boule : dans la video ils
-      // restent fusionnes avec elle 1-2 frames avant de se detacher.
+      // The side dots emerge from the ball's flanks: in the video they stay
+      // merged with it for 1-2 frames before detaching.
       const emerge = 0.3 + 0.7 * easings.easeOutCubic(clamp(t / 0.3))
       return base({
-        // la boule DEVIENT le point du milieu : le morph reste continu
+        // the ball BECOMES the middle dot: the morph stays continuous
         sil: circle(DOT_R * (1 + (DOT_PEAK - 1) * mid), { cx: DOT_X[1]! }),
         eyeAlpha: 0,
         dots: [0, 2].map((i) => {
@@ -327,8 +329,8 @@ export const STATES: StateDef[] = [
       base({
         gaze: { yaw: -5.37, pitch: 4.55, roll: 6.7 },
         split: 16.25,
-        // L'oeil ferme n'est pas l'oeil ouvert ecrase : c'est un tiret
-        // horizontal PLUS LARGE que l'oeil ouvert (0.447 contre 0.236).
+        // The closed eye isn't the open eye squashed: it's a horizontal
+        // dash WIDER than the open eye (0.447 versus 0.236).
         eyes: [
           { w: 0.236, h: 0.464, open: 1 },
           { w: 0.447, h: 0.089, open: 1 }
@@ -354,23 +356,23 @@ export const STATES: StateDef[] = [
   {
     id: 'alert',
     duration: 2.4,
-    // le "!" revient en place a 1.6 + 0.4
+    // the "!" snaps back into place at 1.6 + 0.4
     minDuration: 2,
     morph: 0.45,
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // blobatar eye-visibility audit: left at `eyeAlpha: 0`. `sil` here is
+    // bolota eye-visibility audit: left at `eyeAlpha: 0`. `sil` here is
     // `barItalic` — a thin italic glyph bar, not a round body — there is no face
     // plane for a pair of capsule eyes to sit on. Truly impossible, not overlooked;
     // covered by the same cross-fade as `thinking` above.
     pose: (t) => {
-      // Course mesuree : -0.087 -> +0.732 en 1.5 s, ease-in-out, micro-overshoot.
+      // Measured travel: -0.087 -> +0.732 over 1.5s, ease-in-out, micro-overshoot.
       const p = clamp(t / 1.5)
       const travel = easings.easeInOutCubic(p) * 0.82 - 0.087
       const back = t > 1.6 ? clamp((t - 1.6) / 0.4) : 0
       const x = travel * (1 - back) + 0.1 * back
-      // Vibration secondaire a 2.5 Hz, barre et point en opposition de phase.
+      // Secondary vibration at 2.5Hz, bar and dot in phase opposition.
       const buzz = Math.sin(t * 2.5 * TAU) * 0.005
       const tilt = (17.7 * Math.PI) / 180
       return base({
@@ -378,7 +380,7 @@ export const STATES: StateDef[] = [
         eyeAlpha: 0,
         dots: [
           {
-            // le point suit l'axe du glyphe, a 0.580 du centre de la barre
+            // the dot follows the glyph's axis, 0.580 from the bar's center
             x: x - Math.sin(tilt) * 0.58,
             y: -0.325 + Math.cos(tilt) * 0.58 + buzz * 2.8,
             r: 0.118,
@@ -399,13 +401,13 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: true,
     pose: (t) => {
-      // Pop du point bleu : pic a +14 % vers 0.3 s puis stabilisation.
+      // Blue dot pop: peaks at +14% around 0.3s then settles.
       const p = clamp(t / 0.45)
       const pop = 1 + (NOTIF_POP - 1) * Math.sin(p * Math.PI) * (1 - p * 0.35)
       const r = NOTIF_R * (p < 1 ? pop : 1)
       const a = (NOTIF_ANGLE * Math.PI) / 180
       return base({
-        // le regard part a l'oppose de la pastille
+        // the gaze looks away from the badge
         gaze: { yaw: -21.94, pitch: -5.82, roll: -12.2 },
         split: 18.89,
         eyes: pair(0.505, 0.498),
@@ -426,7 +428,7 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // blobatar eye-visibility audit: left at `eyeAlpha: 0` — same reasoning as
+    // bolota eye-visibility audit: left at `eyeAlpha: 0` — same reasoning as
     // `alert`, `sil` is `barUpright()`, a bar glyph with no face plane.
     pose: () =>
       base({
@@ -450,7 +452,7 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // blobatar eye-visibility audit: left at `eyeAlpha: 0`, but for a different
+    // bolota eye-visibility audit: left at `eyeAlpha: 0`, but for a different
     // reason than `thinking`/`alert`/`exclaim` above — `sil` here IS still a round
     // body (a small bouncing ball), so a face plane exists. This is the one state
     // where "no eyes" is the correct read regardless: the bot is asleep, and closed
@@ -458,7 +460,7 @@ export const STATES: StateDef[] = [
     // the other direction. Not changed.
     pose: (t) =>
       base({
-        // Rebond vertical mesure : +-0.19 autour de +0.11, periode 0.6 s.
+        // Measured vertical bounce: +-0.19 around +0.11, period 0.6s.
         sil: circle(0.1585, { cy: 0.11 + Math.sin(t * (TAU / 0.6)) * 0.19 }),
         eyeAlpha: 0
       })
@@ -483,14 +485,14 @@ export const STATES: StateDef[] = [
     baseBody: false,
     blinkIn: true,
     pose: (t) => {
-      // Le triangle reste quasi immobile pendant que le bouquet le traverse.
+      // The triangle stays nearly still while the bouquet sweeps across it.
       const fade = clamp(t / 0.35) * clamp((2.2 - t) / 0.5)
       return base({
         sil: spinningTriangle(0),
         gaze: { yaw: 12, pitch: -8, roll: -6 },
         split: 15,
         eyes: pair(0.18, 0.34),
-        // le bouquet balaie de la droite vers la gauche par-dessus le triangle
+        // the bouquet sweeps right to left across the triangle
         arcs: SWOOSH.map((s, i) => ({
           id: `sw${i}`,
           seed: { ...s, cx: 0.45 - t * 0.42 },
@@ -508,13 +510,13 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // blobatar addition: see `StateDef.ownsLiveliness`'s own comment — this
+    // bolota addition: see `StateDef.ownsLiveliness`'s own comment — this
     // state drives body center (`sil.cx/cy` via `spinningTriangle`) itself,
     // so idle's wander/drift/breath must not also compose on top of it. Gaze
     // no longer needs the same guard: see `ORBIT_PERIOD`'s comment below,
     // the eyes are calm and no longer a moving channel to protect.
     ownsLiveliness: true,
-    // blobatar addition: whole revolutions (`1.25 tour/s` below) of the
+    // bolota addition: whole revolutions (1.25 rev/s below) of the
     // rotation's own rate — 4 turns at 1.25 rev/s. `rot`'s value at
     // `t = ORBIT_PERIOD` is therefore an exact multiple of a full turn,
     // i.e. identical (mod 2*PI) to its value at `t = 0`: `sil.rot` and
@@ -549,19 +551,19 @@ export const STATES: StateDef[] = [
     // here needs a modulo of its own.
     period: ORBIT_PERIOD,
     pose: (t) => {
-      // Rotation mesuree : 1.25 tour/s (sens antihoraire). Constant-rate,
+      // Measured rotation: 1.25 rev/s (counter-clockwise). Constant-rate,
       // deliberately: a ramp-up here would go back to 0 every loop, briefly
       // slowing the spin down and re-accelerating it each cycle — smooth,
       // but still a recurring hitch a full sweep would flag, and everything
       // this state needs a "wraps clean" story to be free of gets one.
       const rot = -TAU * 1.25 * t
-      // Le triangle tourne autour de l'origine (mesure) : c'est ce decalage
-      // qui donne l'impression qu'il bascule au lieu de pivoter sur place.
-      // `sil.radii`'s own angular shape never reaches the screen either way
-      // — `BotEngine.posed()` substitutes the seed's own profile, scaled to
-      // this array's mean, for every non-`baseBody` state (see its own doc
-      // comment) — so `spinningTriangle` is used here purely for its
-      // already-periodic `cx/cy`, not for its triangle.
+      // The triangle's center travels around the origin (measured): it's
+      // this offset that makes it look like it's tumbling instead of
+      // pivoting in place. `sil.radii`'s own angular shape never reaches
+      // the screen either way — `BotEngine.posed()` substitutes the seed's
+      // own profile, scaled to this array's mean, for every non-`baseBody`
+      // state (see its own doc comment) — so `spinningTriangle` is used
+      // here purely for its already-periodic `cx/cy`, not for its triangle.
       const sil = spinningTriangle(rot)
       // Rise over the same 0.8s the rings take to enter, hold, fall over the
       // last 0.9s before the loop wraps — symmetric with the entrance so the
@@ -569,7 +571,7 @@ export const STATES: StateDef[] = [
       const fade = clamp(t / 0.8) * clamp((ORBIT_PERIOD - t) / 0.9)
       return base({
         sil,
-        // blobatar divergence from verbatim bloub (user-sanctioned, see
+        // bolota divergence from verbatim bloub (user-sanctioned, see
         // src/engine.ts's header): bloub's own reference had the eyes race
         // around the sphere ~3x faster than the silhouette (+-65deg yaw,
         // its own separate 6.5rad/s sweep, no relation to `rot`'s 0.8s
@@ -587,7 +589,7 @@ export const STATES: StateDef[] = [
         // grow that would have reset every loop) — same reasoning as `rot`
         // and `sil` above, one fewer channel with a start/end to desync.
         eyes: pair(0.18, 0.34),
-        // les anneaux entrent un par un sur 0.8 s
+        // the rings enter one by one over 0.8s
         arcs: RINGS.map((s, i) => ({
           id: `rg${i}`,
           seed: s,
@@ -600,45 +602,46 @@ export const STATES: StateDef[] = [
 
   {
     /**
-     * Entree dans la vue des reglages.
+     * Entrance into the settings view.
      *
-     * SEUL etat qui n'est pas releve sur la video : il est CHOISI, comme la
-     * couleur `--ink`. Il emprunte le vocabulaire d'`orbit` — les memes anneaux,
-     * avec leurs parametres mesures — mais coupe court : 1 s au lieu de 3,4, la
-     * moitie des anneaux, et aucun triangle.
+     * The ONLY state not lifted off the video: it's CHOSEN, like the
+     * `--ink` color. It borrows `orbit`'s vocabulary — the same rings, with
+     * their measured parameters — but cut short: 1s instead of 3.4, half
+     * the rings, and no triangle.
      *
-     * Les deux drapeaux a `true` sont tout l'interet de cet etat :
+     * The two flags set to `true` are the whole point of this state:
      *
-     * - `baseBody` laisse la forme choisie remplacer le corps, donc la vue peut
-     *   imposer le cercle et le galet ou la goutte y MORPHENT au lieu de sauter ;
-     * - `baseFace` fait porter le visage de repos, donc le suivi du curseur
-     *   s'applique des cette entree. Un etat qui aurait sa propre pose de regard
-     *   (comme `orbit`) rendrait la main a l'etat suivant en pleine course, et
-     *   les yeux sauteraient d'un coup a la reprise.
+     * - `baseBody` lets the chosen shape replace the body, so the view can
+     *   impose the circle and the pebble or the drop MORPH into it instead
+     *   of jumping;
+     * - `baseFace` makes it carry the resting face, so cursor-follow
+     *   applies from this entrance onward. A state with its own gaze pose
+     *   (like `orbit`) would hand off to the next state mid-motion, and the
+     *   eyes would jump all at once on resuming.
      *
-     * Il n'est volontairement PAS dans `SEQUENCE` : ce n'est pas une animation du
-     * catalogue, c'est une transition d'interface.
+     * Deliberately NOT in `SEQUENCE`: it's not a catalog animation, it's an
+     * interface transition.
      */
     id: 'swirl',
-    // un peu plus que le tour du regard (`TURN_TIME`, 1,1 s) : les yeux doivent
-    // etre poses a gauche avant que les anneaux ne s'effacent
+    // a bit more than the gaze turn (`TURN_TIME`, 1.1s): the eyes need to
+    // be settled to the left before the rings fade out
     duration: 1.3,
     minDuration: 1.3,
     morph: 0.3,
     baseFace: true,
     baseBody: true,
-    // le morph de forme est masque par un clignement, comme partout ailleurs
+    // the shape morph is masked by a blink, like everywhere else
     blinkIn: true,
     pose: (t) =>
       base({
-        // trois anneaux sur les six d'`orbit` : la moitie du bouquet suffit a le
-        // reconnaitre, et c'est autant d'arcs en moins a rasteriser par image
+        // three of `orbit`'s six rings: half the bouquet is enough to
+        // recognize it, and that's fewer arcs to rasterize per frame
         arcs: RINGS.slice(0, 3).map((s, i) => ({
           id: `sw${i}`,
           seed: s,
           t,
-          // ils entrent l'un apres l'autre puis s'effacent avant la fin du bloc,
-          // pour que la reprise au repos se fasse sur une image deja propre
+          // they enter one after another then fade out before the block
+          // ends, so resuming at rest happens on an already-clean frame
           opacity: clamp((t - i * 0.06) / 0.14) * clamp((1.22 - t) / 0.34)
         }))
       })
@@ -647,13 +650,13 @@ export const STATES: StateDef[] = [
   {
     id: 'burst',
     duration: 2.6,
-    // le corps est recompose a 1.7 + 0.7
+    // the body is recomposed at 1.7 + 0.7
     minDuration: 2.4,
     morph: 0.4,
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // blobatar eye-visibility audit: unlike `thinking`/`alert`/`exclaim`, `sil`
+    // bolota eye-visibility audit: unlike `thinking`/`alert`/`exclaim`, `sil`
     // never stops being a circle here — it shrinks to 0.166 of resting radius and
     // regrows, but a face plane exists the whole time. Verbatim bloub hid the eyes
     // from t=0 to 1.85 (85% of the 2.6s duration) and popped them in over the last
@@ -665,7 +668,7 @@ export const STATES: StateDef[] = [
     // regrow with the body. No new snap: the driving curve is the same
     // `easeOutQuint` already used for `sil`, so alpha and size move together.
     pose: (t) => {
-      // Effondrement mesure : 1.0 -> 0.166 en 0.7 s, ease-out, sans rebond.
+      // Measured collapse: 1.0 -> 0.166 over 0.7s, ease-out, no overshoot.
       const collapse = 1 - 0.834 * easings.easeOutQuint(clamp(t / 0.7))
       const regrow = easings.easeOutQuint(clamp((t - 1.7) / 0.7))
       const bodyScale = collapse + (1 - collapse) * regrow
@@ -681,15 +684,15 @@ export const STATES: StateDef[] = [
   {
     id: 'comet',
     duration: 2.4,
-    // le point se recompose a 1.85 + 0.6 = 2.45, soit 0.05 s apres la coupe de
-    // la video : ce reliquat se termine pendant le fondu suivant, comme dans la
-    // reference. On ne descend donc pas sous la duree mesuree.
+    // the dot recomposes at 1.85 + 0.6 = 2.45, 0.05s after the video's cut:
+    // this remainder finishes during the next cross-fade, as in the
+    // reference. So it's never held below the measured duration.
     minDuration: 2.4,
     morph: 0.45,
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // blobatar eye-visibility audit: same case as `burst` above — `sil` shrinks to
+    // bolota eye-visibility audit: same case as `burst` above — `sil` shrinks to
     // `COMET_DOT` (0.129 of resting radius, comparable to burst's 0.166) but never
     // stops being a circular body, so a face plane exists throughout. User report
     // named this one explicitly ("comet collapses to a dot"). Same divergence:
@@ -703,7 +706,7 @@ export const STATES: StateDef[] = [
       const bodyScale = collapse + (1 - collapse) * regrow
       const fade = clamp((t - 0.15) / 0.25) * clamp((1.95 - t) / 0.3)
       return base({
-        // Le point derive de 0.035 vers le bas puis remonte (wobble mesure).
+        // The dot drifts 0.035 down then back up (measured wobble).
         sil: circle(bodyScale, {
           cy: Math.sin(clamp(t / 1.7) * Math.PI) * 0.035
         }),
@@ -716,11 +719,11 @@ export const STATES: StateDef[] = [
 
 export const STATE_BY_ID = new Map(STATES.map((s) => [s.id, s]))
 
-/** Ordre de lecture de la sequence complete, calque sur la video de reference. */
+/** Playback order of the full sequence, mirroring the reference video. */
 /**
- * Date, en temps local, ou chaque etat est le plus lisible : c'est la pose que
- * montrent les vignettes et la planche. Rendu deterministe, donc comparable
- * d'une execution a l'autre. Le type force a couvrir tout nouvel etat.
+ * Date, in local time, at which each state is most legible: it's the pose
+ * shown by the thumbnails and the storyboard. Deterministically rendered,
+ * so comparable run to run. The type forces every new state to be covered.
  */
 export const POSES: Record<StateId, number> = {
   idle: 1,

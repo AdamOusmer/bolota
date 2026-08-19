@@ -1,5 +1,5 @@
 /**
- * The trait keys shared by Blobatar 2's silhouette families.
+ * The trait keys shared by Bolota 2's silhouette families.
  *
  * Now spread across `styles/compose.ts` (the body and eye ranges every
  * style shares) and `styles/shapes.ts` (the per-silhouette families like
@@ -49,7 +49,7 @@ const BASE_KEYS = [
 ];
 
 /**
- * Every trait key Blobatar 2 reads, including shape-specific families.
+ * Every trait key Bolota 2 reads, including shape-specific families.
  */
 export const BLOB_KEYS = [
   ...BASE_KEYS,

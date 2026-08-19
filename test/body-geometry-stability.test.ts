@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { blobatar } from "../src/blobatar";
+import { bolota } from "../src/bolota";
 
 /**
  * Pinned regression guard, prompted by a user report: seed "anna" appeared
  * to render a different silhouette than before, suspected as the bloub
  * engine work leaking into the static renderer. It wasn't — `src/engine.ts`
- * and `src/bloub/` are a separate render path from `blobatar()`/`parts()`
+ * and `src/bloub/` are a separate render path from `bolota()`/`parts()`
  * (`styles/compose.ts`'s own `render()`), and nothing in this fork's session
  * touched `styles/blob.ts`'s `BANDS` table (last changed at `bf26067 feat:
  * release v2`, upstream, before this fork's first commit `acb549c`). The
- * mismatch the report compared against was `blobatar@1.0.0` from npm — gen1,
+ * mismatch the report compared against was `bolota@1.0.0` from npm — gen1,
  * a different major with a different shape vocabulary entirely. Verified
  * directly: `anna`'s body is byte-identical between `acb549c` (this fork's
  * first commit, before any eye or engine work) and current HEAD.
@@ -34,7 +34,7 @@ const PINNED_BODY: Record<string, string> = {
 describe("body geometry is byte-stable vs. this fork's pre-eye-rework commit", () => {
   for (const [seed, expected] of Object.entries(PINNED_BODY)) {
     test(`"${seed}"`, () => {
-      const svg = blobatar(seed, { background: false });
+      const svg = bolota(seed, { background: false });
       expect(bodyGroup(svg)).toBe(expected);
     });
   }

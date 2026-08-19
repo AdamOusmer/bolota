@@ -4,7 +4,7 @@ import type { Expression, Posable } from "./expression";
 import { superellipse } from "./shape";
 import { traits, type TraitOverrides, type Traits } from "./traits";
 
-export interface BlobatarOptions {
+export interface BolotaOptions {
   /** Emits width/height attributes. Omit to let CSS size it (the viewBox always scales). */
   size?: number;
   /** Overrides the default backdrop. `false` renders transparent. */
@@ -25,11 +25,11 @@ export interface BlobatarOptions {
    *
    * ```ts
    * // Always a sun, always wide eyes — colour and everything else per name.
-   * blobatar(user.email, { traits: { shape: 0.95, "eye.ratio": 0 } })
+   * bolota(user.email, { traits: { shape: 0.95, "eye.ratio": 0 } })
    * ```
    *
    * Pin every trait and the name stops mattering, which is how you build one
-   * fixed blobatar: pass any constant string alongside a full map.
+   * fixed bolota: pass any constant string alongside a full map.
    *
    * The layout still runs in full, so the containment guarantees hold under any
    * combination — an eye cluster that would not fit is scaled down by `fit`
@@ -49,23 +49,23 @@ export interface BlobatarOptions {
   /**
    * Idle animation. Off by default.
    *
-   * Requires `import "blobatar/motion.css"`, and requires the blobatar to be
+   * Requires `import "bolota/motion.css"`, and requires the bolota to be
    * inline SVG — content inside an `<img>` is an isolated document that hover
    * cannot reach. A framework adapter built on `parts` switches rendering mode
    * for you; the string API is already inline.
    *
-   * **Honored by an adapter built on `parts` only, for now.** `blobatar()` returns static
+   * **Honored by an adapter built on `parts` only, for now.** `bolota()` returns static
    * markup regardless: a branch on `animate` inside it keeps the motion module
    * alive for every caller, animating or not, which measured at ~190 B. An
    * animated string API wants its own entry point, not a branch here.
    */
   animate?: Animate;
   /**
-   * Which pose the blobatar holds. Import one from `blobatar/expression`.
+   * Which pose the bolota holds. Import one from `bolota/expression`.
    *
    * ```ts
-   * import { happy } from "blobatar/expression";
-   * blobatar(name, { expression: happy });
+   * import { happy } from "bolota/expression";
+   * bolota(name, { expression: happy });
    * ```
    *
    * Passed as a value rather than named as a string so that the expressions you
@@ -78,12 +78,12 @@ export interface BlobatarOptions {
    * by your own `setTimeout`, which is four lines in your code and zero bytes in
    * this bundle.
    *
-   * Independent of `animate` in both directions. Without `animate` the blobatar
+   * Independent of `animate` in both directions. Without `animate` the bolota
    * renders the pose statically, which is what makes this work in the string API
    * and under `prefers-reduced-motion`; **the morph between poses requires
-   * `animate`**, because that is what puts the blobatar in inline SVG where CSS
+   * `animate`**, because that is what puts the bolota in inline SVG where CSS
    * can reach it. Setting `expression` never turns `animate` on for you: that
-   * would silently flip a 400-blobatar grid from 400 `<img>`s to 400 SVG trees.
+   * would silently flip a 400-bolota grid from 400 `<img>`s to 400 SVG trees.
    *
    * `idle` emits byte-identical markup to omitting the option.
    */
@@ -109,7 +109,7 @@ export interface Style<L> {
  * eight custom properties and the CSS composes it, so baking it into geometry as
  * well would apply it twice.
  */
-function posed<L>(l: L, opts: BlobatarOptions, animate?: unknown) {
+function posed<L>(l: L, opts: BolotaOptions, animate?: unknown) {
   const e = opts.expression;
   if (animate || !e) return { l, wrap: "" };
   return e.bake(l as L & Posable, e.p);
@@ -136,7 +136,7 @@ const escape = (s: string) =>
     c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;",
   );
 
-export function resolve(seed: string, opts: BlobatarOptions) {
+export function resolve(seed: string, opts: BolotaOptions) {
   const t = traits(seed, opts.normalize ?? true, opts.traits);
   return {
     t,
@@ -152,7 +152,7 @@ export function resolve(seed: string, opts: BlobatarOptions) {
 }
 
 /** Screen-reader label, if one was asked for. */
-const label = (opts: BlobatarOptions) =>
+const label = (opts: BolotaOptions) =>
   opts.title ? `<title>${escape(opts.title)}</title>` : "";
 
 /** The plate behind the figure, as geometry rather than as markup. */
@@ -170,7 +170,7 @@ export interface Backdrop {
  */
 function backdrop<L>(
   style: Style<L>,
-  opts: BlobatarOptions,
+  opts: BolotaOptions,
   p: Palette,
 ): Backdrop | undefined {
   const bg = opts.background ?? style.background;
@@ -212,7 +212,7 @@ export interface Motion {
 
 /**
  * The palette is handed to the factory because a tinting expression needs it:
- * the hot pair it mixes toward is derived from the colors the blobatar is actually
+ * the hot pair it mixes toward is derived from the colors the bolota is actually
  * wearing, overrides included. It arrives as an argument rather than being
  * looked up so that `src/color.ts`'s `tinted()` stays reachable only from an
  * expression value — the same indirection that keeps `animate.ts` out of static
@@ -220,9 +220,9 @@ export interface Motion {
  */
 export type MotionFactory = (t: Traits, p: Palette) => Motion;
 
-/** Binds one package major's frozen style into `blobatar(name, opts)`. */
-export function makeBlobatar<L>(style: Style<L>) {
-  return (name: string, opts: BlobatarOptions = {}): string => {
+/** Binds one package major's frozen style into `bolota(name, opts)`. */
+export function makeBolota<L>(style: Style<L>) {
+  return (name: string, opts: BolotaOptions = {}): string => {
     const { t, palette } = resolve(name, opts);
     const p = tinted(palette, opts.expression);
     const dim = opts.size ? ` width="${opts.size}" height="${opts.size}"` : "";
@@ -239,9 +239,9 @@ export function makeBlobatar<L>(style: Style<L>) {
 }
 
 /**
- * The blobatar in the pieces a renderer that owns the outer element needs.
+ * The bolota in the pieces a renderer that owns the outer element needs.
  *
- * Split out from `makeBlobatar` because a framework adapter has to own the
+ * Split out from `makeBolota` because a framework adapter has to own the
  * `<svg>` when animating — it needs real props on it — and recovering the
  * inner markup by regex-stripping a serialized `<svg>` is the kind of thing
  * that works until someone passes a `title` containing a `>`.
@@ -264,7 +264,7 @@ export function makeBlobatar<L>(style: Style<L>) {
 export function makeParts<L>(style: Style<L>) {
   return (
     name: string,
-    opts: BlobatarOptions = {},
+    opts: BolotaOptions = {},
     motion?: MotionFactory,
   ) => {
     const { t, palette: p } = resolve(name, opts);

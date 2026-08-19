@@ -1,11 +1,11 @@
 /**
- * blobatar — motion layer. See docs/motion-spec.md.
+ * bolota — motion layer. See docs/motion-spec.md.
  *
  * Import once, anywhere:
  *
- *   import "blobatar/motion.css";
+ *   import "bolota/motion.css";
  *
- * Only blobatars rendered with `animate` set carry these classes, so importing
+ * Only bolotas rendered with `animate` set carry these classes, so importing
  * this without using `animate` costs the stylesheet and nothing else.
  *
  * Layers: hover reaction, breathe, bob, blink, saccades, expression.
@@ -74,14 +74,14 @@
  * `parts.inner` may vary with the expression, and the morph does not survive it
  * being tried (see `makeParts`).
  *
- * So the asymmetry is carried by an inherited property the whole blobatar shares,
+ * So the asymmetry is carried by an inherited property the whole bolota shares,
  * and each eye picks its own share of it out of the one thing that *does* differ
  * per eye and never varies with the pose: `--mo-wrap`'s sign. See `--mo-sel` on
  * `.mo-eye`.
  *
  * An initial of 0 is what makes them free: a symmetric pose leaves them alone,
  * `poseVars` skips every channel at its identity, and the twelve-year-old
- * blobatars that never asked for an asymmetric face emit not one extra byte.
+ * bolotas that never asked for an asymmetric face emit not one extra byte.
  */
 @property --mo-esx2 {
   syntax: "<number>";
@@ -109,7 +109,7 @@
  *
  * A `<number>` rather than a switch precisely so it interpolates: the seeded
  * lean eases away over the morph with everything else, and eases back when the
- * expression clears. An initial of 0 keeps every unposed blobatar leaning exactly
+ * expression clears. An initial of 0 keeps every unposed bolota leaning exactly
  * as its seed drew it, and costs the poses that do not want it nothing.
  */
 @property --mo-lock {
@@ -124,7 +124,7 @@
  * An expression is set and held — no timers, no self-termination, and no notion
  * of firing again — so a shake cannot be a one-shot. It is an *amplitude* on a
  * loop that always runs, exactly like `--mo-amp` and every idle layer above:
- * `@keyframes mo-shake` resolves to the identity at 0, so a blobatar that is not
+ * `@keyframes mo-shake` resolves to the identity at 0, so a bolota that is not
  * angry is running an animation between two poses that are the same pose. There
  * is nothing to start, nothing to restart, and re-selecting the same expression
  * needs no replay because the tremor never stopped.
@@ -160,7 +160,7 @@
  * SVG's UA stylesheet sets `transform-origin: 0 0`, not CSS's `50% 50%` — so
  * the hover scale, the breathe, and the expression's body channels were all
  * pivoting on the top-left corner of the viewBox. A 4% hover scale about (0,0)
- * moves the blobatar 2 units down-right as it grows instead of growing in place,
+ * moves the bolota 2 units down-right as it grows instead of growing in place,
  * and the breathe drifted diagonally rather than pulsing. Both read as "close
  * enough" in isolation and neither is what was designed; the divergence only
  * became measurable when `bakePose` — which is explicit about scaling around
@@ -183,7 +183,7 @@
 
 /**
  * Hover controls amplitude, not playback. Every keyframe below resolves to the
- * identity transform at `--mo-amp: 0`, so an unhovered blobatar oscillates
+ * identity transform at `--mo-amp: 0`, so an unhovered bolota oscillates
  * between two poses that are the same pose — the loop never starts or stops,
  * and therefore never restarts from zero or freezes mid-squash.
  *
@@ -263,7 +263,7 @@
     ease-out, cubic-bezier(0.23, 1, 0.32, 1), var(--mo-me);
 
   /*
-   * The tremor. Runs on every animated blobatar and is invisible on almost all of
+   * The tremor. Runs on every animated bolota and is invisible on almost all of
    * them, which is the same bargain `--mo-amp` makes: at `--mo-shake: 0` every
    * keyframe below is `0 0`, so the loop oscillates between two identical poses
    * and never has to be started, stopped, or replayed.
@@ -279,7 +279,7 @@
  *
  * The fills are presentation attributes, which CSS cannot read and which any
  * rule at all outranks, so the two groups restate `fill` from custom properties
- * the renderer emits. On a blobatar wearing no expression those properties hold
+ * the renderer emits. On a bolota wearing no expression those properties hold
  * exactly the colours already in the markup, and this changes nothing; on a hot
  * pose they hold the tinted pair and `transition: fill` carries the difference.
  *
@@ -291,12 +291,12 @@
  * transition is symmetric in both directions for nothing.
  *
  * The attribute stays in the markup and is not dead weight: it is what an app
- * that forgot `import "blobatar/motion.css"` renders, and it is what the static
+ * that forgot `import "bolota/motion.css"` renders, and it is what the static
  * path — which has no stylesheet at all — has always used.
  *
  * The body is selected structurally rather than through a class of its own,
  * which is the one place in this file that is worth justifying. A `mo-body`
- * class costs bytes twice — in the markup of every animated blobatar, and in the
+ * class costs bytes twice — in the markup of every animated bolota, and in the
  * renderer that has to decide whether to emit it, which is core code every
  * static consumer pays for as well. `.mo-bob` is emitted by exactly one style
  * and has exactly two children, so "the group that is not the eyes" is not a
@@ -321,7 +321,7 @@
  *
  * Every offset carries `--mo-shake`, so this resolves to `0 0` at amplitude
  * zero — the same guarantee the blink's closed pose and the wrap layer need, and
- * for the same reason: a blobatar must never be stranded mid-effect.
+ * for the same reason: a bolota must never be stranded mid-effect.
  */
 @keyframes mo-shake {
   0%,
@@ -364,7 +364,7 @@
  * before the eye appears to have left, which reads as no transition at all
  * rather than as a fast one.
  *
- * Measured on a 400px blobatar, `idle → happy`, as a fraction of the eye's travel
+ * Measured on a 400px bolota, `idle → happy`, as a fraction of the eye's travel
  * at each fifth of the duration:
  *
  *   cubic-bezier(.2,.8,.2,1)   @240ms    53%  87%  95%  98%  100%
@@ -397,7 +397,7 @@
  * `animate="always"` — pinned amplitude, hover ignored for the idle layers.
  *
  * It deliberately does *not* disable transitions: the hover reaction still
- * applies, because an always-animating blobatar is usually the single large one
+ * applies, because an always-animating bolota is usually the single large one
  * on a profile header, which is exactly where a pointer response is wanted.
  * There is no start-up ramp to suppress either — transitions do not run on an
  * element's first style resolution.
@@ -453,7 +453,7 @@
  *
  * 3400ms against breathe's 2800ms, deliberately not a multiple: the two drift
  * in and out of phase instead of locking into one obvious pulse. Their own
- * offsets are seeded independently, so no two blobatars share a drift either.
+ * offsets are seeded independently, so no two bolotas share a drift either.
  *
  * `px` on an SVG element is one unit of the local user coordinate system, so
  * this is 1.1 viewBox units at any rendered size.
@@ -465,7 +465,7 @@
    *
    * It takes the free `translate` property and *adds* to bob rather than
    * multiplying. Getting that operator backwards is silent and severe: an offset
-   * scaled by `--mo-amp` would vanish on every unhovered blobatar, which is most
+   * scaled by `--mo-amp` would vanish on every unhovered bolota, which is most
    * of a grid.
    */
   translate: 0 calc(var(--mo-bdy) * 1px);
@@ -547,7 +547,7 @@
  *
  * `transform-box: fill-box` is still not optional on the shape. Without it,
  * `transform-origin` resolves against the SVG viewport, so both eyes scale about
- * the middle of the blobatar and slide toward each other instead of closing.
+ * the middle of the bolota and slide toward each other instead of closing.
  */
 .mo-eye {
   transform-box: view-box;
@@ -567,7 +567,7 @@
    * what keeps the static and animated paths agreeing.
    *
    * Derived here rather than emitted per eye because this stylesheet is paid
-   * once per app and markup is paid per blobatar — the same trade that settled
+   * once per app and markup is paid per bolota — the same trade that settled
    * every other composition question in this file. They are inherited, so the
    * shape underneath reads the same values without restating them.
    */
@@ -615,7 +615,7 @@
    * capsule reaches the DOM already tilted and this element's local axes are the
    * viewport's, not the capsule's. A bare `scaleY` therefore squashes along
    * screen-Y and shears the capsule rather than closing it across its own width.
-   * The seeded lean is a median 5.9° and reaches 12°, so this is most blobatars,
+   * The seeded lean is a median 5.9° and reaches 12°, so this is most bolotas,
    * not a corner:
    *
    *   rotate(lean) · scale · rotate(-lean)
@@ -651,7 +651,7 @@
  * motion are close to invisible at full speed.
  *
  * Selected structurally rather than through a class of its own, for the reason
- * the body group is: a class costs bytes in the markup of every animated blobatar,
+ * the body group is: a class costs bytes in the markup of every animated bolota,
  * and `.mo-eye` is emitted by exactly one style and holds exactly one shape.
  *
  * Two animations on one element, and they must not be merged. Blink runs on its
@@ -677,7 +677,7 @@
 
 /**
  * The closed pose carries `--mo-amp` rather than being a constant, which is
- * what lets a blink caught by hover-out re-open instead of leaving the blobatar
+ * what lets a blink caught by hover-out re-open instead of leaving the bolota
  * with its eyes shut — roughly a 3% chance per hover-out otherwise, rare enough
  * to miss in testing and common enough to ship.
  *
@@ -689,7 +689,7 @@
  * capsule reaches the DOM already tilted and this element's local axes are the
  * viewport's, not the capsule's. A bare `scaleY` therefore closes the eye along
  * screen-Y and shears it, rather than closing it across its own width. The seeded
- * lean is a median 5.9° and reaches 12°, so this is most blobatars, not a corner:
+ * lean is a median 5.9° and reaches 12°, so this is most bolotas, not a corner:
  *
  *   rotate(lean) · scale · rotate(-lean)
  *
@@ -769,7 +769,7 @@
  * center, up-left, right, down, up-right, left. A sequence that walks the
  * compass in order reads as a mechanism.
  *
- * The fractions multiply this blobatar's own `--mo-look-x/y`, whose signs are
+ * The fractions multiply this bolota's own `--mo-look-x/y`, whose signs are
  * seeded, so the whole pattern mirrors horizontally, vertically, or both. One
  * shared `@keyframes` therefore yields four orientations, each at its own
  * period and phase.
@@ -841,9 +841,9 @@
  *    verticals, where a real face shows no tilt either.
  *
  * Peaks across the whole seed space are 7.0% on X, 4.6% on Y, and 2.4°, against
- * a static per-blobatar lean capped at 12°. That ceiling is the constraint, not a
+ * a static per-bolota lean capped at 12°. That ceiling is the constraint, not a
  * coincidence: lean carries identity, and an animated tilt approaching it stops
- * decorating the blobatar and starts overwriting who it is.
+ * decorating the bolota and starts overwriting who it is.
  *
  * Every term carries `--mo-amp`, so hover-out resolves to scale 1 / rotate 0
  * rather than stranding an eye mid-squash — the same guarantee the blink's
@@ -932,14 +932,14 @@
 
 /**
  * Touch devices latch hover on tap and hold it until the next tap elsewhere, so
- * a tapped blobatar would sit there breathing. Amplitude is the only gate, so
+ * a tapped bolota would sit there breathing. Amplitude is the only gate, so
  * defeating the hover rule is the whole fix — `animate="always"` is not
  * hover-triggered and deliberately survives.
  */
 @media not ((hover: hover) and (pointer: fine)) {
   .mo-root:hover {
     --mo-amp: 0;
-    /* The hover reaction latches too, and a tapped blobatar left sitting at
+    /* The hover reaction latches too, and a tapped bolota left sitting at
        1.04× is more obviously wrong than one left breathing. */
     transform: none;
   }
@@ -960,15 +960,15 @@
    * on every frame, forever, and the only thing they produce is work.
    *
    * That work is not small at scale, which is the case this library invites —
-   * a grid meant to read as a crowd. Eight effects per blobatar, most of them
+   * a grid meant to read as a crowd. Eight effects per bolota, most of them
    * driving registered custom properties, which are style-recalculated on the
-   * main thread rather than composited. Sixty blobatars on a landing page came
+   * main thread rather than composited. Sixty bolotas on a landing page came
    * to roughly 480 live animations and 6.7s of style and layout in a Lighthouse
    * trace; pausing them took it to 1.9s and moved Total Blocking Time by an
    * order of magnitude on a mid-range phone.
    *
    * `animation-play-state`, not `animation: none`. Paused effects keep their
-   * resolved styles, so the pose a blobatar holds is the one it already had;
+   * resolved styles, so the pose a bolota holds is the one it already had;
    * removing the animations would drop back to the base declarations and, for
    * the eye layers, lose the pose entirely. `.mo-always` is excluded because it
    * is the one mode whose amplitude survives this query.
@@ -985,7 +985,7 @@
 
 /**
  * Slow motion, for reviewing timing. Put it on any ancestor — it is read
- * through `var(--mo-rate, 1)`, never declared on `.mo-root`, so a blobatar's own
+ * through `var(--mo-rate, 1)`, never declared on `.mo-root`, so a bolota's own
  * rules cannot shadow it.
  */
 .mo-slow {

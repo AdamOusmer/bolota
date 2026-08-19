@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { motionVars } from "../src/animate";
-import { blobatar, _layout, parts } from "../src/blobatar";
+import { bolota, _layout, parts } from "../src/bolota";
 import { traits } from "../src/traits";
 
 const SEEDS = Array.from({ length: 300 }, (_, i) => `user-${i}`);
@@ -13,8 +13,8 @@ describe("markup", () => {
     // The whole opt-in design rests on this: adding animation cost nothing to
     // the people who never asked for it.
     for (const s of SEEDS) {
-      expect(blobatar(s)).not.toContain("mo-");
-      expect(blobatar(s)).not.toContain("style=");
+      expect(bolota(s)).not.toContain("mo-");
+      expect(bolota(s)).not.toContain("style=");
     }
   });
 
@@ -148,7 +148,7 @@ describe("markup", () => {
 });
 
 describe("timing", () => {
-  test("delays are negative, so blobatars start mid-cycle", () => {
+  test("delays are negative, so bolotas start mid-cycle", () => {
     // A positive delay postpones the start instead of offsetting the phase:
     // the grid still opens in unison, after an awkward pause.
     for (const s of SEEDS) {
@@ -171,7 +171,7 @@ describe("timing", () => {
 
   test("breathe and bob drift independently", () => {
     // Sharing one offset keeps the two periods drifting apart but locks every
-    // blobatar into the same drift — unison again, one level up.
+    // bolota into the same drift — unison again, one level up.
     const same = SEEDS.filter((s) => {
       const v = motionVars(traits(s));
       return (
@@ -208,7 +208,7 @@ describe("timing", () => {
   test("look magnitudes are the unsigned form of the signed ones", () => {
     // The wrap layer foreshortens by how far the eyes travelled, which is
     // sign-independent, and CSS has no portable abs(). If these two ever drift
-    // apart, a mirrored blobatar foreshortens the wrong way — it would read as the
+    // apart, a mirrored bolota foreshortens the wrong way — it would read as the
     // eyes bulging on a glance rather than compressing, in exactly half the grid.
     for (const s of SEEDS) {
       const v = motionVars(traits(s));
@@ -225,7 +225,7 @@ describe("timing", () => {
 
   test("glances go in every direction across a grid", () => {
     // One shared @keyframes walks one sequence of fixations, so the only thing
-    // stopping 400 blobatars looking the same way at the same moment is the sign
+    // stopping 400 bolotas looking the same way at the same moment is the sign
     // of these two. All four quadrants have to show up.
     const quadrants = new Set(
       SEEDS.map((s) => {
@@ -273,14 +273,14 @@ describe("timing", () => {
   test("reading motion traits leaves every existing trait untouched", () => {
     // Trait keys are string-addressed, so this should hold by construction.
     // It is asserted anyway because it is the property the whole keyed-stream
-    // design exists to provide, and a regression here reshuffles every blobatar
+    // design exists to provide, and a regression here reshuffles every bolota
     // that has ever been rendered.
     const geometry = (svg: string) => svg.match(/ d="[^"]+"|<circle[^/]+/g);
 
     for (const s of SEEDS.slice(0, 50)) {
-      const before = blobatar(s);
+      const before = bolota(s);
       motionVars(traits(s));
-      expect(blobatar(s)).toBe(before);
+      expect(bolota(s)).toBe(before);
       // Same shapes, same numbers — the animated build differs only by the
       // wrapper and the eye class.
       expect(geometry(parts(s, { animate: "hover" }).inner)).toEqual(
