@@ -32,8 +32,11 @@ const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
  *
  * `handle.follow("window")` is real on this branch (src/engine.ts:
  * `follow(target?: Element | "window" | false): void`, eyes track the
- * pointer while it moves anywhere over `target`, fall back to idle drift
- * once it leaves). Deliberately page-wide, not scoped to the hero's own
+ * pointer while it moves anywhere over `target`, fall back to "idle"'s own
+ * fixed, dead-ahead gaze once it leaves — post idle/wander split (see
+ * `bloub/states.ts`), "idle" no longer wanders on its own; that ambient
+ * drift choreography lives under its own id, "wander", now). Deliberately
+ * page-wide, not scoped to the hero's own
  * stage element: scoping it to hover-over-the-avatar reads as broken (the
  * eyes only wake up once the cursor happens to already be on top of them);
  * page-wide, the avatar is looking at you from the moment the page loads.

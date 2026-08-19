@@ -14,7 +14,18 @@ const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 /** The expression picker: one live engine (the stage avatar), a grid of
  * circular buttons below it. Click one to hold that expression; leave it
  * alone and it gently auto-cycles through the roster on its own, nothing
- * on this page needs a play button to be alive. */
+ * on this page needs a play button to be alive.
+ *
+ * Stage state is `"wander"`, not `"idle"`: both are `baseFace` (so
+ * `setExpression` shows on either — `bloub/states.ts`'s doc comment on the
+ * idle/wander split), but since that split `"idle"` is bolota's new
+ * "no-state" neutral (gaze locked dead ahead, no wander/drift — blink and
+ * breathing still play, just no eye travel). `"wander"` is the old
+ * wandering-gaze choreography `idle` used to default to, carried under its
+ * own id. This stage is a held-expression showcase, not the seed's resting
+ * portrait (that's Hero, which deliberately stays on `"idle"`), so it wants
+ * the livelier state: blink + breathe + gaze all visibly moving underneath
+ * whatever expression is picked. */
 export function setupExpressions() {
   const section = document.querySelector<HTMLElement>("[data-expressions]");
   const stageHost = document.querySelector<HTMLElement>("[data-expr-stage]");
@@ -94,7 +105,7 @@ export function setupExpressions() {
     if (myGen !== gen) return; // a newer mount() call already won the race
     handle?.destroy();
     handle = mountEngine(svg, seed);
-    handle.play("idle", { loop: true });
+    handle.play("wander", { loop: true });
     buildPicker();
     select(0, handle.expressions[0]!, false);
   }
@@ -105,7 +116,7 @@ export function setupExpressions() {
   onVisible(
     svg,
     () => {
-      handle?.play("idle", { loop: true });
+      handle?.play("wander", { loop: true });
       scheduleAuto();
     },
     () => {

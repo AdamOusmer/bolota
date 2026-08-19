@@ -68,7 +68,7 @@ export function setupMagnetic() {
  * whichever section is currently in view highlighted.
  *
  * Driven by `IntersectionObserver` against a 1px sentinel at the very top
- * of `<body>` (see Base.astro), not a `scroll` event listener: a `scroll`
+ * of `<body>` (see Layout.astro), not a `scroll` event listener: a `scroll`
  * handler depends on the page's own native scroll position firing that
  * event on every change, which Lenis's smoothing does not reliably do here
  * (measured: `window.scrollY` moves but no `scroll` event follows), leaving
@@ -167,7 +167,7 @@ export function setupNav() {
  * motion, no IntersectionObserver support, and any animate() failure all
  * resolve straight to the resting state, never a permanently invisible
  * section, same belt-and-suspenders shape as hero.ts's own entrance. See
- * also the `<noscript>` rule in Base.astro for when JS never runs at all.
+ * also the `<noscript>` rule in Layout.astro for when JS never runs at all.
  */
 const revealEase = cubicBezier(0.25, 0.1, 0.25, 1);
 const revealed = new WeakSet<Element>();
