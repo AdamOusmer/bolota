@@ -218,7 +218,22 @@ export function _seededSilhouette(
 // rarely sits at its own peak; a tracked pointer can hold there). `PITCH`
 // (the rest-height bias, cursor centered) is still `gaze.ts`'s own 10deg —
 // untouched, unrelated to the amplitude question above.
-export const FOLLOW_MAX_YAW = MAX_YAW_DRIFT;
+/**
+ * How far a tracked pointer turns the head left and right.
+ *
+ * No longer `MAX_YAW_DRIFT`. Reusing the drift bound made sense while the two
+ * were the same size, but the ambient drift was cut to 0.63 of its old
+ * amplitude for being too busy, and the tracked gaze inherited that: 10
+ * degrees, which moves the eyes 17% of the way to the side of the body. A
+ * pointer crossing the whole screen barely registered.
+ *
+ * 35 puts them at roughly half, with the eye's own edge at 0.9 of the body's.
+ * There is more room sideways than down (a body is at least as wide as it is
+ * tall, and the eye pair splits along this axis rather than stacking), which
+ * is why this is larger than the vertical ask. `_safeGaze` still solves the
+ * real limit per seed at mount.
+ */
+export const FOLLOW_MAX_YAW = 35;
 export const FOLLOW_MAX_PITCH = MAX_PITCH_DRIFT;
 
 /**
@@ -299,7 +314,10 @@ export function followLook(nx: number, ny: number): Look {
  * silhouette is an arbitrary polygon, so the honest answer is to render the
  * extremes and look. ~40 samples once per mount.
  */
-export function _safeGaze(scale: number, shape: number[]): { up: number; down: number } {
+export function _safeGaze(
+  scale: number,
+  shape: number[],
+): { up: number; down: number; yaw: number } {
   const probe = new BotEngine(scale, "idle", shape, null);
   // Room to spare: the solve runs on the resting face, and idle wander, blink
   // and breath all move the eyes a little on top of whatever it returns.
@@ -331,8 +349,8 @@ export function _safeGaze(scale: number, shape: number[]): { up: number; down: n
     ].map(([x, y]) => [a! * x! + c! * y! + e!, b! * x! + dd! * y! + f!] as const);
   };
 
-  const fits = (pitch: number) => {
-    for (const yaw of [-FOLLOW_MAX_YAW, 0, FOLLOW_MAX_YAW]) {
+  const fits = (pitch: number, yaws: number[]) => {
+    for (const yaw of yaws) {
       probe.setLook({ yaw, pitch, mix: 1, spin: 0, wander: 0 }, 0, 0);
       // Spread across breath and blink phases, whose periods do not divide
       // each other: a three-sample check passed shapes that visibly failed a
@@ -348,13 +366,44 @@ export function _safeGaze(scale: number, shape: number[]): { up: number; down: n
     }
     return true;
   };
-  const solve = (limit: number) => {
-    // Coarse walk inward from the constant: the answer only needs to be right
-    // to a degree or so, and a bisection would cost more samples for less.
-    for (let p = limit; Math.abs(p) > 1; p *= 0.85) if (fits(p)) return p;
+  // Coarse walk inward from the constant: the answer only needs to be right to
+  // a degree or so, and a bisection would cost more samples for less.
+  const walk = (limit: number, ok: (v: number) => boolean) => {
+    for (let v = limit; Math.abs(v) > 1; v *= 0.85) if (ok(v)) return v;
     return 0;
   };
-  return { up: solve(FOLLOW_PITCH_UP), down: solve(FOLLOW_PITCH_DOWN) };
+  // Each axis solved with the OTHER centred, because the safe region is an
+  // ellipse rather than a rectangle: an eye already pushed to the side has no
+  // room left to go down as well. Solving them together (pitch at full yaw)
+  // answers the corner case and throws away the straight-down reach that
+  // motivated the whole exercise — measured, it cut a round body from -38 to
+  // -14. `gazeFit` below is what re-imposes the corner constraint at runtime,
+  // shrinking one axis as the other is used.
+  return {
+    yaw: walk(FOLLOW_MAX_YAW, (v) => fits(PITCH, [-v, v])),
+    up: walk(FOLLOW_PITCH_UP, (v) => fits(v, [0])),
+    down: walk(FOLLOW_PITCH_DOWN, (v) => fits(v, [0])),
+  };
+}
+
+/**
+ * Fits a gaze target inside the ellipse `_safeGaze` measured the axes of.
+ *
+ * Yaw is clamped first, then pitch is scaled by how much of the sideways
+ * budget the yaw actually spent: at dead centre the eyes get the full vertical
+ * sweep, at full deflection sideways they get none of it, and in between they
+ * get the ellipse. A rectangle would either clip the straight-down reach or
+ * let the corners escape, and the corners are where an eye leaves the body.
+ */
+function gazeFit(
+  yaw: number,
+  pitch: number,
+  limit: { up: number; down: number; yaw: number },
+): { yaw: number; pitch: number } {
+  const y = clamp(yaw, -limit.yaw, limit.yaw);
+  const spent = limit.yaw > 0 ? Math.abs(y) / limit.yaw : 0;
+  const room = Math.sqrt(Math.max(0, 1 - spent * spent));
+  return { yaw: y, pitch: clamp(pitch, limit.down * room, limit.up * room) };
 }
 
 /**
@@ -884,11 +933,12 @@ export function mountEngine(
       fromYaw = cur.yaw;
       fromPitch = cur.pitch;
       const target = followLook(nx, ny);
-      toYaw = target.yaw;
-      // Clamped to what this body can actually wear (see `safeGaze`): the
-      // constant range assumes a round bolota, and a pill-shaped one runs out
-      // of room vertically long before it does horizontally.
-      toPitch = clamp(target.pitch, gazeLimit.down, gazeLimit.up);
+      // Fitted to what this body can actually wear (see `_safeGaze` and
+      // `gazeFit`): the constants assume a round bolota with the other axis
+      // centred, and neither holds for a pill looking into its own corner.
+      const fitted = gazeFit(target.yaw, target.pitch, gazeLimit);
+      toYaw = fitted.yaw;
+      toPitch = fitted.pitch;
       retargetAt = now;
       lastNx = nx;
       lastNy = ny;

@@ -30,10 +30,23 @@ generation change ships as a major, never as a patch.
   triangle seed's eyes at 1.05 of the local body radius: outside.
 
   `mountEngine` now solves the real limit per seed at mount, against the
-  seed's own silhouette and counting the whole eye, and clamps the tracked
-  gaze to it. A round or boxy body gets the full sweep (-38 to -45), a capsule
-  gets -32, a triangle -23. The constant is the ceiling; the silhouette
-  decides what it can wear.
+  seed's own silhouette and counting the whole eye, and fits the tracked gaze
+  inside it. A round or boxy body gets the full sweep (-38 to -45), a capsule
+  -38, a triangle -32. The constant is the ceiling; the silhouette decides
+  what it can wear.
+
+- **The tracked gaze turns properly sideways too.** Yaw was still borrowing the
+  ambient drift bound, which had been cut to 0.63 of its old amplitude for
+  being busy at rest: 10 degrees, moving the eyes 17% of the way to the side,
+  so a pointer crossing the whole screen barely registered. The ask is 35 now,
+  which puts them at roughly half, and the same per-seed solve applies.
+
+  The two axes are fitted as an ELLIPSE rather than a rectangle. Solving them
+  jointly (pitch at full yaw) answers the corner case and throws away the
+  straight-down reach: measured, it cut a round body from -45 to -14. Each axis
+  is solved with the other centred, and at runtime the vertical budget shrinks
+  by however much of the sideways one is spent, so the extremes stay reachable
+  and the corners, where an eye actually leaves the body, stay inside.
 
 ## 0.1.3
 

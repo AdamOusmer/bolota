@@ -14,6 +14,9 @@ import {
 import { MAX_PITCH_DRIFT, MAX_YAW_DRIFT } from "../src/bloub/face";
 import { PITCH } from "../src/bloub/gaze";
 import { BotEngine } from "../src/bloub/engine";
+import { _layout } from "../src/bolota";
+import { _safeGaze, _seededSilhouette } from "../src/engine";
+import { radiusAtAngle } from "../src/bloub/shape";
 import { superellipseProfile } from "../src/bloub/shape";
 
 /**
@@ -515,22 +518,23 @@ describe("handle.follow — premium tuning: wide deflection, low latency", () =>
    * reaching `followLook`, so a viewport corner is exactly `nx, ny = +-1`.
    */
   test("corner deflection reaches at least 80% of the proven-safe max drift bound", () => {
-    // Deflection now rides bloub/face.ts's MAX_YAW_DRIFT/MAX_PITCH_DRIFT
-    // (16/16deg, the same bound idle wander is proven safe against) rather
-    // than gaze.ts's own, narrower YAW_MAX/PITCH_MAX (16/13deg) — see
-    // `FOLLOW_MAX_YAW`/`FOLLOW_MAX_PITCH`'s own doc comment in engine.ts.
-    expect(FOLLOW_MAX_YAW).toBe(MAX_YAW_DRIFT);
+    // The tracked gaze no longer rides the ambient drift bound: that bound was
+    // cut to 0.63 of its old amplitude for being too busy at rest, which is a
+    // different question from how far a pointer should be able to pull the
+    // eyes. Both axes now ask for more than it, and `_safeGaze` solves what
+    // each body can actually wear (see engine.ts).
+    expect(FOLLOW_MAX_YAW).toBeGreaterThan(MAX_YAW_DRIFT);
     expect(FOLLOW_MAX_PITCH).toBe(MAX_PITCH_DRIFT);
 
     const corner = followLook(1, 1);
-    expect(Math.abs(corner.yaw)).toBeGreaterThanOrEqual(0.8 * MAX_YAW_DRIFT);
+    expect(Math.abs(corner.yaw)).toBeGreaterThanOrEqual(0.8 * FOLLOW_MAX_YAW);
     // The *deflection* from the rest bias is what must clear 80%, not the raw
     // pitch value. Downward now deflects further than upward, since it travels
     // from the bias all the way to its mirror (see FOLLOW_PITCH_DOWN).
     expect(Math.abs(corner.pitch - PITCH)).toBeGreaterThanOrEqual(0.8 * MAX_PITCH_DRIFT);
 
     const oppositeCorner = followLook(-1, -1);
-    expect(Math.abs(oppositeCorner.yaw)).toBeGreaterThanOrEqual(0.8 * MAX_YAW_DRIFT);
+    expect(Math.abs(oppositeCorner.yaw)).toBeGreaterThanOrEqual(0.8 * FOLLOW_MAX_YAW);
     expect(Math.abs(oppositeCorner.pitch - PITCH)).toBeGreaterThanOrEqual(0.8 * MAX_PITCH_DRIFT);
 
     // And a centered pointer should be nowhere near that bound.
@@ -539,7 +543,7 @@ describe("handle.follow — premium tuning: wide deflection, low latency", () =>
 
   test("full deflection is reachable, not accidentally clamped short of the bound", () => {
     const corner = followLook(1, 1);
-    expect(Math.abs(corner.yaw)).toBe(MAX_YAW_DRIFT);
+    expect(Math.abs(corner.yaw)).toBe(FOLLOW_MAX_YAW);
     expect(corner.pitch).toBe(FOLLOW_PITCH_DOWN);
     expect(followLook(-1, -1).pitch).toBe(FOLLOW_PITCH_UP);
   });
@@ -674,4 +678,93 @@ describe("handle.follow — eye-pair coherence (both eyes move as one head, not 
       }
     });
   }
+});
+
+describe("_safeGaze — the silhouette decides how far the eyes may travel", () => {
+  // The bug this exists for: the deflection was a constant, and a constant is
+  // wrong per seed. A pill-shaped body drove its eyes out of its own bottom
+  // while a round one had room to spare. Reported from a screen recording,
+  // missed by every numeric test because they all checked where an eye's
+  // CENTRE landed, and an eye is about 15 units tall on a 100-unit body.
+  const SEEDS = {
+    capsule: "seed-6",
+    round: "seed-3",
+    triangle: "seed-31",
+    droplet: "seed-7",
+    boxy: "seed-1",
+    hexagon: "seed-12",
+    sun: "seed-70",
+    cloud: "seed-0",
+    nub: "seed-5",
+    organic: "seed-2",
+  } as const;
+
+  /** Every corner of both eyes, in body units, at a given gaze. */
+  function eyeCorners(seed: string, yaw: number, pitch: number, t: number) {
+    const l = _layout(seed) as never as {
+      body: { rx: number };
+      draw?: (b: never) => string;
+      petals: { cx: number; cy: number; r: number }[];
+      extra: string[];
+    };
+    const shape = _seededSilhouette(l.body as never, l.draw as never, l.petals, l.extra);
+    const engine = new BotEngine(l.body.rx, "idle", shape);
+    engine.setLook({ yaw, pitch, mix: 1, spin: 0, wander: 0 }, 0, 0);
+    const out: { x: number; y: number; edge: number }[] = [];
+    for (const { d, matrix } of engine.sample(t).eyes) {
+      const [a, b, c, dd, e, f] = matrix.slice(7, -1).split(",").map(Number) as number[];
+      const nums = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+      for (let i = 0; i + 1 < nums.length; i += 2) {
+        const x = a! * nums[i]! + c! * nums[i + 1]! + e!;
+        const y = b! * nums[i]! + dd! * nums[i + 1]! + f!;
+        out.push({ x, y, edge: radiusAtAngle(shape, Math.atan2(y, x)) * l.body.rx });
+      }
+    }
+    return out;
+  }
+
+  function limitsFor(seed: string) {
+    const l = _layout(seed) as never as {
+      body: { rx: number };
+      draw?: (b: never) => string;
+      petals: { cx: number; cy: number; r: number }[];
+      extra: string[];
+    };
+    return _safeGaze(l.body.rx, _seededSilhouette(l.body as never, l.draw as never, l.petals, l.extra));
+  }
+
+  for (const [shape, seed] of Object.entries(SEEDS)) {
+    test(`"${shape}" keeps the whole eye inside itself at every solved extreme`, () => {
+      const limit = limitsFor(seed);
+      const corners: [number, number][] = [
+        [0, limit.down],
+        [0, limit.up],
+        [limit.yaw, PITCH],
+        [-limit.yaw, PITCH],
+        // and the real corner, where the ellipse is what saves it
+        [limit.yaw * 0.7, limit.down * 0.7],
+        [-limit.yaw * 0.7, limit.up * 0.7],
+      ];
+      for (const [yaw, pitch] of corners) {
+        for (const t of [0.4, 2.6, 7.9, 21.3]) {
+          for (const { x, y, edge } of eyeCorners(seed, yaw, pitch, t)) {
+            expect(Math.hypot(x, y) / edge, `${shape} yaw=${yaw} pitch=${pitch} t=${t}`).toBeLessThan(1);
+          }
+        }
+      }
+    });
+  }
+
+  test("a flat body is given less than a round one, and every body gets something", () => {
+    const capsule = limitsFor(SEEDS.capsule);
+    const round = limitsFor(SEEDS.round);
+    // The capsule is nearly two to one, so it runs out of room downward first.
+    expect(Math.abs(capsule.down)).toBeLessThan(Math.abs(round.down));
+    for (const seed of Object.values(SEEDS)) {
+      const l = limitsFor(seed);
+      expect(l.yaw).toBeGreaterThan(5);
+      expect(Math.abs(l.down)).toBeGreaterThan(5);
+      expect(l.up).toBeGreaterThan(5);
+    }
+  });
 });
