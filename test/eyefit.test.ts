@@ -160,41 +160,26 @@ describe("idle — the no-state neutral: fixed gaze, no wander/drift, still aliv
   });
 });
 
-describe("swirl — carries bloub's own resting glance (REST_GAZE), not a swept neutral", () => {
-  // Regression guard for a two-step history on this state's gaze: an
-  // earlier pass on this branch swept `swirl` (alongside `burst`/`comet`)
-  // to `NEUTRAL_GAZE`; compared directly against bloub running live, that
-  // was wrong for THIS state specifically — bloub's own `arrival` entrance
-  // (`swirl`'s upstream original, `../../bloub`'s `states.ts`) never
-  // touches `gaze` at all, i.e. keeps `base()`'s own `REST_GAZE` default —
-  // and reverted (`states.ts`'s own comment on the `swirl` entry has the
-  // full history). `burst`/`comet` are NOT part of this guard: their own
-  // sweep to `NEUTRAL_GAZE` stands, unrelated to this state.
+describe("swirl — rests on NEUTRAL_GAZE like the rest of the roster", () => {
+  // Three-step history on this state's gaze: swept to `NEUTRAL_GAZE`
+  // alongside `burst`/`comet`, reverted to `base()`'s own `REST_GAZE`
+  // for bloub fidelity (bloub's `arrival` never touches `gaze`), then
+  // swept back on the owner's call — the showcase grid shows all 14
+  // states side by side, and one tile resting off-axis reads as broken
+  // next to thirteen neutral ones. `states.ts`'s own comment on the
+  // `swirl` entry carries the full history.
   const swirlDef = STATE_BY_ID.get("swirl")!;
 
-  test("pose(t).gaze equals base()'s own REST_GAZE default at every sampled t, not NEUTRAL_GAZE", () => {
+  test("pose(t).gaze is neutral at every sampled t, not base()'s REST_GAZE", () => {
     for (let t = 0; t <= swirlDef.duration; t += swirlDef.duration / 10) {
       const gaze = swirlDef.pose(t).gaze;
-      expect(gaze.yaw).toBe(REST_GAZE.yaw);
-      expect(gaze.pitch).toBe(REST_GAZE.pitch);
-      expect(gaze.roll).toBe(REST_GAZE.roll);
-      // and NOT the swept value, spelled out so a future re-sweep fails
-      // this test even if `REST_GAZE`'s own numbers ever move too
-      expect(gaze.yaw).not.toBe(0);
-      expect(gaze.pitch).not.toBe(0);
-      expect(gaze.roll).not.toBe(0);
+      expect(gaze.yaw).toBe(0);
+      expect(gaze.pitch).toBe(0);
+      expect(gaze.roll).toBe(0);
+      // spelled out so a future fidelity revert fails here rather than
+      // only showing up on the showcase grid
+      expect(gaze.yaw).not.toBe(REST_GAZE.yaw);
     }
-  });
-
-  test("matches bloub upstream exactly: pose(t) declares no gaze override at all (inherits base())", () => {
-    // White-box companion to the black-box check above: `base({...})`'s own
-    // spread means an explicit `gaze: { ...REST_GAZE }` and simply omitting
-    // the field are indistinguishable from `pose()`'s return value alone —
-    // this reads the SOURCE to confirm it's the latter (bloub's own
-    // authoring shape), not a swirl-local `{ ...REST_GAZE }` copy that
-    // would silently go stale if `REST_GAZE` itself ever moved.
-    const src = swirlDef.pose.toString();
-    expect(src).not.toContain("gaze");
   });
 });
 

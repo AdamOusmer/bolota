@@ -822,19 +822,17 @@ export const STATES: StateDef[] = [
     blinkIn: true,
     pose: (t) =>
       base({
-        // bolota gaze sweep history: an earlier pass on this branch swept
-        // this line to `NEUTRAL_GAZE` (`base()`'s own default is
-        // `REST_GAZE`, bloub's measured resting glance). User call,
-        // compared directly against bloub running live: that sweep was
-        // wrong FOR THIS STATE specifically — bloub's own `arrival` entrance
-        // (this state's upstream original, `../../bloub`'s `states.ts`)
-        // never touches `gaze` at all, i.e. keeps `base()`'s own
-        // `REST_GAZE` default, and `swirl` carrying anything else read as
-        // broken next to it, not merely different. `burst`/`comet` (that
-        // same sweep's other two states) are UNCHANGED by this reversal —
-        // their own `NEUTRAL_GAZE` stands, this is a swirl-only correction.
-        // No explicit `gaze:` line here at all, same as bloub: this state's
-        // eyes are `base()`'s own resting `REST_GAZE`, full stop.
+        // bolota gaze policy: neutral is this library's base for every
+        // state that owns its own choreography, `swirl` included. bloub's
+        // own `arrival` entrance (this state's upstream original) inherits
+        // `base()`'s `REST_GAZE` sideways glance instead, and a pass on
+        // this branch restored that for fidelity — reverted again here on
+        // the owner's call: the showcase reads the whole grid at once, and
+        // one state resting off-axis next to thirteen neutral ones reads
+        // as the odd tile, not as upstream fidelity. `burst`/`comet`
+        // already carry `NEUTRAL_GAZE` for the same reason; this makes the
+        // set consistent.
+        gaze: { ...NEUTRAL_GAZE },
         //
         // three of `orbit`'s six rings: half the bouquet is enough to
         // recognize it, and that's fewer arcs to rasterize per frame
