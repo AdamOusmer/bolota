@@ -1,0 +1,15 @@
+{
+  // Cloudflare Pages project, built from this directory (Root directory
+  // `/web/` in the dashboard). Pages reads `pages_build_output_dir` to know
+  // what to upload, which is the whole job of this file: without it the build
+  // succeeded and the deploy step had nothing to act on.
+  //
+  // Not the Workers `assets` shape. The two are mutually exclusive, and this
+  // project is Pages: `assets` here would make wrangler treat it as a Worker
+  // and refuse.
+  //
+  // `_headers` in the build output (the site's CSP) is served by Pages as-is.
+  "name": "bolota",
+  "compatibility_date": "2026-08-19",
+  "pages_build_output_dir": "./dist"
+}
