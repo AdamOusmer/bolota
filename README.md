@@ -219,11 +219,27 @@ const bot = mountEngine(svgElement, user.id);
 bot.play("wander", { loop: true }); // resting face, alive
 bot.setExpression("curious");       // hold a face on top of it
 bot.follow("window");               // eyes track the pointer
-bot.play("burst");                  // one-shot, returns to idle on its own
+bot.play("burst");                  // one-shot: plays, holds, blends back
 
 bot.stop();     // freeze on the current frame
 bot.destroy();  // remove every node this call created
 ```
+
+A one-shot state plays, dwells on its finished pose for a beat, then
+cross-fades back into the face it interrupted, expression and all. The state
+it returns to is whatever was looping before it, so the bot never drops into
+a different resting face than the one it left. Both parts are adjustable:
+
+```ts
+bot.play("orbit", { hold: 1.2 });        // linger longer before handing back
+bot.play("wink", { rest: "thinking" });  // settle somewhere else afterwards
+bot.play("burst", { hold: 0 });          // hand back the instant it ends
+```
+
+Every transition is a cross-fade over the outgoing state's own morph, and
+most mask the shape change with a blink. There is no path through the API
+that cuts, with one deliberate exception: under `prefers-reduced-motion` the
+engine renders single frames and does not animate between them.
 
 Fourteen states ship, listed at runtime as `bot.states`:
 

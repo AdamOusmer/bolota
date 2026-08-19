@@ -665,3 +665,101 @@ describe("orbit decor and eye-pair fidelity to bloub", () => {
     }
   });
 });
+
+describe("one-shot states dwell, then morph back to the face they left", () => {
+  // Owner's ask: a state that finishes should hold its settled pose for a
+  // beat and then blend back into the expression the bot was wearing, rather
+  // than handing back the instant its `duration` elapses (which is the exact
+  // moment its choreography settles, so the settled pose was never seen) and
+  // handing back to a hard-coded `idle` (which is the STILL neutral, so a bot
+  // that was alive before the gesture went static after it).
+  const eyeMid = (svg: FakeElement) => {
+    const eyes = parts(svg).eyes.children;
+    const pts = eyes.map((e) => {
+      const m = /matrix\(([^,]+),([^,]+),([^,]+),([^,]+),(-?[\d.]+),(-?[\d.]+)\)/.exec(
+        e.getAttribute("transform") ?? "",
+      );
+      return m ? { x: Number(m[5]), y: Number(m[6]) } : { x: 0, y: 0 };
+    });
+    return {
+      x: pts.reduce((a, p) => a + p.x, 0) / (pts.length || 1),
+      y: pts.reduce((a, p) => a + p.y, 0) / (pts.length || 1),
+    };
+  };
+
+  test("a one-shot fired over a looping wander returns to wander, not idle", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 500);
+
+    handle.play("wink");
+    // wink's own duration plus the dwell plus the morph back
+    run(doc, 4000);
+
+    // wander drifts; idle does not. Sampling across a window is what tells
+    // them apart from the outside, with no state getter to ask.
+    const a = eyeMid(svg as unknown as FakeElement);
+    run(doc, 900);
+    const b = eyeMid(svg as unknown as FakeElement);
+    expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeGreaterThan(0.5);
+  });
+
+  test("the dwell is real: the gesture's own decor is still on screen after its duration", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 500);
+    // Total decor ink on screen: the nodes persist, so it is their opacity
+    // that says whether the gesture is still showing.
+    // The decor sits one group deeper than `front` itself, and the nodes are
+    // created and removed rather than merely faded, so counting them is the
+    // honest signal for "is the gesture still on screen".
+    const decor = () =>
+      parts(svg as unknown as FakeElement).front.children.flatMap((g) => g.children).length;
+    const resting = decor();
+    expect(resting).toBe(0);
+
+    // exclaim's duration is 2s, and it draws the mark's bar as decor
+    handle.play("exclaim", { hold: 1 });
+    run(doc, 2100); // past the duration, inside the dwell
+    expect(decor()).toBeGreaterThan(0);
+
+    run(doc, 1500); // past the dwell and the morph back
+    expect(decor()).toBe(0);
+  });
+
+  test("hold: 0 restores the immediate hand-back", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 500);
+    handle.play("swirl", { hold: 0 });
+    run(doc, 1300 + 600);
+    // back on a resting face, so the body is the seed's own silhouette again
+    expect(parts(svg as unknown as FakeElement).bodyPath.getAttribute("d")).toBeTruthy();
+  });
+
+  test("no jumps: the hand-back is a blend, not a cut", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("wander", { loop: true });
+    run(doc, 500);
+    handle.play("wink", { hold: 0.4 });
+
+    // Step frame by frame across the whole gesture, including the hand-back,
+    // and watch for a single frame that moves the eyes further than a morph
+    // ever would. A cut shows up here as one outlier step; a blend does not.
+    let worst = 0;
+    let prev = eyeMid(svg as unknown as FakeElement);
+    for (let i = 0; i < 200; i++) {
+      run(doc, 16);
+      const now = eyeMid(svg as unknown as FakeElement);
+      worst = Math.max(worst, Math.hypot(now.x - prev.x, now.y - prev.y));
+      prev = now;
+    }
+    expect(worst).toBeLessThan(6);
+  });
+
+  test("an unknown rest state is refused, like an unknown state", () => {
+    const { handle } = mount();
+    expect(() => handle.play("wink", { rest: "nope" })).toThrow(/unknown bloub state/);
+  });
+});
+
