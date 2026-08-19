@@ -758,6 +758,21 @@ export const STATES: StateDef[] = [
     // fraction at every `t`, they just move in opposite directions during
     // collapse (`sil` shrinks, `eyeAlpha` fades) and together during regrow
     // (both rise on `regrow` itself, unmodified).
+    //
+    // Second bug found only by actually rendering frames (a debug page,
+    // side-by-side SVG snapshots, screenshotted): the alpha fade landed but
+    // eye GEOMETRY never tracked `bodyScale` — `eyes` stayed the default
+    // full-size `pair(EYE_W, EYE_H)` (`base()`'s own default) regardless of
+    // how small the body was. Mid-regrow (e.g. t=1.8, body at ~50% scale,
+    // alpha already ~50%) the eye rendered nearly as big as the whole
+    // shrunken body — a full-size capsule on a half-size ball. Fixed at the
+    // shared choke point instead of here (`bloub/engine.ts`'s `posed()`
+    // already computes this exact `scale` for `sil.radii`, for every
+    // non-`baseBody` state — see its own comment): it now applies the same
+    // factor to `pose.eyes[i].w/h`, so `orbit` and `play` (both render a
+    // constant ~0.86-scale body via that same mechanism, unnoticed until
+    // this bug was found) get it too, not just the two states that
+    // happened to be reported.
     pose: (t) => {
       // Measured collapse: 1.0 -> 0.166 over 0.7s, ease-out, no overshoot.
       const collapseFrac = easings.easeOutQuint(clamp(t / 0.7))
@@ -785,10 +800,13 @@ export const STATES: StateDef[] = [
     baseBody: false,
     blinkIn: false,
     // bolota eye-visibility audit, user-reversed: same case as `burst`
-    // above (see its own comment) — floored fade replaced with a full,
-    // eased fade to 0, tracking the same collapse curve, and back with the
-    // regrow. User report named this one explicitly ("comet collapses to a
-    // dot"); the dot is now genuinely eyeless at its smallest.
+    // above (see its own comment, including the eye-GEOMETRY-scaling half
+    // of the fix, which lives at the shared choke point — `bloub/engine.ts`'s
+    // `posed()` — not here) — floored fade replaced with a full, eased fade
+    // to 0, tracking the same collapse curve, and back with the regrow.
+    // User report named this one explicitly ("comet collapses to a dot");
+    // the dot is now genuinely eyeless at its smallest, and proportionate
+    // everywhere in between.
     pose: (t) => {
       const collapseFrac = easings.easeOutQuint(clamp(t / 0.55))
       const collapse = 1 - (1 - COMET_DOT) * collapseFrac
