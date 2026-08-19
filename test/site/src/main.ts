@@ -370,6 +370,86 @@ function mountEngineSvg(container: HTMLElement, name: string, size: number, opts
   );
 }
 
+// ---- Morph slideshow (engine, auto-advancing idle -> state timeline) ----
+{
+  const c = card("Morph slideshow -- idle -> state", true);
+  const { handle } = mountEngineSvg(c, "slideshow-blob", 96);
+
+  const status = document.createElement("div");
+  status.className = "status";
+  c.appendChild(status);
+
+  const controls = document.createElement("div");
+  controls.className = "row";
+  const prevBtn = document.createElement("button");
+  prevBtn.textContent = "prev";
+  const playBtn = document.createElement("button");
+  playBtn.textContent = "pause";
+  const nextBtn = document.createElement("button");
+  nextBtn.textContent = "next";
+  controls.appendChild(prevBtn);
+  controls.appendChild(playBtn);
+  controls.appendChild(nextBtn);
+  c.appendChild(controls);
+
+  // Each non-"idle" beat returns to "idle" on its own once its duration
+  // elapses (see engine.ts's tick()), but we still drive the timeline with
+  // our own timer so the status label and manual prev/next stay in sync
+  // with what's on screen, including the resting "idle" beats.
+  const timeline: string[] = [
+    "idle", "thinking", "idle", "alert", "idle", "sleep",
+    "idle", "exclaim", "idle", "burst", "idle", "comet", "idle",
+  ];
+  const STEP_MS = 3000;
+  let step = 0;
+  let playing = true;
+  let timer: ReturnType<typeof setInterval> | null = null;
+
+  function render() {
+    const s = timeline[step];
+    handle.play(s, { loop: s === "idle" });
+    status.textContent = `${step + 1}/${timeline.length}: ${s}`;
+  }
+
+  function advance(delta: number) {
+    step = (step + delta + timeline.length) % timeline.length;
+    render();
+  }
+
+  function startTimer() {
+    timer = setInterval(() => advance(1), STEP_MS);
+  }
+
+  function stopTimer() {
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+  }
+
+  playBtn.addEventListener("click", () => {
+    playing = !playing;
+    playBtn.textContent = playing ? "pause" : "play";
+    if (playing) startTimer();
+    else stopTimer();
+  });
+  prevBtn.addEventListener("click", () => {
+    stopTimer();
+    playing = false;
+    playBtn.textContent = "play";
+    advance(-1);
+  });
+  nextBtn.addEventListener("click", () => {
+    stopTimer();
+    playing = false;
+    playBtn.textContent = "play";
+    advance(1);
+  });
+
+  render();
+  startTimer();
+}
+
 // ---- MIX 1: onboarding scene (roam + morph + engine burst finale) ----
 {
   const c = card("MIX: onboarding scene (roam + morph + engine burst finale)", true);
