@@ -5,6 +5,7 @@
     "": {
       "name": "bolota-showcase",
       "dependencies": {
+        "bolota": "./.lib/bolota-2.0.0.tgz",
         "@astrojs/sitemap": "3.7.3",
         "astro": "^7",
         "bolota": "./.lib/bolota-2.0.0.tgz",

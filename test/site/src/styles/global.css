@@ -12,7 +12,7 @@
  * everywhere, and Space Mono itself is gone, replaced by Spline Sans Mono,
  * scoped to code and seed-input contexts only instead of the whole page. All
  * three are self-hosted via @font-face in ./fonts.css, imported in
- * src/layouts/Base.astro right after this file's own tokens.css import.
+ * src/layouts/Layout.astro right after this file's own tokens.css import.
  *
  * Also v2: the boxless law. Card/tile/panel chrome (border + background) is
  * gone except on the three surfaces the redesign spec keeps: the hero seed
@@ -21,7 +21,7 @@
  * `.light-pool` utility below, not a box.
  *
  * Every color is a `var(--token)` defined in ./tokens.css, imported first;
- * see Base.astro, never a literal here. That file's own header explains the
+ * see Layout.astro, never a literal here. That file's own header explains the
  * naming and the two structural exceptions (the data: URI favicon, and the
  * library's own seed-computed avatar palettes).
  */
@@ -299,7 +299,7 @@ main {
    `data-reveal style="--reveal-i:N"` groups). Reduced motion and any
    failure to reach JS (disabled, error, IntersectionObserver missing) both
    resolve to the resting state via the media query below plus the
-   `<noscript>` rule in Base.astro, never a permanently invisible section. */
+   `<noscript>` rule in Layout.astro, never a permanently invisible section. */
 
 [data-reveal] {
   opacity: 0;
@@ -316,7 +316,7 @@ main {
 /* ── section heading (kicker/title/lead) ──
    The shared pattern every section opens with: an optional kicker, a
    `.display-section` title, one `.lead` sentence. No explainer paragraphs,
-   per the redesign's copy voice. See components/SectionHead.astro. */
+   per the redesign's copy voice. See components/ui/SectionHead.astro. */
 
 .section-head {
   margin-bottom: 3rem;

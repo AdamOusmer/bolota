@@ -16,7 +16,7 @@
  * lib/lightfield.ts's canvas drawing pull the same values via
  * `getComputedStyle` instead of hardcoding its own copy of the mote hues.
  *
- * Exception, deliberately not tokenized: the favicon in Base.astro is a
+ * Exception, deliberately not tokenized: the favicon in Layout.astro is a
  * `data:` URI SVG, resolved by the browser before the page's stylesheet
  * exists, so it cannot reference a CSS custom property. Its two hex values
  * are kept in sync with --bg-color/--light by hand.

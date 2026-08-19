@@ -1,7 +1,7 @@
 ---
-import SectionHead from "./SectionHead.astro";
+import SectionHead from "../ui/SectionHead.astro";
 import { bolota, parts, normalizeSeed } from "bolota";
-import { DEFAULT_SEED } from "../scripts/lib/curated-seeds";
+import { DEFAULT_SEED } from "../../scripts/lib/curated-seeds";
 
 // Static-first paint here too, same reasoning as Hero.astro: `bolota()`
 // (and `parts()`, its framework-adapter twin) are near-free string
