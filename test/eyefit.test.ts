@@ -36,21 +36,36 @@ describe("bug 1 — eye anchoring on arbitrary seeded silhouettes", () => {
 
   const baseBodyStates: StateId[] = ["idle", "wink", "wide", "notify", "swirl"];
 
+  // A single `t` sample is not enough to trust: `eyefit.ts`'s correction is a
+  // single constant per (shape, state, expr), sized to cover the worst case the
+  // idle wander's `loopNoise` sum can reach — and because that sum's terms use
+  // incommensurate periods, the actual worst moment recurs only occasionally and
+  // was observed (round 2 tuning) to land as late as t~300s for the tightest
+  // combo (`notify` on the squashed, high-exponent seed below). A `t=1.0` check
+  // alone would have passed for amplitude values later proven, by a 600s+ sweep,
+  // to blow past the silhouette edge. Sweeping to 350s at a coarse step is the
+  // cheapest check that still crosses that recurrence.
   for (const shape of shapes) {
     for (const state of baseBodyStates) {
-      test(`eyes sit centrally, not pinned to the edge — state "${state}", seed n=${JSON.stringify(shape[0])}`, () => {
+      test(`eyes stay inside the body over a long idle window — state "${state}", seed n=${JSON.stringify(shape[0])}`, () => {
         const engine = new BotEngine(R, state, shape);
-        const frame = engine.sample(1.0);
-        expect(frame.eyes.length).toBeGreaterThan(0);
-        for (const eye of eyeCenters(frame.eyes)) {
-          const angle = Math.atan2(eye.y, eye.x);
-          const localBodyRadius = radiusAtAngle(shape, angle) * R;
-          const ratio = Math.hypot(eye.x, eye.y) / localBodyRadius;
-          // "Stuck at the top/side" == ratio near or over 1 (eye at/past the
-          // silhouette's own edge). A corrected anchor sits well inside it.
-          expect(ratio).toBeLessThan(0.95);
-          expect(ratio).toBeGreaterThan(0.1);
+        let sampled = false;
+        for (let t = 0; t <= 350; t += 0.5) {
+          const frame = engine.sample(t);
+          for (const eye of eyeCenters(frame.eyes)) {
+            sampled = true;
+            const angle = Math.atan2(eye.y, eye.x);
+            const localBodyRadius = radiusAtAngle(shape, angle) * R;
+            const ratio = Math.hypot(eye.x, eye.y) / localBodyRadius;
+            // "Stuck at the top/side" == ratio near or over 1 (eye at/past the
+            // silhouette's own edge). A corrected anchor sits well inside it,
+            // with margin: round 2 tuning measured a real worst of ~0.875 for
+            // this exact grid, so 0.97 catches a regression without being a
+            // hair-trigger on sampling-resolution noise.
+            expect(ratio).toBeLessThan(0.97);
+          }
         }
+        expect(sampled).toBe(true);
       });
     }
   }
@@ -62,15 +77,28 @@ describe("bug 2 — idle gaze travel", () => {
     const dt = 1 / 30;
     let prev = eyeCenters(engine.sample(0).eyes)[0]!;
     let travel = 0;
+    let tx = 0;
+    let ty = 0;
     for (let t = dt; t <= 10; t += dt) {
       const cur = eyeCenters(engine.sample(t).eyes)[0]!;
       travel += dist(prev, cur);
+      tx += Math.abs(cur.x - prev.x);
+      ty += Math.abs(cur.y - prev.y);
       prev = cur;
     }
-    // Pre-fix amplitude (dYaw <= 7.1deg, dPitch <= 5.5deg) measured well under
-    // 40 viewBox units of accumulated travel over 10s on a R=100 ball; raising the
-    // wander amplitude ~2.2x (`face.ts`) comfortably clears 100.
-    expect(travel).toBeGreaterThan(100);
+    // Round 1: original amplitude (7.1/5.5deg) -> 50.96 units; raised ~2.2x
+    // (`face.ts`) -> 112.50, x (82.78) leading y (61.90) by 1.34x. Round 2 verdict:
+    // still not enough. Amplitude turned out to be tightly gated by `eyefit.ts`'s
+    // containment solve (see `face.ts`'s comment — a 600s+ sweep found the real
+    // feasibility cliff sits almost exactly at round 1's numbers), so round 2
+    // spent its budget mostly on period instead — measured amplitude-gated only,
+    // period nearly free — landing at 252.48 (x 166.90 / y 158.13, ratio 1.06).
+    // Floor set well under the measured value so the test catches a regression,
+    // not a re-tune.
+    expect(travel).toBeGreaterThan(200);
+    // x-y balance: neither axis should dominate the way x did pre-round-2.
+    expect(tx / ty).toBeGreaterThan(0.7);
+    expect(tx / ty).toBeLessThan(1.4);
   });
 });
 

@@ -163,21 +163,56 @@ export interface LivelinessOptions {
  * `dYaw`/`dPitch`/`dRoll`) were measured off bloub's own reference video at
  * 5.5+1.6deg yaw, 4.2+1.3deg pitch, 2.2deg roll — correct for THAT video, but user
  * testing on blobatar avatars called the resulting idle drift "stuck... they move but
- * subtle movement, we need more." Raised ~2.2-2.3x here (yaw 7.1deg -> 16.1deg max,
- * pitch 5.5deg -> 12.4deg max, roll 2.2deg -> 4.8deg max) — still a wander, not a
- * cartoon look-around, but the travel is now large enough to read as alive rather
- * than as a static rest pose with occasional jitter.
+ * subtle movement, we need more."
+ *
+ * Round 1 raised these ~2.2x (yaw 7.1deg -> 16.1deg, pitch 5.5deg -> 12.4deg, roll
+ * 2.2deg -> 4.8deg; measured 10s eye-center path 50.96 -> 112.50 viewBox units).
+ * Round 2 verdict: still not enough, and x-travel (82.78) visibly led y-travel
+ * (61.90, ratio 1.34) — the old 16.1/12.4 yaw/pitch split.
+ *
+ * What actually gates this is NOT the 10s window, it's `eyefit.ts`'s anchor solve:
+ * `decalagePour` covers the worst case by testing gaze at the FOUR corners of
+ * (+-MAX_YAW_DRIFT, +-MAX_PITCH_DRIFT) — a bound that (per this file's own earlier
+ * comment) `loopNoise`'s two summed terms genuinely reach, given enough time
+ * (incommensurate periods -> arbitrarily close recurrence, not a paranoid
+ * overestimate). Long sweeps (600s-1800s, 5 baseBody states x 3 realistic seed
+ * profiles spanning the real `body.n`/squash range from `styles/shapes.ts`)
+ * confirmed this empirically: round 1's exact 16.1/12.4 sits right at that solver's
+ * feasibility cliff for the tightest combo (`notify`'s large capsule eyes on a
+ * squashed, high-exponent seed) — a further amplitude increase of as little as 2%
+ * flips the solve infeasible (measured overflow ratio jumping past 1.7, not a
+ * graceful degradation). Amplitude is NOT the free lever it looks like.
+ *
+ * Period, on the other hand, turned out to be almost entirely free: the same long
+ * sweeps showed the worst-case containment ratio is amplitude-gated only — moving
+ * from the original periods to noticeably shorter ones at the SAME amplitude left
+ * the worst ratio unchanged (0.835 -> 0.830 over 600s) while nearly doubling 10s
+ * travel on its own. So round 2 spends its budget on period, not amplitude, and
+ * only redistributes amplitude (yaw down a hair, pitch up) to equalize the x/y
+ * split rather than grow the total drift bound much at all:
+ *
+ * - yaw/pitch sums brought to near-equal (16.0 / 16.0, was 16.1 / 12.4) — small
+ *   step up for pitch, imperceptible step down for yaw, tested safe with real
+ *   margin (worst containment ratio 0.875 over 600s, 0.873 over 1800s — i.e. it
+ *   converges, it does not keep creeping toward 1).
+ * - periods roughly halved (11.3/3.7 -> 6.0/1.8 yaw, 9.1/4.3 -> 5.1/2.1 pitch,
+ *   13.7/3.2 -> 7.3/3.2 roll): same smooth 3-term `loopNoise` sum, just cycling
+ *   faster — more frequent glances, not jitter (`loopNoise` has no added noise
+ *   term, just a shorter period on the same sinusoid sum).
+ *
+ * Measured 10s eye-center path at these values: 112.50 -> 252.48 (x 82.78 -> 166.90,
+ * y 61.90 -> 158.13 — x/y now 1.06, was 1.34).
  *
  * `eyefit.ts`'s `DERIVE_YAW`/`DERIVE_PITCH` import `MAX_YAW_DRIFT`/`MAX_PITCH_DRIFT`
  * below rather than restating these sums, so the anchor-correction coverage always
  * matches the amplitude actually in play here — see that file's comment on why a
  * stale copy there is exactly the bug this whole module exists to prevent.
  */
-const WANDER_YAW_SLOW = 12.5
+const WANDER_YAW_SLOW = 12.4
 const WANDER_YAW_FAST = 3.6
-const WANDER_PITCH_SLOW = 9.5
-const WANDER_PITCH_FAST = 2.9
-const WANDER_ROLL = 4.8
+const WANDER_PITCH_SLOW = 12.3
+const WANDER_PITCH_FAST = 3.7
+const WANDER_ROLL = 5.2
 
 /** Exported so `eyefit.ts` can bound its correction table on the real amplitude. */
 export const MAX_YAW_DRIFT = WANDER_YAW_SLOW + WANDER_YAW_FAST
@@ -188,10 +223,10 @@ export function liveliness(t: number, opt: LivelinessOptions = {}): Liveliness {
 
   // Periodes premieres entre elles : la derive ne se repete jamais a l'oeil.
   return {
-    dYaw: (loopNoise(t, 11.3, 0.4) * WANDER_YAW_SLOW + loopNoise(t, 3.7, 2.1) * WANDER_YAW_FAST) * wander,
+    dYaw: (loopNoise(t, 6.0, 0.4) * WANDER_YAW_SLOW + loopNoise(t, 1.8, 2.1) * WANDER_YAW_FAST) * wander,
     dPitch:
-      (loopNoise(t, 9.1, 1.3) * WANDER_PITCH_SLOW + loopNoise(t, 4.3, 0.7) * WANDER_PITCH_FAST) * wander,
-    dRoll: loopNoise(t, 13.7, 3.2) * WANDER_ROLL * wander,
+      (loopNoise(t, 5.1, 1.3) * WANDER_PITCH_SLOW + loopNoise(t, 2.1, 0.7) * WANDER_PITCH_FAST) * wander,
+    dRoll: loopNoise(t, 7.3, 3.2) * WANDER_ROLL * wander,
     lid: blink ? blinkLid(t) : 1,
     // Au repos la video est quasiment immobile (centre stable a +-0.003, rayon
     // constant) : toute la vie passe par le regard et les clignements. On garde
