@@ -460,6 +460,44 @@ describe("handle.follow — composes with idle life", () => {
     const moved = eyeXY(svg as unknown as FakeElement)!;
     expect(moved).not.toEqual(after);
   });
+
+  test("a state with its own gaze choreography (baseFace: false) is not overridden by follow", () => {
+    // Matches bloub's own `aim()` gate (`BloubBot.vue`): only a `baseFace`
+    // state (`idle`/`swirl` in this port's `states.ts`) wears the tracked
+    // Look. Every other state — `wink` here — has its own `pose.gaze` (it
+    // visibly winks over its 1.6s duration, so its eye position is NOT
+    // static — the comparison below is against an identical un-tracked
+    // mount, not against a "should stay still" assumption).
+    const withFollow = mount();
+    withFollow.handle.play("wink", { loop: true });
+    withFollow.handle.follow("window");
+    // Far corner: if the gate were missing, this is where the eyes would
+    // wrongly be dragged toward instead of wink's own pose.
+    move(withFollow.doc, withFollow.doc.defaultView, withFollow.doc.defaultView.innerWidth, 0);
+
+    const reference = mount(); // no follow() call at all
+    reference.handle.play("wink", { loop: true });
+
+    run(withFollow.doc, 500); // well past both FOLLOW_MORPH and BotEngine's LOOK_MORPH
+    run(reference.doc, 500);
+
+    // If the gate were missing, `withFollow` would be dragged toward the far
+    // corner instead of matching wink's own untouched choreography.
+    expect(eyeXY(withFollow.svg as unknown as FakeElement)).toEqual(
+      eyeXY(reference.svg as unknown as FakeElement),
+    );
+
+    // Switching to a baseFace state re-engages tracking at the pointer's
+    // current (already-known) position — now it SHOULD diverge from the
+    // untracked reference.
+    withFollow.handle.play("idle", { loop: true });
+    reference.handle.play("idle", { loop: true });
+    run(withFollow.doc, 500);
+    run(reference.doc, 500);
+    expect(eyeXY(withFollow.svg as unknown as FakeElement)).not.toEqual(
+      eyeXY(reference.svg as unknown as FakeElement),
+    );
+  });
 });
 
 describe("handle.follow — premium tuning: wide deflection, low latency", () => {
