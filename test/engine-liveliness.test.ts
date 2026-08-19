@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mountEngine, type EngineHandle } from "../src/engine";
+import { engineStates, mountEngine, type EngineHandle } from "../src/engine";
 import { runSequence } from "../src/sequences";
 
 /**
@@ -247,5 +247,97 @@ describe("entrance handoff", () => {
     // engine a second apart must not be reading the same frame twice.
     expect(plusOne).not.toBe(settled);
     expect(plusTwo).not.toBe(plusOne);
+  });
+});
+
+// The two describe blocks below are the final-gate additions on top of the
+// engine-core and eyes fixes above: they extend the same fake-DOM harness to
+// the remaining reported symptoms — full 15-state coverage (only 4 states
+// were spot-checked above), the exact 40%/80% burst thresholds and its
+// particles, and a signal that proves a loop genuinely restarts its local
+// clock rather than merely holding its last frame.
+
+describe("every state moves — full 15-state sweep", () => {
+  // engine-core's own sweep above already pins thinking/alert/sleep/exclaim
+  // as the root-cause regression test; this closes the rest of the catalog
+  // (`engineStates()`, `bun test`-stable order per `bloub/states.ts`) so no
+  // state can regress back to a static tile unnoticed.
+  const alreadyCovered = new Set(["thinking", "alert", "sleep", "exclaim"]);
+  for (const state of engineStates()) {
+    if (alreadyCovered.has(state)) continue;
+    test(`"${state}" actually moves once looping (t=0.5s vs t=1.5s differ)`, () => {
+      const { doc, svg, handle } = mount();
+      handle.play(state, { loop: true });
+      run(doc, 500);
+      const mid = parts(svg as unknown as FakeElement).bodyPath.getAttribute("d");
+      run(doc, 1000); // now at 1.5s
+      const late = parts(svg as unknown as FakeElement).bodyPath.getAttribute("d");
+      expect(late).not.toBe(mid);
+    });
+  }
+
+  test('"swirl" renders non-empty markup (body path plus its entrance rings)', () => {
+    const { doc, svg, handle } = mount();
+    handle.play("swirl", { loop: true });
+    run(doc, 500); // inside the rings' visible window (~0.06s-1.22s)
+    const { bodyPath, back, front } = parts(svg as unknown as FakeElement);
+    const d = bodyPath.getAttribute("d");
+    expect(d).toBeTruthy();
+    expect((d as string).length).toBeGreaterThan(10);
+    // Rings render as `<path>` children of `back`/`front` (arcGroup) — at
+    // least one side must be non-empty while the rings are visible.
+    expect(back.children.length + front.children.length).toBeGreaterThan(0);
+  });
+});
+
+describe("burst: the exact reported thresholds", () => {
+  test("body bbox shrinks below 40% then regrows above 80% of its initial size", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("burst", { loop: true });
+    run(doc, 50); // ~0.05s: collapse has barely started
+    const initial = bbox(parts(svg as unknown as FakeElement).bodyPath.getAttribute("d")!);
+    run(doc, 600); // ~0.65s: past the 0.7s collapse window's floor
+    const collapsed = bbox(parts(svg as unknown as FakeElement).bodyPath.getAttribute("d")!);
+    run(doc, 1750); // ~2.4s: regrow window's own end
+    const regrown = bbox(parts(svg as unknown as FakeElement).bodyPath.getAttribute("d")!);
+
+    expect(collapsed.w).toBeLessThan(initial.w * 0.4);
+    expect(collapsed.h).toBeLessThan(initial.h * 0.4);
+    expect(regrown.w).toBeGreaterThan(initial.w * 0.8);
+    expect(regrown.h).toBeGreaterThan(initial.h * 0.8);
+  });
+
+  test("particles are present mid-collapse", () => {
+    const { doc, svg, handle } = mount();
+    handle.play("burst", { loop: true });
+    run(doc, 500); // t=0.5s: inside two overlapping particle birth windows
+    const { back } = parts(svg as unknown as FakeElement);
+    // `dotsBehind` puts burst's particle group last among `back`'s children,
+    // rebuilt fresh every frame (see `render()`'s `arcGroup` + `dotGroup`).
+    const dotsGroup = back.children[back.children.length - 1];
+    expect(dotsGroup?.children.length ?? 0).toBeGreaterThan(0);
+  });
+});
+
+describe("loop:true genuinely restarts, it does not clamp on the last frame", () => {
+  test('"comet" resumes shrinking after its plateau — proof of a real restart, not a permanent clamp', () => {
+    // `tick()` deliberately holds a looping-but-plateaued state (every term
+    // in comet's pose is `clamp(...)`, so it settles to `circle(1)` and
+    // stops changing) until `duration + morph` before calling `reset()` —
+    // see `engine.ts`'s own comment on why. So `t = duration + 0.3s` is
+    // *expected* to equal the plateaued frame here; that only becomes a
+    // "clamped forever" bug if nothing ever moves again after it. This
+    // checks the frame that must differ: once the restart actually fires
+    // (duration + morph = 2.4 + 0.45 = 2.85s), comet's own collapse curve
+    // re-enters and the body shrinks hard again (COMET_DOT = 0.129 of
+    // resting radius by 0.55s into a fresh cycle).
+    const { doc, svg, handle } = mount();
+    handle.play("comet", { loop: true });
+    run(doc, 2700); // duration + 0.3s: inside the plateau, body ~circle(1)
+    const plateaued = bbox(parts(svg as unknown as FakeElement).bodyPath.getAttribute("d")!);
+    run(doc, 250); // crosses the 2.85s restart boundary, ~0.1s into cycle 2
+    const afterRestart = bbox(parts(svg as unknown as FakeElement).bodyPath.getAttribute("d")!);
+
+    expect(afterRestart.w).toBeLessThan(plateaued.w * 0.85);
   });
 });
