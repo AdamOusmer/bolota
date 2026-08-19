@@ -13,6 +13,8 @@ const {
   description = "Deterministic SVG avatars from any string, with a motion engine for when they need to move. A Luzir project.",
 } = Astro.props;
 
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+
 // The one deliberate exception to "every color is a var(--token) from
 // tokens.css": a `data:` URI favicon is resolved by the browser before the
 // page's own stylesheet exists, so it cannot reference a CSS custom
@@ -31,6 +33,9 @@ const favicon = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' vi
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     <title>{title}</title>
+    <link rel="canonical" href={canonicalURL} />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:site_name" content="bolota" />
     <link rel="icon" href={favicon} />
     <!-- [data-reveal]'s resting state is opacity: 0 until src/scripts/lib/
          motion.ts's setupReveal() (or, under prefers-reduced-motion, its
