@@ -1,37 +1,72 @@
 ---
+// Redesign v2's hero: lamplight specimen stage. Centered column, boxless
+// except the one seed input the spec calls out as the hero's single
+// surface. Headline is split into `.hero__word` spans so hero.ts can play
+// the spec's load choreography (headline rises word-by-word, then the
+// light-pool/blob fades up, then the rest) instead of the flat per-element
+// stagger the interim version used; the visible text still reads as one
+// continuous sentence to assistive tech, spans don't break that.
 ---
 
+<noscript>
+  <style>
+    .hero__kicker,
+    .hero__lead,
+    .hero__stage,
+    .hero__controls,
+    .hero__word {
+      opacity: 1 !important;
+      transform: none !important;
+    }
+  </style>
+</noscript>
+
 <section class="hero wrap" id="top">
-  <div class="hero__copy">
-    <h1 class="hero__title" data-hero-stagger>bolota</h1>
-    <p class="hero__subhead" data-hero-stagger>One string in. One face out. Always the same.</p>
-    <p class="hero__tagline" data-hero-stagger>
-      Deterministic SVG avatars from any string, with a motion engine for when they need to move.
+  <p class="kicker hero__kicker" data-hero-stagger>A Luzir project</p>
+
+  <h1 class="display-hero hero__title">
+    <span class="hero__word">Turn</span>{" "}<span class="hero__word">any</span>{" "}<span
+      class="hero__word">string</span
+    >
+    <br />
+    <span class="hero__word">into</span>{" "}<span class="hero__word">a</span>{" "}<span class="hero__word"
+      >living</span
+    >{" "}<span class="hero__word">face.</span>
+  </h1>
+
+  <p class="lead hero__lead" data-hero-stagger>
+    Deterministic SVG avatars, with a motion engine for when they need to move.
+  </p>
+
+  <div class="hero__stage" data-hero-pool>
+    <div class="light-pool hero__pool" aria-hidden="true"></div>
+    <div class="hero__avatar-wrap" data-hero-avatar>
+      <svg viewBox="0 0 100 100"></svg>
+    </div>
+  </div>
+
+  <div class="hero__controls" data-hero-stagger>
+    <label class="seed-control hero__seed" for="seed-input">
+      <span class="seed-control__prefix">seed</span>
+      <input id="seed-input" data-seed-input type="text" placeholder="type anything…" autocomplete="off" spellcheck="false" />
+      <button class="seed-control__dice" type="button" data-seed-random data-magnetic aria-label="Randomize seed">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <rect x="4" y="4" width="16" height="16" rx="4"></rect>
+          <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"></circle>
+          <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"></circle>
+          <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"></circle>
+          <circle cx="8.5" cy="15.5" r="1.2" fill="currentColor" stroke="none"></circle>
+          <circle cx="15.5" cy="15.5" r="1.2" fill="currentColor" stroke="none"></circle>
+        </svg>
+      </button>
+    </label>
+    <p class="seed-hint" data-seed-hint>
+      Empty seed shows a <strong>curated set</strong> of shapes below. Type one to see it everywhere on this page.
     </p>
 
-    <div data-hero-stagger>
-      <label class="seed-control" for="seed-input">
-        <span class="seed-control__prefix">seed</span>
-        <input id="seed-input" data-seed-input type="text" placeholder="type anything…" autocomplete="off" spellcheck="false" />
-        <button class="seed-control__dice" type="button" data-seed-random data-magnetic aria-label="Randomize seed">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <rect x="4" y="4" width="16" height="16" rx="4"></rect>
-            <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"></circle>
-            <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"></circle>
-            <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"></circle>
-            <circle cx="8.5" cy="15.5" r="1.2" fill="currentColor" stroke="none"></circle>
-            <circle cx="15.5" cy="15.5" r="1.2" fill="currentColor" stroke="none"></circle>
-          </svg>
-        </button>
-      </label>
-      <p class="seed-hint" data-seed-hint>
-        Empty seed shows a <strong>curated set</strong> of shapes below. Type one to see it everywhere on this page.
-      </p>
-    </div>
-
-    <div class="install-snip" data-hero-stagger>
+    <div class="install-snip">
       <code>npm install bolota</code>
-      <button class="copy-btn" data-copy="npm install bolota" aria-label="Copy install command">
+      <button class="copy-btn" data-copy="npm install bolota" data-magnetic aria-label="Copy install command">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <rect x="9" y="9" width="13" height="13" rx="2"></rect>
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -40,10 +75,84 @@
       </button>
     </div>
   </div>
-
-  <div class="hero__stage" data-hero-stagger>
-    <div class="hero__avatar-wrap" data-hero-avatar>
-      <svg viewBox="0 0 100 100"></svg>
-    </div>
-  </div>
 </section>
+
+<style>
+  /* Load choreography rest state: hero.ts's playEntrance() animates every
+     one of these from here, mirroring [data-reveal]'s opacity:0/translateY
+     resting-state pattern in global.css but scoped to the hero since these
+     aren't scroll-triggered, they're the page's first paint. */
+  .hero__kicker,
+  .hero__lead,
+  .hero__stage,
+  .hero__controls {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  .hero__word {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(0.4em);
+  }
+
+  .hero__title {
+    max-width: 15ch;
+    margin-inline: auto;
+  }
+
+  .hero__lead {
+    max-width: 46ch;
+  }
+
+  /* Blob HUGE per spec: min 44vh, pushed toward 46vh so it reads as the
+     stage's one specimen rather than an interim placeholder. */
+  .hero__avatar-wrap {
+    height: clamp(360px, 46vh, 680px);
+  }
+
+  /* Bigger pool than the shared default: a 44vh+ blob needs a wider, softer
+     glow behind it than the -25%/56px default tuned for smaller focal
+     blobs elsewhere on the page (per global.css's own note that hero and
+     sequences are expected to override this locally). */
+  .hero__pool {
+    inset: -55%;
+    filter: blur(clamp(40px, 6vw, 100px));
+  }
+
+  .hero__controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* "Large rounded field" + the spec's focus glow, the hero's one surface. */
+  .hero__seed {
+    padding: 8px 8px 8px 24px;
+    font-size: 1.05rem;
+    transition: box-shadow 240ms var(--ease-smooth);
+  }
+
+  .hero__seed input {
+    font-size: 1.05rem;
+    padding-block: 13px;
+  }
+
+  .hero__seed:focus-within {
+    box-shadow:
+      0 0 0 1px rgb(var(--accent-rgb) / 0.5),
+      0 0 36px rgb(var(--accent-rgb) / 0.3);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero__kicker,
+    .hero__lead,
+    .hero__stage,
+    .hero__controls,
+    .hero__word {
+      opacity: 1;
+      transform: none;
+    }
+  }
+</style>

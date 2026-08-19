@@ -67,45 +67,66 @@ export function setupHero() {
   playEntrance();
 }
 
-/** Staggered fade-up for `[data-hero-stagger]`, matching the Portfolio's
- * ui/PageEntrance.astro `.page-stagger` timing (duration 0.7, delay
- * 0.3 + i * 0.15, the same "smooth" cubic-bezier). Under reduced motion the
- * elements are set straight to their resting state instead of animated. */
+/** The spec's load choreography: the headline rises word-by-word (60ms
+ * stagger), then the blob's light-pool fades up, then the rest (lead, seed
+ * control, install line) follows. Kicker leads with its own quick fade.
+ * Same belt-and-suspenders shape as setupReveal() in lib/motion.ts: every
+ * element gets a `finalize()` that stops the running animation and pins the
+ * resting inline styles, called both from `animate()`'s own completion and
+ * from a backstop `setTimeout`, so a stalled rAF driver (backgrounded tab,
+ * `motion` failing to load, anything else) never leaves hero content stuck
+ * invisible. Under reduced motion every element jumps straight to resting. */
 function playEntrance() {
-  const els = document.querySelectorAll<HTMLElement>("[data-hero-stagger]");
+  const kicker = document.querySelector<HTMLElement>(".hero__kicker");
+  const words = Array.from(document.querySelectorAll<HTMLElement>(".hero__word"));
+  const pool = document.querySelector<HTMLElement>("[data-hero-pool]");
+  const rest = [
+    document.querySelector<HTMLElement>(".hero__lead"),
+    document.querySelector<HTMLElement>(".hero__controls"),
+  ].filter((el): el is HTMLElement => !!el);
+
+  const all = [kicker, ...words, pool, ...rest].filter((el): el is HTMLElement => !!el);
+
+  const settle = (el: HTMLElement) => {
+    el.style.opacity = "1";
+    el.style.transform = "none";
+  };
+
   if (reduceMotion.matches) {
-    els.forEach((el) => {
-      el.style.opacity = "1";
-      el.style.transform = "none";
-    });
+    all.forEach(settle);
     return;
   }
+
   const smooth = cubicBezier(0.25, 1, 0.5, 1);
-  els.forEach((el, i) => {
-    const delayMs = (0.3 + i * 0.15) * 1000;
+  const run = (el: HTMLElement, delay: number, duration = 0.6, riseBy = 16) => {
     let controls: ReturnType<typeof animate> | null = null;
-    // `stop()` before writing the resting inline styles: a still-running
-    // animation controls its target's `opacity`/`transform` on every frame
-    // and otherwise clobbers a plain style assignment straight back to
-    // whatever frame it is currently on, which is exactly the class of bug
-    // that left this stuck invisible in a background/unfocused tab whose
-    // rAF driver never reached the animation's own last frame.
     const finalize = () => {
       controls?.stop();
-      el.style.opacity = "1";
-      el.style.transform = "none";
+      settle(el);
     };
     try {
-      controls = animate(el, { opacity: [0, 1], y: [25, 0] }, { duration: 0.7, delay: delayMs / 1000, ease: smooth });
+      controls = animate(el, { opacity: [0, 1], y: [riseBy, 0] }, { duration, delay, ease: smooth });
       controls.finished.then(finalize).catch(finalize);
     } catch {
       finalize();
     }
-    // Belt and suspenders: a stalled rAF driver (a backgrounded/unfocused
-    // tab, or any other reason the animation's own completion never fires)
-    // must not leave hero content permanently invisible.
-    setTimeout(finalize, delayMs + 900);
-  });
+    setTimeout(finalize, (delay + duration) * 1000 + 400);
+  };
+
+  const WORD_STAGGER = 0.06;
+
+  let t = 0.15;
+  if (kicker) run(kicker, t, 0.5, 10);
+  t += 0.3;
+
+  words.forEach((w, i) => run(w, t + i * WORD_STAGGER, 0.45, 12));
+  const headlineEnd = words.length ? t + (words.length - 1) * WORD_STAGGER + 0.45 : t;
+
+  const poolDelay = headlineEnd + 0.1;
+  if (pool) run(pool, poolDelay, 0.7, 20);
+
+  const restStart = poolDelay + 0.3;
+  rest.forEach((el, i) => run(el, restStart + i * 0.12, 0.6, 16));
 }
 
 function escapeHtml(s: string): string {
