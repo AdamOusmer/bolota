@@ -78,6 +78,15 @@ const pair = (w: number, h: number): [EyeCfg, EyeCfg] => [
   { w, h, open: 1 }
 ]
 
+/**
+ * Dead-ahead gaze: yaw/pitch/roll all zero. `base()`'s own default gaze is
+ * `REST_GAZE` instead (bloub's measured resting pose, a sideways glance —
+ * see `../bloub/expressions.ts`'s header comment), which is correct for
+ * `wander` and `aside` but NOT for `idle` — see `idle`'s own doc comment
+ * below for why it overrides to this instead of taking `base()`'s default.
+ */
+const NEUTRAL_GAZE: HeadGaze = { yaw: 0, pitch: 0, roll: 0 }
+
 function base(over: Partial<Pose> = {}): Pose {
   return {
     sil: circle(1),
@@ -318,28 +327,40 @@ export const STATES: StateDef[] = [
     baseFace: true,
     baseBody: true,
     // bolota divergence, user-defined: `idle` is now the "no-state" neutral
-    // — gaze fixed dead ahead (`base()`'s own `REST_GAZE` default, already
-    // exactly this, so `pose` itself is untouched), NO wander, NO position
-    // drift. Blink and breathing stay alive regardless (`face.ts`'s
-    // `liveliness`, both gated on `alive`/`blink` now, not on the wander
-    // suppression `ownsLiveliness` below triggers — see that flag's own doc
-    // comment and `liveliness`'s breath comment). Cursor-follow composes
-    // normally on top when active (`look.mix`, a separate channel `wander`
-    // never touched) — follow owns gaze while it's on, this state's own
+    // — gaze fixed dead ahead, NO wander, NO position drift. This is
+    // ALSO the static renderer's own default (`../bolota.ts`/`../render.ts`
+    // draw the seeded eye anchors with gaze untouched): overriding to
+    // `NEUTRAL_GAZE` here, rather than taking `base()`'s own `REST_GAZE`
+    // default, is what makes an idle-frame sample reproduce exactly what
+    // the static renderer draws for the same seed (`test/eye-static-parity
+    // .test.ts` pins this). `base()`'s default stayed `REST_GAZE` — it's
+    // still correct for `wander` right below and for the `aside`
+    // expression (`../bloub/expressions.ts`) — only `idle` diverges from
+    // it, and only on this one field.
+    //
+    // Blink and breathing stay alive regardless (`face.ts`'s `liveliness`,
+    // both gated on `alive`/`blink` now, not on the wander suppression
+    // `ownsLiveliness` below triggers — see that flag's own doc comment and
+    // `liveliness`'s breath comment). Cursor-follow composes normally on
+    // top when active (`look.mix`, a separate channel `wander` never
+    // touched) — follow owns gaze while it's on, this state's own
     // straight-ahead gaze is only what shows when it's off.
     //
     // The wandering-gaze choreography this state USED to be is `wander`
-    // now (below) — same pose, id split so both meanings can coexist.
+    // now (below) — same `REST_GAZE` base, id split so both meanings can
+    // coexist.
     ownsLiveliness: true,
-    pose: () => base()
+    pose: () => base({ gaze: { ...NEUTRAL_GAZE } })
   },
 
   {
     // bolota addition: `idle`'s own former self — see its doc comment for
-    // the split. Byte-identical StateDef otherwise (duration, morph,
-    // blinkIn, baseFace, baseBody, pose all unchanged), minus the
-    // wander-suppression flag, so idle's ambient gaze drift/blink/breathe
-    // life is exactly what this state now carries under its own name.
+    // the split. Same `duration`/`morph`/`blinkIn`/`baseFace`/`baseBody` as
+    // `idle`, and the same `base()` this whole file's other states use
+    // (still `REST_GAZE`, unlike `idle`'s own override right above) — only
+    // the wander-suppression flag differs, so idle's former ambient gaze
+    // drift/blink/breathe life is exactly what this state now carries
+    // under its own name, REST_GAZE base included.
     id: 'wander',
     duration: 2.4,
     morph: 0.45,
@@ -696,9 +717,13 @@ export const STATES: StateDef[] = [
         // rings.
         //
         // Round B (final, user call): orbit's eyes hold `idle`'s own
-        // neutral instead — the same `REST_GAZE` constant `idle`'s `pose`
-        // already returns unmodified, not a divergent one this state
-        // invents. Checked and confirmed clean, not just asserted: with
+        // neutral instead — originally the same `REST_GAZE` constant
+        // `idle`'s `pose` returned unmodified at the time this decision was
+        // made; now `NEUTRAL_GAZE` (dead-ahead), tracking `idle`'s own
+        // override (its doc comment above) so this state keeps meaning
+        // exactly what it says — "holds idle's neutral" — rather than
+        // silently drifting to a stale copy of what idle's gaze used to be.
+        // Checked and confirmed clean, not just asserted: with
         // `ownsLiveliness` (above) zeroing `life.dYaw/dPitch/dRoll` and
         // `driftX/Y` (`engine.ts`'s `wander`/`float` gates, both keyed off
         // this flag), the ONLY inputs left to `gaze` are this constant and
@@ -706,18 +731,22 @@ export const STATES: StateDef[] = [
         // comment describes — composes on top when active, off otherwise,
         // symmetric with `idle`, not a leak) — measured max deviation
         // between orbit's rendered eye position and a from-scratch
-        // reconstruction off this exact `REST_GAZE` (no look, no wander):
+        // reconstruction off this exact constant (no look, no wander):
         // 0.006 units, i.e. the engine's own two-decimal rounding, not a
-        // residual pin. Blink and breathing are untouched by any of this
-        // (`liveliness`'s `lid`/`breath`, gated on `alive`/`blink` alone,
-        // never on `ownsLiveliness`) — measured directly off the rendered
-        // frame too: eye height (matrix-scaled, not the unscaled `d`) dips
-        // 25.16 -> 1.76 -> 25.16 across the first scheduled blink, and
-        // `bodyPath`'s own bbox height still varies sample to sample at
-        // t's where `rot`'s own 0.8s period holds silhouette/position
-        // otherwise identical (203.42 / 204.44 / 203.61 / 202.45 at
-        // t=0/0.8/1.6/2.4) — both alive, neither owned by this flag.
-        gaze: { ...REST_GAZE },
+        // residual pin (that measurement predates the `REST_GAZE` ->
+        // `NEUTRAL_GAZE` swap above but the mechanism it's checking —
+        // `gaze` having no other live input — is unchanged by which
+        // constant this field holds). Blink and breathing are untouched by
+        // any of this (`liveliness`'s `lid`/`breath`, gated on
+        // `alive`/`blink` alone, never on `ownsLiveliness`) — measured
+        // directly off the rendered frame too: eye height (matrix-scaled,
+        // not the unscaled `d`) dips 25.16 -> 1.76 -> 25.16 across the
+        // first scheduled blink, and `bodyPath`'s own bbox height still
+        // varies sample to sample at t's where `rot`'s own 0.8s period
+        // holds silhouette/position otherwise identical (203.42 / 204.44 /
+        // 203.61 / 202.45 at t=0/0.8/1.6/2.4) — both alive, neither owned
+        // by this flag.
+        gaze: { ...NEUTRAL_GAZE },
         eyes: pair(0.18, 0.34),
         // the rings enter one by one over 0.8s
         arcs: RINGS.map((s, i) => ({

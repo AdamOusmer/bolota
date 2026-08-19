@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BotEngine, type Look } from "../src/bloub/engine";
-import { eyePoses, REST_GAZE } from "../src/bloub/face";
+import { eyePoses } from "../src/bloub/face";
 import { r2 } from "../src/bloub/math";
 import { radiusAtAngle, superellipseProfile, toPoints } from "../src/bloub/shape";
 import { ORBIT_PERIOD, STATE_BY_ID, WINK_PERIOD, type StateId } from "../src/bloub/states";
@@ -124,7 +124,7 @@ describe("idle — the no-state neutral: fixed gaze, no wander/drift, still aliv
     expect(travel).toBe(0);
   });
 
-  test("gaze matches REST_GAZE exactly at every sampled t — dead ahead, not just low-amplitude", () => {
+  test("gaze matches idle's own pose exactly at every sampled t — dead ahead, not just low-amplitude", () => {
     const engine = new BotEngine(R, "idle");
     const idleDef = STATE_BY_ID.get("idle")!;
     for (let t = 0; t <= 8; t += 0.5) {
@@ -482,21 +482,29 @@ describe("orbit — eyes ride the body's own wobbling center", () => {
     // swung between: bloub's own verbatim sweep (+-65deg yaw, tried and
     // reverted — see `states.ts`'s comment on this line) and a genuine
     // wander/look leak composing on top of the constant (checked, not
-    // found — same comment). `pose(t).gaze` itself must be `REST_GAZE`,
-    // unchanged, at every `t`: any reintroduced sweep or per-`t` term
+    // found — same comment). `pose(t).gaze` itself must equal `idle`'s own
+    // gaze, unchanged, at every `t`: any reintroduced sweep or per-`t` term
     // shows up here directly, before rendering or `ownsLiveliness` gating
     // even get a chance to hide or reveal it.
+    //
+    // The constant this pins against is `idle`'s own current gaze, read
+    // fresh off `STATE_BY_ID` rather than hardcoded, so this test doesn't
+    // silently go stale if idle's neutral value ever moves again the way
+    // it did once already (`REST_GAZE` -> dead ahead) — `orbit`'s own
+    // doc comment (`states.ts`) explicitly ties itself to "idle's own
+    // neutral," so this assertion should track the same source it does.
+    const idleGaze = STATE_BY_ID.get("idle")!.pose(0).gaze
     for (let t = 0; t <= ORBIT_PERIOD; t += ORBIT_PERIOD / 20) {
-      const gaze = orbitDef.pose(t).gaze;
-      expect(gaze.yaw).toBe(REST_GAZE.yaw);
-      expect(gaze.pitch).toBe(REST_GAZE.pitch);
-      expect(gaze.roll).toBe(REST_GAZE.roll);
+      const gaze = orbitDef.pose(t).gaze
+      expect(gaze.yaw).toBe(idleGaze.yaw)
+      expect(gaze.pitch).toBe(idleGaze.pitch)
+      expect(gaze.roll).toBe(idleGaze.roll)
     }
 
     // And the composed, rendered gaze (life + look on top of `pose`, no
-    // look target set) matches a from-scratch `REST_GAZE` reconstruction
-    // to the engine's own rounding — the same method `bug 2`'s wander
-    // parity checks use, confirming `ownsLiveliness` actually zeroes
+    // look target set) matches a from-scratch reconstruction off that same
+    // constant, to the engine's own rounding — the same method `bug 2`'s
+    // wander parity checks use, confirming `ownsLiveliness` actually zeroes
     // `life.dYaw/dPitch/dRoll` here rather than merely returning a
     // constant `pose` that something downstream still perturbs.
     const seed = superellipseProfile(3, 0.6, 1);
@@ -506,7 +514,7 @@ describe("orbit — eyes ride the body's own wobbling center", () => {
       const scale = raw.sil.radii.reduce((a, b) => a + b, 0) / raw.sil.radii.length;
       const sil = { ...raw.sil, radii: seed.map((r) => r * scale) };
       const bodyRadiusAt = (x: number, y: number) => radiusAtAngle(sil.radii, Math.atan2(y, x) - sil.rot);
-      const expected = eyePoses(REST_GAZE, R, raw.split)
+      const expected = eyePoses(idleGaze, R, raw.split)
         .filter((e) => e.depth > 0.02)
         .map((e) => ({
           x: r2(e.x * bodyRadiusAt(e.x, e.y) + sil.cx * R),
