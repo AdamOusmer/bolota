@@ -377,13 +377,42 @@ export function mountEngine(
     clock += dt;
 
     const def = STATE_BY_ID.get(current)!;
-    if (clock - stateStart >= def.duration) {
-      if (loop) engine.reset(current, clock);
-      else if (current !== "idle") {
-        current = "idle";
+    // Orbit's own pose math never plateaus — its rotation (`states.ts`'s
+    // `rot = -TAU * 1.25 * t * ramp`) has no clamp on `t`, so it keeps
+    // spinning at a constant rate forever once its 0.35s ramp-in is done.
+    // Forcing a periodic `reset()` on it would be the only thing that ever
+    // interrupts that spin, snapping the phase back to 0 — so it is simply
+    // never reset. Every other looping state's pose *does* plateau (every
+    // one of its terms is wrapped in `clamp(...)`), so it needs a periodic
+    // restart to keep animating at all, which is where the `duration`
+    // bookkeeping below is for.
+    const selfSustaining = current === "orbit";
+    if (loop && !selfSustaining) {
+      // Restart `duration + def.morph` in, not at `duration` itself: bloub's
+      // own transient elements (particle windows, ribbon fades, eyeAlpha
+      // ramps) finish inside that extra margin, so by the time `reset()`
+      // fires the state has settled to its own resting silhouette — for
+      // burst and comet specifically, that resting shape is `circle(1)`,
+      // the *same* shape `reset()` restarts from (verified against
+      // `bloub/states.ts`'s own pose formulas). The restart is then only an
+      // eye-visibility pop, not a body-shape snap.
+      if (clock - stateStart >= def.duration + def.morph) {
+        engine.reset(current, clock);
         stateStart = clock;
-        engine.setState("idle", clock);
       }
+    } else if (!loop && current !== "idle" && clock - stateStart >= def.duration) {
+      // This is the bug this whole block used to have, the other way
+      // around: previously the loop branch above called `reset()` without
+      // ever advancing `stateStart`, so once a looping state's `duration`
+      // first elapsed, the guard stayed true on *every* subsequent frame —
+      // `reset()` fired every frame, pinning `now - tCur` at ~0 forever.
+      // That reads as the state frozen at its very first instant, which is
+      // this file's root cause for burst never exploding, orbit/comet never
+      // looping, and thinking/alert/sleep/exclaim/notify/swirl reading as
+      // static tiles: all of it was one missing assignment.
+      current = "idle";
+      stateStart = clock;
+      engine.setState("idle", clock);
     }
 
     const frame = engine.sample(clock);
