@@ -607,14 +607,15 @@ main {
 }
 
 /* ── tile grid (interim sizing) ──
-   Same story as `.hero__avatar-wrap` above: Determinism, States and
-   Sequences all still mount one avatar SVG per `.tile`/`.tile__avatar`
-   (via `--avatar-size`), and without an explicit box each one paints at
-   its intrinsic size and the grid stacks to an unusable page height. Layout
-   and sizing only, no border/background/shadow: the boxless law's card
-   chrome is gone, this is not a return of it. Agents B (Determinism proof
-   strip), C (States specimen grid) and D (Sequences stage) each replace
-   this with their own section-scoped layout per the spec. */
+   Same story as `.hero__avatar-wrap` above: Determinism and Sequences still
+   mount one avatar SVG per `.tile`/`.tile__avatar` (via `--avatar-size`),
+   and without an explicit box each one paints at its intrinsic size and the
+   grid stacks to an unusable page height. Layout and sizing only, no
+   border/background/shadow: the boxless law's card chrome is gone, this is
+   not a return of it. Agents B (Determinism proof strip) and D (Sequences
+   stage) each replace this with their own section-scoped layout per the
+   spec. States (Agent C) has already moved off this shared grid onto its
+   own boxless `.specimens` layout in States.astro. */
 
 .tile-grid {
   display: grid;
@@ -642,88 +643,12 @@ main {
   text-transform: capitalize;
 }
 
-/* ── expression picker (interim, and mostly already the spec) ──
-   Circular tiles, ring-only selection state, no fill/border at rest: this
-   is not just a stopgap, it is close to the spec's own description
-   ("circular 65-70px tiles... selected = --accent ring + slight lift").
-   Agent C owns Expressions.astro and can restyle freely, but the ring
-   pattern here is meant to be a real starting point, not scaffolding to
-   throw away. */
-
-.picker {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 1rem;
-}
-
-.picker__item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.picker__circle {
-  position: relative;
-  width: 58px;
-  height: 58px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: box-shadow 0.25s, transform 80ms ease;
-}
-
-.picker__circle span {
-  font-size: 0.72rem;
-  color: var(--text-faint);
-}
-
-.picker__item:hover .picker__circle {
-  box-shadow: 0 0 0 1px rgb(var(--light-rgb) / 0.4);
-}
-
-.picker__item.is-active .picker__circle {
-  box-shadow: 0 0 0 1px var(--accent);
-  transform: translateY(-2px);
-}
-
-.picker__item.is-active .picker__label {
-  color: var(--accent);
-}
-
-.picker__label {
-  font-size: 0.74rem;
-  color: var(--text-muted);
-  transition: color 200ms ease;
-}
-
-.picker-stage {
-  display: flex;
-  align-items: center;
-  gap: 22px;
-  margin-bottom: 3rem;
-}
-
-.picker-stage__avatar {
-  width: 100px;
-  height: 100px;
-  flex: none;
-}
-
-.picker-stage__meta {
-  font-size: 0.86rem;
-  color: var(--text-muted);
-}
-
-.picker-stage__meta strong {
-  display: block;
-  color: var(--text-main);
-  font-family: var(--font-display);
-  font-weight: 500;
-  font-size: 1.02rem;
-  margin-bottom: 4px;
-}
+/* ── expression picker / states specimen grid ──
+   Owned by Agent C: Expressions.astro's own `<style is:global>` (the
+   65-70px round tiles, ring + lift selection) and States.astro's own
+   `<style is:global>` (the boxless specimen grid, hairline row dividers)
+   now carry this styling directly, per the redesign split's "each agent
+   owns only its section components" rule. Nothing left to keep here. */
 
 /* ── sequences timeline (interim sizing) ──
    The spec replaces this whole widget with one theatrical stage; Agent D
