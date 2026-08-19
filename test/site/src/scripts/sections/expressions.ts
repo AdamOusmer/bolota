@@ -3,6 +3,7 @@ import { onSeedChange, getSeed } from "../lib/seed-store";
 import { DEFAULT_SEED } from "../lib/curated-seeds";
 import { humanizeExpression } from "../lib/humanize";
 import { onVisible } from "../lib/visibility";
+import { observeReveals } from "../lib/motion";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const AUTO_CYCLE_MS = 3200;
@@ -73,6 +74,12 @@ export function setupExpressions() {
       picker!.appendChild(item);
       return item;
     });
+    // The picker itself is `[data-reveal]` in the Astro markup so it's
+    // already tracked, but its contents mount async here; re-running this
+    // is a cheap no-op for an already-observed node (see motion.ts's
+    // observeReveals doc comment) and a real fix if a future picker layout
+    // moves `data-reveal` onto these items instead of the container.
+    observeReveals(picker!);
   }
 
   function mount(nextSeed: string) {

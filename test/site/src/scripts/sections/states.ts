@@ -3,6 +3,7 @@ import { onSeedChange, getSeed } from "../lib/seed-store";
 import { curatedSeedAt } from "../lib/curated-seeds";
 import { humanizeId } from "../lib/humanize";
 import { mountLiveTile } from "../lib/live-engine";
+import { observeReveals } from "../lib/motion";
 
 /** Every state the engine can play, one live looping specimen each, labels
  * come straight from `engineStates()` (not a hand-copied list), so a state
@@ -26,6 +27,10 @@ export function setupStates() {
     const seed = getSeed() ?? curatedSeedAt(i);
     return mountLiveTile(host, seed, { loopState: id });
   });
+  // Same rationale as expressions.ts: the grid container is already
+  // `[data-reveal]`-tracked, this is a cheap no-op re-observe, not a
+  // required fix for the current markup, just defense-in-depth.
+  observeReveals(grid);
 
   onSeedChange((seed) => {
     tiles.forEach((tile, i) => tile.setSeed(seed ?? curatedSeedAt(i)));
