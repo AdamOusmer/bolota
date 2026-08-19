@@ -35,14 +35,20 @@ jobs:
       - name: Size budgets
         run: bun run size
 
-      - name: Build
-        run: bun run build
+  site:
+    name: test/site
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: test/site
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Pack
-        run: npm pack --pack-destination /tmp
-
-      - uses: actions/upload-artifact@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          name: tarball
-          path: /tmp/blobatar-*.tgz
-          retention-days: 7
+          bun-version: latest
+
+      - run: bun install
+
+      - name: Build
+        run: bunx vite build
