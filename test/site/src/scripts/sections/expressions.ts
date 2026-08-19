@@ -16,16 +16,18 @@ const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
  * alone and it gently auto-cycles through the roster on its own, nothing
  * on this page needs a play button to be alive.
  *
- * Stage state is `"wander"`, not `"idle"`: both are `baseFace` (so
- * `setExpression` shows on either — `bloub/states.ts`'s doc comment on the
- * idle/wander split), but since that split `"idle"` is bolota's new
- * "no-state" neutral (gaze locked dead ahead, no wander/drift — blink and
- * breathing still play, just no eye travel). `"wander"` is the old
- * wandering-gaze choreography `idle` used to default to, carried under its
- * own id. This stage is a held-expression showcase, not the seed's resting
- * portrait (that's Hero, which deliberately stays on `"idle"`), so it wants
- * the livelier state: blink + breathe + gaze all visibly moving underneath
- * whatever expression is picked. */
+ * Stage state is `"idle"`, not `"wander"`: `"wander"` composes continuous
+ * ambient gaze drift on top of whatever pose is showing, which fights the
+ * one thing this section needs — a held expression a visitor can actually
+ * judge, undistorted by the stage also wandering underneath it. `"idle"`
+ * is bolota's true static-render default (eyes at their seeded anchors,
+ * gaze straight; blink + breathe still play, so it isn't a frozen frame
+ * either), and — like `setExpression` — only shows on `baseFace` states,
+ * which both `"idle"` and `"wander"` are (`bloub/states.ts`'s doc comment
+ * on the idle/wander split). `"wander"` stays its own demo, in the States
+ * section, not here. Same state Hero uses for the seed's resting portrait,
+ * for the same reason: it's the pose that doesn't fight whatever else is
+ * meant to be the focus. */
 export function setupExpressions() {
   const section = document.querySelector<HTMLElement>("[data-expressions]");
   const stageHost = document.querySelector<HTMLElement>("[data-expr-stage]");
@@ -105,7 +107,7 @@ export function setupExpressions() {
     if (myGen !== gen) return; // a newer mount() call already won the race
     handle?.destroy();
     handle = mountEngine(svg, seed);
-    handle.play("wander", { loop: true });
+    handle.play("idle", { loop: true });
     buildPicker();
     select(0, handle.expressions[0]!, false);
   }
@@ -116,7 +118,7 @@ export function setupExpressions() {
   onVisible(
     svg,
     () => {
-      handle?.play("wander", { loop: true });
+      handle?.play("idle", { loop: true });
       scheduleAuto();
     },
     () => {
