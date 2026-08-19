@@ -122,13 +122,13 @@ function base(over: Partial<Pose> = {}): Pose {
  * stays a constant-width capsule. Both paths are centered on the origin,
  * as `DotRender.d` requires, and placed via the dot's own `x`/`y`.
  */
-const GLYPH_BAR_UPRIGHT = polyPath(hullOfCircles(0, -0.33, 0.16, 0, 0.33, 0.091))
-const GLYPH_BAR_ITALIC = polyPath(hullOfCircles(0, -0.33, 0.135, 0, 0.33, 0.135))
+const GLYPH_BAR_UPRIGHT = polyPath(hullOfCircles(0, -0.5, 0.145, 0, 0.5, 0.082))
+const GLYPH_BAR_ITALIC = polyPath(hullOfCircles(0, -0.5, 0.12, 0, 0.5, 0.12))
 /** body radius while folded into the glyph's dot */
 const GLYPH_DOT_R = 0.34
 /** dot (body) center, and the bar's, measured down/up from the ball's own */
 const GLYPH_DOT_CY = 0.42
-const GLYPH_BAR_CY = -0.42
+const GLYPH_BAR_CY = -0.55
 /** center-to-center along the glyph's axis, dot to bar */
 const GLYPH_AXIS = GLYPH_DOT_CY - GLYPH_BAR_CY
 
@@ -514,7 +514,7 @@ export const STATES: StateDef[] = [
             // take from the bar, sign flipped now that the roles swapped
             x: x + Math.sin(tilt) * GLYPH_AXIS,
             y: dotY - Math.cos(tilt) * GLYPH_AXIS - buzz,
-            r: 0.135,
+            r: 0.12,
             d: GLYPH_BAR_ITALIC,
             rot: (tilt * 180) / Math.PI,
             opacity: 1
@@ -566,7 +566,7 @@ export const STATES: StateDef[] = [
       base({
         gaze: { ...NEUTRAL_GAZE },
         sil: circle(GLYPH_DOT_R, { cy: GLYPH_DOT_CY }),
-        dots: [{ x: 0, y: GLYPH_BAR_CY, r: 0.16, d: GLYPH_BAR_UPRIGHT, opacity: 1 }]
+        dots: [{ x: 0, y: GLYPH_BAR_CY, r: 0.145, d: GLYPH_BAR_UPRIGHT, opacity: 1 }]
       })
   },
 

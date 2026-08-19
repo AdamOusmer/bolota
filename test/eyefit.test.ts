@@ -217,9 +217,9 @@ describe("alert / exclaim — the blob is the glyph's dot, the bar is decor", ()
         // a path, not a disk: `r` alone would render the bar as a circle
         expect(bar.d).toBeTruthy();
         // above the body (SVG y grows downward), and clear of it: the bar's
-        // own half-length is 0.33 + its cap, the body's radius 0.34
+        // own half-length is 0.5 + its cap, the body's radius 0.34
         const gap = pose.sil.cy - bar.y;
-        expect(gap).toBeGreaterThan(0.34 + 0.33);
+        expect(gap).toBeGreaterThan(0.34 + 0.5);
       }
     });
   }
