@@ -5,26 +5,72 @@ import SectionHead from "./SectionHead.astro";
 <section class="section wrap" id="demo">
   <SectionHead title="Determinism" description="Same seed. Same bytes. Every time." />
 
-  <div class="tile-grid det-grid" data-reveal style="--reveal-i:1">
-    <div class="tile det-tile">
-      <span class="tile__spotlight" aria-hidden="true"></span>
-      <div class="tile__avatar" style="--avatar-size:72px" data-det-slot="1"></div>
-      <div class="tile__label">bolota() #1</div>
-    </div>
-    <div class="tile det-tile">
-      <span class="tile__spotlight" aria-hidden="true"></span>
-      <div class="tile__avatar" style="--avatar-size:72px" data-det-slot="2"></div>
-      <div class="tile__label">bolota() #2</div>
-    </div>
-    <div class="tile det-tile">
-      <span class="tile__spotlight" aria-hidden="true"></span>
-      <div class="tile__avatar" style="--avatar-size:72px" data-det-slot="3"></div>
-      <div class="tile__label">parts() adapter</div>
-    </div>
+  <div class="proof-strip" data-reveal style="--reveal-i:1">
+    <div class="proof-strip__face" data-det-slot="1"></div>
+    <span class="proof-strip__eq" aria-hidden="true">=</span>
+    <div class="proof-strip__face" data-det-slot="2"></div>
+    <span class="proof-strip__eq" aria-hidden="true">=</span>
+    <div class="proof-strip__face" data-det-slot="3"></div>
   </div>
 
-  <div class="det-status-row" data-reveal style="--reveal-i:2">
-    <div class="det-status" data-det-status>checking…</div>
-    <div class="det-status" data-det-norm>normalizeSeed…</div>
-  </div>
+  <p class="proof-strip__caption" data-reveal style="--reveal-i:2">
+    <span class="proof-strip__glyph" data-det-glyph aria-hidden="true"></span>
+    <span data-det-text>checking…</span>
+  </p>
 </section>
+
+<style>
+  /* Boxless proof strip: three faces, thin "=" glyphs between them, nothing
+     else. Faces need an explicit box for the same reason global.css's
+     `.hero__avatar-wrap`/`.tile__avatar` comments give, an SVG paints at
+     its intrinsic size without one. */
+  .proof-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(14px, 3vw, 28px);
+    flex-wrap: wrap;
+  }
+
+  .proof-strip__face {
+    width: clamp(64px, 9vw, 96px);
+    height: clamp(64px, 9vw, 96px);
+    flex: none;
+  }
+
+  .proof-strip__eq {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    font-size: clamp(18px, 2.6vw, 28px);
+    line-height: 1;
+    color: var(--text-faint);
+    user-select: none;
+  }
+
+  /* One caption line under the strip. The byte-check result is the glyph,
+     nothing else, per the spec: no separate status line. */
+  .proof-strip__caption {
+    margin-top: clamp(20px, 3vw, 32px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--text-faint);
+    text-align: center;
+  }
+
+  .proof-strip__glyph {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  .proof-strip__glyph.is-ok {
+    color: var(--ok);
+  }
+
+  .proof-strip__glyph.is-bad {
+    color: var(--bad);
+  }
+</style>

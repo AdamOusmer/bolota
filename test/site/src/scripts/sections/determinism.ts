@@ -13,14 +13,18 @@ function partsSvg(name: string, size: number): string {
 
 /** The determinism proof: the seed control up in the hero is this demo's
  * input (see seed-store.ts). Three independent render paths must agree,
- * byte for byte, on whatever it currently holds. */
+ * byte for byte, on whatever it currently holds; `normalizeSeed` must be
+ * idempotent on it too. Both checks still run (the underlying triple-render
+ * byte-equality logic is unchanged), they just collapse into the one
+ * caption line the boxless proof-strip spec calls for, a single check/cross
+ * glyph plus one short sentence, no separate status lines. */
 export function setupDeterminism() {
   const slot1 = document.querySelector<HTMLElement>("[data-det-slot='1']");
   const slot2 = document.querySelector<HTMLElement>("[data-det-slot='2']");
   const slot3 = document.querySelector<HTMLElement>("[data-det-slot='3']");
-  const status = document.querySelector<HTMLElement>("[data-det-status]");
-  const normStatus = document.querySelector<HTMLElement>("[data-det-norm]");
-  if (!slot1 || !slot2 || !slot3 || !status) return;
+  const glyph = document.querySelector<HTMLElement>("[data-det-glyph]");
+  const text = document.querySelector<HTMLElement>("[data-det-text]");
+  if (!slot1 || !slot2 || !slot3 || !glyph || !text) return;
 
   function render(rawSeed: string | null) {
     const seed = rawSeed ?? DEFAULT_SEED;
@@ -30,20 +34,15 @@ export function setupDeterminism() {
     slot2!.innerHTML = s2;
     slot3!.innerHTML = partsSvg(seed, 72);
 
-    const equal = s1 === s2;
-    status!.textContent = equal ? "deterministic: bytes match" : "mismatch detected";
-    status!.classList.toggle("is-ok", equal);
-    status!.classList.toggle("is-bad", !equal);
+    const bytesEqual = s1 === s2;
+    const norm = normalizeSeed(seed);
+    const normIdempotent = bolota(seed, { size: 24 }) === bolota(norm, { size: 24 });
+    const ok = bytesEqual && normIdempotent;
 
-    if (normStatus) {
-      const norm = normalizeSeed(seed);
-      const face = bolota(seed, { size: 24 });
-      const normFace = bolota(norm, { size: 24 });
-      const idempotent = face === normFace;
-      normStatus!.textContent = `normalizeSeed("${seed}") -> "${norm}": ${idempotent ? "idempotent" : "mismatch"}`;
-      normStatus!.classList.toggle("is-ok", idempotent);
-      normStatus!.classList.toggle("is-bad", !idempotent);
-    }
+    glyph!.textContent = ok ? "✓" : "✗";
+    glyph!.classList.toggle("is-ok", ok);
+    glyph!.classList.toggle("is-bad", !ok);
+    text!.textContent = ok ? "Three renders. Byte-identical." : "Three renders. Mismatch detected.";
   }
 
   render(getSeed());
