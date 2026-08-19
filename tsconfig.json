@@ -31,9 +31,9 @@
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src", "test", "scripts"],
-  // test/site is a separate Vite app with its own tsconfig (Bundler
+  // web/ is a separate Astro app with its own tsconfig (Bundler
   // resolution against the published `blobatar` package, DOM libs for the
   // browser entry point). It is not part of the library's type surface —
   // let its own job in CI type-check/build it instead.
-  "exclude": ["dist", "node_modules", "test/site"]
+  "exclude": ["dist", "node_modules", "web"]
 }

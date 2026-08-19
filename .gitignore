@@ -34,7 +34,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .DS_Store
 
 # astro build cache
-test/site/.astro
+web/.astro
 
-# packed local lib artifact (test/site consumes the compiled dist tarball)
-test/site/.lib
+# packed local lib artifact (kept for local experiments; web/ links the source tree)
+web/.lib

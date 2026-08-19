@@ -8,7 +8,7 @@ import sitemap from "@astrojs/sitemap";
 // No UI framework: the library itself is framework-agnostic vanilla TS, so
 // every interactive demo is a plain `<script type="module">` island reading
 // blobatar/blobatar-engine straight from the workspace-linked package (see
-// package.json's `"blobatar": "file:../.."`).
+// package.json's `"@luzir/bolota": "file:.."`).
 export default defineConfig({
   site: "https://bolota.adam-ousmer.dev",
   output: "static",

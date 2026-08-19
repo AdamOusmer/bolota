@@ -39,11 +39,11 @@ jobs:
         run: bun run size
 
   site:
-    name: test/site
+    name: web
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: test/site
+        working-directory: web
     steps:
       - uses: actions/checkout@v4
 
