@@ -375,14 +375,14 @@ describe("states completeness: nothing bloub ships can silently drop out", () =>
     // dropped from `STATE_BY_ID` fails here first, not in a screenshot.
     expect(handle.states.sort()).toEqual(
       [
-        "idle", "thinking", "wink", "wide", "alert", "notify", "exclaim",
+        "idle", "wander", "thinking", "wink", "wide", "alert", "notify", "exclaim",
         "snooze", "play", "orbit", "swirl", "burst", "comet",
       ].sort(),
     );
   });
 
   for (const state of [
-    "idle", "thinking", "wink", "wide", "alert", "notify", "exclaim",
+    "idle", "wander", "thinking", "wink", "wide", "alert", "notify", "exclaim",
     "snooze", "play", "orbit", "swirl", "burst", "comet",
   ] as const) {
     test(`"${state}" renders a non-empty body and animates under the fixed clock`, () => {

@@ -73,9 +73,15 @@ describe("bug 1 — eye anchoring on arbitrary seeded silhouettes", () => {
   }
 });
 
-describe("bug 2 — idle gaze travel", () => {
-  test("eye-center path length over 10s of idle exceeds a meaningful threshold", () => {
-    const engine = new BotEngine(R);
+describe("bug 2 — wander gaze travel", () => {
+  // bolota split (later request): `idle` and `wander` used to be the same
+  // state. `idle` is now the "no-state" neutral (fixed gaze, tested in its
+  // own describe block below) and `wander` carries the choreography this
+  // whole describe block was originally tuned against — same engine
+  // construction, just naming the state explicitly instead of relying on
+  // `BotEngine`'s default (which is `idle` and would now measure 0).
+  test("eye-center path length over 10s of wander exceeds a meaningful threshold", () => {
+    const engine = new BotEngine(R, "wander");
     const dt = 1 / 30;
     let prev = eyeCenters(engine.sample(0).eyes)[0]!;
     let travel = 0;
@@ -101,6 +107,54 @@ describe("bug 2 — idle gaze travel", () => {
     // x-y balance: neither axis should dominate the way x did pre-round-2.
     expect(tx / ty).toBeGreaterThan(0.7);
     expect(tx / ty).toBeLessThan(1.4);
+  });
+});
+
+describe("idle — the no-state neutral: fixed gaze, no wander/drift, still alive", () => {
+  test("eye-center travel over 10s is exactly zero (no wander, no drift)", () => {
+    const engine = new BotEngine(R, "idle");
+    const dt = 1 / 30;
+    let prev = eyeCenters(engine.sample(0).eyes)[0]!;
+    let travel = 0;
+    for (let t = dt; t <= 10; t += dt) {
+      const cur = eyeCenters(engine.sample(t).eyes)[0]!;
+      travel += dist(prev, cur);
+      prev = cur;
+    }
+    expect(travel).toBe(0);
+  });
+
+  test("gaze matches REST_GAZE exactly at every sampled t — dead ahead, not just low-amplitude", () => {
+    const engine = new BotEngine(R, "idle");
+    const idleDef = STATE_BY_ID.get("idle")!;
+    for (let t = 0; t <= 8; t += 0.5) {
+      const raw = idleDef.pose(t);
+      const bodyRadiusAt = (x: number, y: number) => radiusAtAngle(raw.sil.radii, Math.atan2(y, x) - raw.sil.rot);
+      const expected = eyePoses(raw.gaze, R, raw.split)
+        .filter((e) => e.depth > 0.02)
+        .map((e) => ({ x: e.x * bodyRadiusAt(e.x, e.y), y: e.y * bodyRadiusAt(e.x, e.y) }));
+      const actual = eyeCenters(engine.sample(t).eyes);
+      actual.forEach((a, i) => {
+        expect(a.x).toBeCloseTo(expected[i]!.x, 2);
+        expect(a.y).toBeCloseTo(expected[i]!.y, 2);
+      });
+    }
+  });
+
+  test("blink and breathing stay alive despite zero wander", () => {
+    // Breathing: `sil.sy` should still oscillate over time (`face.ts`'s
+    // `breath`, now gated on `blink`/`alive` alone, not on the same flag
+    // that kills wander/drift — see `ownsLiveliness`'s own doc comment).
+    // Read it off the rendered body path's own bounding box height, since
+    // `BotFrame` doesn't expose `sil` directly.
+    const engine = new BotEngine(R, "idle");
+    const heights = new Set<number>();
+    for (let t = 0; t <= 4; t += 0.2) {
+      const d = engine.sample(t).bodyPath;
+      const ys = [...d.matchAll(/-?\d+\.?\d*/g)].map(Number).filter((_, i) => i % 2 === 1);
+      heights.add(Math.round((Math.max(...ys) - Math.min(...ys)) * 100) / 100);
+    }
+    expect(heights.size).toBeGreaterThan(1);
   });
 });
 
@@ -152,22 +206,71 @@ describe("bug 3 — eased retarget, no snap", () => {
   });
 });
 
-describe("bug 4 — eyes stay alive through comet/burst collapse", () => {
-  test('"comet" keeps eyeAlpha > 0 through its deepest collapse instant', () => {
+describe("bug 4 — collapse states hide the eyes completely, then fade back", () => {
+  // User-reversed decision (later than the original "keep a floor" fix this
+  // describe block used to pin): the collapse states now hide the eyes
+  // COMPLETELY, not just dim them — see states.ts's own comment on `burst`/
+  // `comet` for the exact mechanism (an eased fraction, `1 - collapseFrac`
+  // during collapse and `regrow` itself during regrow, sharing the SAME
+  // `easeOutQuint` curve `sil`'s own scale uses, so there is nothing to pop:
+  // alpha and size are both continuous functions of the identical eased t).
+
+  test('"comet" eyes are fully gone (alpha 0, filtered out) through the deep collapse', () => {
     const engine = new BotEngine(R, "comet");
-    for (const t of [0, 0.2, 0.55, 1.0, 1.5, 1.84, 2.0, 2.3]) {
+    // Collapse completes at t=0.55, regrow starts at t=1.85 — anywhere in
+    // between is "deep collapse."
+    for (const t of [0.55, 0.8, 1.0, 1.5, 1.84]) {
       const frame = engine.sample(t);
-      expect(frame.eyes.length).toBeGreaterThan(0);
-      for (const eye of frame.eyes) expect(eye.alpha).toBeGreaterThan(0.15);
+      expect(frame.eyes.length).toBe(0);
+    }
+    // Start (t=0) and fully-regrown (t=1.85+0.6=2.45): fully visible.
+    for (const t of [0, 2.45]) {
+      const frame = engine.sample(t);
+      for (const eye of frame.eyes) expect(eye.alpha).toBeCloseTo(1, 1);
     }
   });
 
-  test('"burst" keeps eyeAlpha > 0 through its deepest collapse instant', () => {
+  test('"burst" eyes are fully gone (alpha 0, filtered out) through the deep collapse', () => {
     const engine = new BotEngine(R, "burst");
-    for (const t of [0, 0.2, 0.7, 1.0, 1.7, 2.4, 2.5]) {
+    // Collapse completes at t=0.7, regrow starts at t=1.7.
+    for (const t of [0.7, 1.0, 1.4, 1.69]) {
       const frame = engine.sample(t);
-      expect(frame.eyes.length).toBeGreaterThan(0);
-      for (const eye of frame.eyes) expect(eye.alpha).toBeGreaterThan(0.15);
+      expect(frame.eyes.length).toBe(0);
+    }
+    // Start (t=0) and fully-regrown (t=1.7+0.7=2.4): fully visible.
+    for (const t of [0, 2.4]) {
+      const frame = engine.sample(t);
+      for (const eye of frame.eyes) expect(eye.alpha).toBeCloseTo(1, 1);
+    }
+  });
+
+  test('"comet" fade is smooth, not a pop — monotonic across collapse and regrow', () => {
+    const engine = new BotEngine(R, "comet");
+    // eyeAlpha isn't on BotFrame once an eye is filtered out (alpha<=0.01
+    // drops it from `frame.eyes` entirely) — read it via presence/count
+    // instead of a raw number for the collapsed samples, and the raw alpha
+    // where an eye is still rendered.
+    const alphaAt = (t: number) => engine.sample(t).eyes[0]?.alpha ?? 0;
+    const collapseCurve = [0, 0.1, 0.2, 0.3, 0.4, 0.55].map(alphaAt);
+    for (let i = 1; i < collapseCurve.length; i++) {
+      expect(collapseCurve[i]!).toBeLessThanOrEqual(collapseCurve[i - 1]! + 1e-9);
+    }
+    const regrowCurve = [1.85, 2.0, 2.1, 2.2, 2.3, 2.45].map(alphaAt);
+    for (let i = 1; i < regrowCurve.length; i++) {
+      expect(regrowCurve[i]!).toBeGreaterThanOrEqual(regrowCurve[i - 1]! - 1e-9);
+    }
+  });
+
+  test('"burst" fade is smooth, not a pop — monotonic across collapse and regrow', () => {
+    const engine = new BotEngine(R, "burst");
+    const alphaAt = (t: number) => engine.sample(t).eyes[0]?.alpha ?? 0;
+    const collapseCurve = [0, 0.15, 0.3, 0.45, 0.6, 0.7].map(alphaAt);
+    for (let i = 1; i < collapseCurve.length; i++) {
+      expect(collapseCurve[i]!).toBeLessThanOrEqual(collapseCurve[i - 1]! + 1e-9);
+    }
+    const regrowCurve = [1.7, 1.85, 2.0, 2.15, 2.3, 2.4].map(alphaAt);
+    for (let i = 1; i < regrowCurve.length; i++) {
+      expect(regrowCurve[i]!).toBeGreaterThanOrEqual(regrowCurve[i - 1]! - 1e-9);
     }
   });
 
@@ -374,16 +477,22 @@ describe("orbit — eyes ride the body's own wobbling center", () => {
     }
   });
 
-  test("wander resumes once a non-owning state (idle) takes over", () => {
-    // idle does NOT set `ownsLiveliness` — its gaze is a constant `REST_GAZE`
-    // for its whole duration, so any deviation from the pure constant-gaze
-    // reconstruction (same method as the parity test above) is wander/drift
-    // actually contributing, proving the gate is state-scoped, not a global
-    // kill switch that broke idle's own liveliness as a side effect.
-    const engine = new BotEngine(R, "idle");
+  test("wander resumes once a non-owning state (wander) takes over", () => {
+    // bolota split (later request): this used to target `idle` itself,
+    // back when idle carried this exact choreography by default. `idle` is
+    // now the deliberately-still "no-state" neutral (`ownsLiveliness: true`
+    // — see its own test group above, travel is exactly 0 there) and
+    // `wander` is what inherited the wandering-gaze behavior this test
+    // actually proves. `wander` does NOT set `ownsLiveliness` — its own
+    // `pose()`'s gaze is a constant `REST_GAZE` for its whole duration, so
+    // any deviation from the pure constant-gaze reconstruction (same method
+    // as the parity test above) is wander/drift actually contributing,
+    // proving the gate is state-scoped, not a global kill switch that broke
+    // every state's liveliness as a side effect.
+    const engine = new BotEngine(R, "wander");
     let anyDeviation = false;
     for (let t = 0.5; t <= 8; t += 0.5) {
-      const raw = STATE_BY_ID.get("idle")!.pose(t);
+      const raw = STATE_BY_ID.get("wander")!.pose(t);
       const bodyRadiusAt = (x: number, y: number) => radiusAtAngle(raw.sil.radii, Math.atan2(y, x) - raw.sil.rot);
       const expected = eyePoses(raw.gaze, R, raw.split).map((e) => ({
         x: e.x * bodyRadiusAt(e.x, e.y),

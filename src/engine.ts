@@ -338,8 +338,12 @@ function el<K extends keyof SVGElementTagNameMap>(
   return node;
 }
 
-/** All 14 states bloub's video documents, plus `swirl` (an interface-only
- * transition in bloub, kept here because it costs nothing to expose). */
+/** Bloub's own catalog, plus `swirl` (an interface-only transition in
+ * bloub, kept here because it costs nothing to expose) and `wander`
+ * (bolota's own addition — the wandering-gaze choreography `idle` used to
+ * be, split out under its own id; see `StateId`'s doc comment in
+ * `bloub/states.ts`), 14 ids total (`STATES.length`/`STATE_BY_ID.size`,
+ * not restated here as a number that could drift). */
 export function engineStates(): StateId[] {
   return [...STATE_BY_ID.keys()];
 }

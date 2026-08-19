@@ -186,6 +186,13 @@ export const WINK_PERIOD = WINK_CLOSE + WINK_HOLD + WINK_OPEN + WINK_REST
 
 export type StateId =
   | 'idle'
+  /**
+   * bolota addition: the wandering-gaze choreography `idle` itself used to
+   * be (idle's own doc comment covers the split). Unlike `swirl` — bloub's
+   * own interface-only transition, just not one of its 13 video-documented
+   * states — this id doesn't exist in bloub at all; it's this fork's own.
+   */
+  | 'wander'
   | 'thinking'
   | 'wink'
   | 'wide'
@@ -231,25 +238,28 @@ export interface StateDef {
   baseFace: boolean
   /**
    * bolota addition (not from bloub — every other flag on this interface
-   * is verbatim): true = this state's own `pose(t)` already animates gaze
-   * and/or body position (`sil.cx/cy` via `offX/offY`) itself, so idle's
-   * background liveliness (`face.ts`'s wander/drift/breath) must contribute
-   * NOTHING while it plays — composing idle's own gaze noise or center
-   * float on top of a state that is already driving those same channels is
-   * exactly the arbitration bug `follow` vs `idle` had (`gaze.ts`), just
-   * between `idle`'s wander and a *different* active state instead of the
-   * cursor. `orbit` is the only state this applies to today (`gaze.yaw`
-   * swings +-65deg via its own `sin(t*6.5)`, `sil.cx/cy` recenters every
-   * frame) — every other state's `gaze`/`sil.cx/cy` is a constant for its
-   * whole duration and NEEDS idle's wander, or it would read as frozen
-   * apart from blinking. Blink and breathing are unaffected either way:
-   * blink is independent of `wander` already (gated on `eyeAlpha` alone,
-   * see `bloub/engine.ts`'s `sample()`), and this flag zeroes breathing
-   * too (`float`) only because `orbit`'s own silhouette scale animation
-   * (triangle collapsing to ball) already fills that role — a second,
-   * uncoordinated size wobble on top would be the same bug again.
-   * Defaults to false/absent, i.e. bloub's own unconditional-wander
-   * behavior, for every state that doesn't opt in.
+   * is verbatim): true = idle's background liveliness (`face.ts`'s
+   * wander/drift — NOT blink or breathing, see below) must contribute
+   * NOTHING while this state plays. Two different reasons currently set it:
+   *
+   * - `orbit`: its own `pose(t)` already animates gaze/body position
+   *   itself (`sil.cx/cy`), so composing idle's wander on top would be the
+   *   same arbitration bug `follow` vs `idle` had (`gaze.ts`), just against
+   *   a different active state instead of the cursor.
+   * - `idle` (its own doc comment): deliberately wants NEITHER — its
+   *   "no-state, watching straight ahead" meaning requires a fixed gaze,
+   *   not merely one this flag happens to leave alone.
+   *
+   * Every state that doesn't set it (which is most of them, including the
+   * new `wander` — the wandering-gaze choreography `idle` itself used to
+   * be) has a `gaze`/`sil.cx/cy` that's a constant for its whole duration
+   * and NEEDS the ambient wander, or it would read as frozen apart from
+   * blinking.
+   *
+   * Blink and breathing are UNAFFECTED either way, regardless of this
+   * flag: both are gated on `alive`/`blink` alone now (`face.ts`'s
+   * `liveliness`) — a state with zero wander still blinks and breathes,
+   * per the user's own explicit pairing ("blink + breathe still alive").
    */
   ownsLiveliness?: boolean
   /**
@@ -286,6 +296,35 @@ function dotPulse(t: number, index: number): number {
 export const STATES: StateDef[] = [
   {
     id: 'idle',
+    duration: 2.4,
+    morph: 0.45,
+    blinkIn: false,
+    baseFace: true,
+    baseBody: true,
+    // bolota divergence, user-defined: `idle` is now the "no-state" neutral
+    // — gaze fixed dead ahead (`base()`'s own `REST_GAZE` default, already
+    // exactly this, so `pose` itself is untouched), NO wander, NO position
+    // drift. Blink and breathing stay alive regardless (`face.ts`'s
+    // `liveliness`, both gated on `alive`/`blink` now, not on the wander
+    // suppression `ownsLiveliness` below triggers — see that flag's own doc
+    // comment and `liveliness`'s breath comment). Cursor-follow composes
+    // normally on top when active (`look.mix`, a separate channel `wander`
+    // never touched) — follow owns gaze while it's on, this state's own
+    // straight-ahead gaze is only what shows when it's off.
+    //
+    // The wandering-gaze choreography this state USED to be is `wander`
+    // now (below) — same pose, id split so both meanings can coexist.
+    ownsLiveliness: true,
+    pose: () => base()
+  },
+
+  {
+    // bolota addition: `idle`'s own former self — see its doc comment for
+    // the split. Byte-identical StateDef otherwise (duration, morph,
+    // blinkIn, baseFace, baseBody, pose all unchanged), minus the
+    // wander-suppression flag, so idle's ambient gaze drift/blink/breathe
+    // life is exactly what this state now carries under its own name.
+    id: 'wander',
     duration: 2.4,
     morph: 0.45,
     blinkIn: false,
@@ -709,25 +748,25 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // bolota eye-visibility audit: unlike `thinking`/`alert`/`exclaim`, `sil`
-    // never stops being a circle here — it shrinks to 0.166 of resting radius and
-    // regrows, but a face plane exists the whole time. Verbatim bloub hid the eyes
-    // from t=0 to 1.85 (85% of the 2.6s duration) and popped them in over the last
-    // 0.4s instead. Divergence: `eyeAlpha` now tracks the same `collapse`/`regrow`
-    // curve driving the body (`bodyScale` below), floored at 0.18 instead of 0 —
-    // the eyes shrink and dim toward the collapse instant exactly as much as the
-    // body does (via the existing `bodyRadius` fit in `bloub/engine.ts`'s
-    // `sample()`, unchanged), staying faintly present instead of vanishing, then
-    // regrow with the body. No new snap: the driving curve is the same
-    // `easeOutQuint` already used for `sil`, so alpha and size move together.
+    // bolota eye-visibility audit, user-reversed: an earlier pass kept the
+    // eyes faintly present through the collapse (floored at `0.18 + 0.82 *
+    // bodyScale`, never truly 0). User call supersedes that: the collapse
+    // states hide the eyes COMPLETELY — smooth eased fade to 0 tracking the
+    // SAME collapse curve driving `sil` (`easeOutQuint`, not a new one),
+    // fully gone through the hold, smooth fade back in with the regrow. No
+    // pop: `eyeAlpha` and `sil`'s own scale share the identical eased
+    // fraction at every `t`, they just move in opposite directions during
+    // collapse (`sil` shrinks, `eyeAlpha` fades) and together during regrow
+    // (both rise on `regrow` itself, unmodified).
     pose: (t) => {
       // Measured collapse: 1.0 -> 0.166 over 0.7s, ease-out, no overshoot.
-      const collapse = 1 - 0.834 * easings.easeOutQuint(clamp(t / 0.7))
+      const collapseFrac = easings.easeOutQuint(clamp(t / 0.7))
+      const collapse = 1 - 0.834 * collapseFrac
       const regrow = easings.easeOutQuint(clamp((t - 1.7) / 0.7))
       const bodyScale = collapse + (1 - collapse) * regrow
       return base({
         sil: circle(bodyScale),
-        eyeAlpha: 0.18 + 0.82 * bodyScale,
+        eyeAlpha: t < 1.7 ? 1 - collapseFrac : regrow,
         dots: particles(t, 1),
         dotsBehind: true
       })
@@ -745,16 +784,14 @@ export const STATES: StateDef[] = [
     baseFace: false,
     baseBody: false,
     blinkIn: false,
-    // bolota eye-visibility audit: same case as `burst` above — `sil` shrinks to
-    // `COMET_DOT` (0.129 of resting radius, comparable to burst's 0.166) but never
-    // stops being a circular body, so a face plane exists throughout. User report
-    // named this one explicitly ("comet collapses to a dot"). Same divergence:
-    // `eyeAlpha` now tracks `bodyScale` (floored at 0.18) instead of staying at 0
-    // until t=2 (83% of the 2.4s duration) and popping in over the last 0.35s.
-    // At `COMET_DOT` scale the eyes render tiny — a natural fade by proportion, not
-    // a second alpha ramp fighting the geometry.
+    // bolota eye-visibility audit, user-reversed: same case as `burst`
+    // above (see its own comment) — floored fade replaced with a full,
+    // eased fade to 0, tracking the same collapse curve, and back with the
+    // regrow. User report named this one explicitly ("comet collapses to a
+    // dot"); the dot is now genuinely eyeless at its smallest.
     pose: (t) => {
-      const collapse = 1 - (1 - COMET_DOT) * easings.easeOutQuint(clamp(t / 0.55))
+      const collapseFrac = easings.easeOutQuint(clamp(t / 0.55))
+      const collapse = 1 - (1 - COMET_DOT) * collapseFrac
       const regrow = easings.easeOutQuint(clamp((t - 1.85) / 0.6))
       const bodyScale = collapse + (1 - collapse) * regrow
       const fade = clamp((t - 0.15) / 0.25) * clamp((1.95 - t) / 0.3)
@@ -763,7 +800,7 @@ export const STATES: StateDef[] = [
         sil: circle(bodyScale, {
           cy: Math.sin(clamp(t / 1.7) * Math.PI) * 0.035
         }),
-        eyeAlpha: 0.18 + 0.82 * bodyScale,
+        eyeAlpha: t < 1.85 ? 1 - collapseFrac : regrow,
         arcs: COMET_RIBBONS.map((s, i) => ({ id: `cm${i}`, seed: s, t, opacity: fade }))
       })
     }
@@ -780,6 +817,7 @@ export const STATE_BY_ID = new Map(STATES.map((s) => [s.id, s]))
  */
 export const POSES: Record<StateId, number> = {
   idle: 1,
+  wander: 1,
   thinking: 1.1,
   wink: 0.8,
   wide: 0.8,
