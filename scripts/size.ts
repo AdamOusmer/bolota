@@ -185,8 +185,11 @@ const ENTRIES: {
     // Raised from 15200 by ~600 B for velocity-scaled motion blur: three
     // `feGaussianBlur` filters (body/rings/particles), the damped speed
     // tracking that drives them, and the tightened rAF delta clamp.
+    // Raised from 15850 to 17400 (2026-08-19): loop-phase timeline, wink
+    // gesture timeline, and follow-vs-idle arbitration — deliberate feature
+    // growth (measured 16640), not creep; ~5% headroom on top.
     name: "engine",
-    budget: 15850,
+    budget: 17400,
     external: [],
     source: `import { mountEngine } from "../../src/engine";
              globalThis.x = mountEngine;`,
