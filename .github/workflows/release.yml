@@ -1,0 +1,108 @@
+name: Release
+
+# Fires when a GitHub Release is published (the tag, e.g. `v2.0.1`, drives the
+# version-match check below). `workflow_dispatch` with `dry-run: true` runs the
+# same gate + pack + verify steps without a tag or a token, for testing the
+# pipeline itself.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Dry run (npm publish --dry-run, no NPM_TOKEN needed)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write # required for `npm publish --provenance`
+
+jobs:
+  publish:
+    name: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # setup-node is only here to wire up npm's registry auth (it writes an
+      # .npmrc that reads NODE_AUTH_TOKEN) and to provide `npm` itself for
+      # `publish --provenance`, which is an npm CLI feature bun does not
+      # implement. Every build/test/pack step below still runs through bun,
+      # matching ci.yml.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: bun install --frozen-lockfile
+
+      # `prepare` (bun run build) fires again here as an install side effect,
+      # and `prepack` will fire it a third and fourth time below (bun pm pack,
+      # npm publish). All harmless: scripts/build.ts starts with
+      # `rmSync("dist", { recursive: true, force: true })`, so each rebuild is
+      # a clean, deterministic overwrite, not an accumulation. ci.yml already
+      # lives with the install-triggered rebuild; this job just inherits it.
+
+      - name: Typecheck
+        run: bunx tsc --noEmit
+
+      - name: Tests
+        run: bun test
+
+      - name: Size budgets
+        run: bun run size
+
+      - name: Build
+        run: bun run build
+
+      - name: Version safety — tag must match package.json
+        if: github.event_name == 'release'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "::error::Release tag '${GITHUB_REF_NAME}' (-> version '${TAG}') does not match package.json version '${PKG_VERSION}'. Refusing to publish."
+            exit 1
+          fi
+          echo "Tag ${GITHUB_REF_NAME} matches package.json version ${PKG_VERSION}."
+
+      - name: Pack tarball
+        run: bun pm pack --destination /tmp/pack
+
+      - name: Verify tarball contents
+        run: |
+          TARBALL="$(ls /tmp/pack/*.tgz)"
+          echo "Inspecting ${TARBALL}"
+          FILES="$(tar -tzf "$TARBALL")"
+          echo "$FILES"
+
+          echo "$FILES" | grep -q '^package/dist/' \
+            || { echo "::error::tarball has no dist/ — build output missing"; exit 1; }
+          echo "$FILES" | grep -q '^package/src/' \
+            && { echo "::error::tarball contains src/ — should ship dist only"; exit 1; } || true
+          echo "$FILES" | grep -q '^package/LICENSE$' \
+            || { echo "::error::tarball missing LICENSE"; exit 1; }
+          echo "$FILES" | grep -q '^package/README.md$' \
+            || { echo "::error::tarball missing README.md"; exit 1; }
+
+          echo "Tarball contents look right: dist present, src absent, LICENSE + README present."
+
+      - name: Publish (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry-run
+        run: npm publish --dry-run
+
+      # Real publish is gated to the `release` event only — a manual dispatch
+      # has no release tag to run the version-safety check against, so it
+      # never gets to actually publish, regardless of the dry-run input.
+      # `dry-run: false` on workflow_dispatch just skips both publish steps:
+      # useful for exercising the gate + pack + verify steps alone.
+      - name: Publish
+        if: github.event_name == 'release'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -303,6 +303,23 @@ so scope can be agreed on first.
 
 ***
 
+## Releasing
+
+Tags follow `vX.Y.Z` (e.g. `v2.0.1`), matching the `version` field in
+`package.json`.
+
+1. Bump `version` in `package.json` first, commit it.
+2. Create a GitHub Release against that commit, tagged `vX.Y.Z`.
+3. Publishing the Release triggers `.github/workflows/release.yml`, which
+   typechecks, tests, checks size budgets, builds, verifies the tarball
+   (`bun pm pack`), confirms the tag matches `package.json`'s version, and
+   runs `npm publish --provenance --access public`.
+
+The workflow also runs on `workflow_dispatch` with a `dry-run` input, for
+exercising the same gate and tarball verification without publishing.
+
+***
+
 ## License
 
 Distributed under the MIT License — see [LICENSE](LICENSE) for details.
