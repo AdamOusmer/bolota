@@ -1,4 +1,20 @@
 ---
+// The brand mark is a real bolota, not an icon: same static-first paint
+// as Hero (`components/sections/Hero.astro`'s own header explains the
+// technique in full) — `bolota()` is cheap enough to call inline at build
+// time, so the mark is real pixels in the initial HTML, then
+// `scripts/lib/brand-mark.ts` upgrades it to the live engine (on `"idle"`,
+// bolota's calm neutral post idle/wander split) once the shared
+// `bolota/engine` chunk resolves, crossfading exactly like the hero does.
+// Fixed seed (`curated-seeds.ts`'s `DEFAULT_SEED`, "bolota" — the same
+// identity Hero's default paint uses): the nav mark stays the site's own
+// face regardless of whatever seed a visitor has typed into the hero
+// control.
+import { bolota } from "bolota";
+import { DEFAULT_SEED } from "../../scripts/lib/curated-seeds";
+
+const brandStaticSvg = bolota(DEFAULT_SEED);
+
 const LINKS = [
   { href: "#demo", label: "Demo" },
   { href: "#expressions", label: "Expressions" },
@@ -11,7 +27,15 @@ const LINKS = [
 
 <header class="nav" data-nav>
   <div class="nav__row">
-    <a href="#top" class="nav__brand" data-brand-mark aria-label="bolota">bolota</a>
+    <a href="#top" class="nav__brand" data-brand-mark aria-label="bolota">
+      <span class="nav__brand-avatar" data-brand-avatar>
+        <span class="nav__brand-avatar-static" data-brand-avatar-static set:html={brandStaticSvg} />
+        <span class="nav__brand-avatar-live" data-brand-avatar-live>
+          <svg viewBox="0 0 100 100"></svg>
+        </span>
+      </span>
+      <span class="nav__brand-word">bolota</span>
+    </a>
     <nav class="nav__links" aria-label="Sections">
       {LINKS.map((l) => <a href={l.href}>{l.label}</a>)}
     </nav>
@@ -22,3 +46,56 @@ const LINKS = [
     </a>
   </div>
 </header>
+
+<style>
+  /* Same crossfade technique as `.hero__avatar-wrap` (Hero.astro): the
+     SSR'd static face and the live engine host stack in one relatively
+     positioned box, sized identically, so swapping is opacity-only, no
+     layout shift. brand-mark.ts flips `.is-live` on `.nav__brand-avatar`
+     once the engine's first frame is in. */
+  .nav__brand-avatar {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    flex: none;
+  }
+
+  .nav__brand-avatar-static,
+  .nav__brand-avatar-live {
+    position: absolute;
+    inset: 0;
+    transition: opacity 420ms var(--ease-smooth);
+  }
+
+  .nav__brand-avatar-static,
+  .nav__brand-avatar-static :global(svg),
+  .nav__brand-avatar-live,
+  .nav__brand-avatar-live :global(svg) {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .nav__brand-avatar-static {
+    opacity: 1;
+  }
+
+  .nav__brand-avatar-live {
+    opacity: 0;
+  }
+
+  .nav__brand-avatar.is-live .nav__brand-avatar-static {
+    opacity: 0;
+  }
+
+  .nav__brand-avatar.is-live .nav__brand-avatar-live {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nav__brand-avatar-static,
+    .nav__brand-avatar-live {
+      transition: none;
+    }
+  }
+</style>

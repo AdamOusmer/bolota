@@ -14,6 +14,7 @@ import { setupLenis, setupMagnetic, setupNav, setupReveal } from "./lib/motion";
 import { setupLightfield } from "./lib/lightfield";
 import { setupEasterEgg } from "./lib/easter-egg";
 import { setupCopyButtons } from "./lib/copy";
+import { setupBrandMark } from "./lib/brand-mark";
 import { setupHero } from "./sections/hero";
 import { setupDeterminism } from "./sections/determinism";
 import { setupExpressions } from "./sections/expressions";
@@ -30,6 +31,7 @@ setupMagnetic();
 setupReveal();
 setupCopyButtons();
 setupEasterEgg();
+setupBrandMark();
 
 setupHero();
 setupDeterminism();

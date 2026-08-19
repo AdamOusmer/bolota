@@ -378,11 +378,17 @@ main {
 }
 
 .nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  user-select: none;
+}
+
+.nav__brand-word {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 1.05rem;
   color: var(--text-main);
-  user-select: none;
 }
 
 .nav__links {
