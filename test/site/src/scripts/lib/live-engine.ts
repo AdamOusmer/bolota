@@ -1,15 +1,15 @@
-import type { EngineHandle } from "bolota/engine";
+import type { EngineHandle } from "@luzir/bolota/engine";
 import { onVisible } from "./visibility";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-let enginePromise: Promise<typeof import("bolota/engine")> | null = null;
+let enginePromise: Promise<typeof import("@luzir/bolota/engine")> | null = null;
 
 /**
- * The one shared `bolota/engine` loader for every section below the hero:
+ * The one shared `@luzir/bolota/engine` loader for every section below the hero:
  * this file's own `mountLiveTile` (states.ts), and expressions.ts/
  * sequences.ts, all `await ensureEngine()` instead of statically importing
- * `bolota/engine`. hero.ts keeps its own local copy of this exact pattern
+ * `@luzir/bolota/engine`. hero.ts keeps its own local copy of this exact pattern
  * rather than importing this one: it predates this extraction, already
  * has its own generation counter, and pulling in a cross-file dependency
  * there wasn't worth it for four identical lines. Everywhere else, this is
@@ -27,7 +27,7 @@ let enginePromise: Promise<typeof import("bolota/engine")> | null = null;
  * cached response.
  */
 export function ensureEngine() {
-  if (!enginePromise) enginePromise = import("bolota/engine");
+  if (!enginePromise) enginePromise = import("@luzir/bolota/engine");
   return enginePromise;
 }
 

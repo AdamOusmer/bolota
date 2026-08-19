@@ -1,4 +1,4 @@
-import type { EngineHandle } from "bolota/engine";
+import type { EngineHandle } from "@luzir/bolota/engine";
 import { ensureEngine } from "./live-engine";
 import { onVisible } from "./visibility";
 import { DEFAULT_SEED } from "./curated-seeds";
@@ -15,7 +15,7 @@ import { DEFAULT_SEED } from "./curated-seeds";
  * `bolota()` SVG for the zero-JS-wait first paint; this upgrades it to
  * the live engine on `"idle"` (bolota's calm neutral post idle/wander
  * split — no wander, blink/breathe still alive) once the shared
- * `bolota/engine` chunk resolves, then crossfades exactly like the hero
+ * `@luzir/bolota/engine` chunk resolves, then crossfades exactly like the hero
  * does (`.nav__brand-avatar.is-live`, `Nav.astro`'s own scoped style).
  *
  * Routed through `live-engine.ts`'s shared `ensureEngine()` (this file's

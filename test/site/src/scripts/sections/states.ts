@@ -13,7 +13,7 @@ import { observeReveals } from "../lib/motion";
  * list instead, so the grid itself demonstrates bolota's silhouette variety.
  *
  * `engineStates()` itself is cheap (it's just a static roster, not the
- * engine's runtime), but it lives in the same `bolota/engine` module as
+ * engine's runtime), but it lives in the same `@luzir/bolota/engine` module as
  * everything else, so it rides the same deferred `ensureEngine()` chunk as
  * `mountLiveTile`'s own engine use rather than pulling that module back
  * into the eager initial bundle on its own.

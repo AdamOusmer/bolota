@@ -5,12 +5,12 @@
 // time, so the mark is real pixels in the initial HTML, then
 // `scripts/lib/brand-mark.ts` upgrades it to the live engine (on `"idle"`,
 // bolota's calm neutral post idle/wander split) once the shared
-// `bolota/engine` chunk resolves, crossfading exactly like the hero does.
+// `@luzir/bolota/engine` chunk resolves, crossfading exactly like the hero does.
 // Fixed seed (`curated-seeds.ts`'s `DEFAULT_SEED`, "bolota" — the same
 // identity Hero's default paint uses): the nav mark stays the site's own
 // face regardless of whatever seed a visitor has typed into the hero
 // control.
-import { bolota } from "bolota";
+import { bolota } from "@luzir/bolota";
 import { DEFAULT_SEED } from "../../scripts/lib/curated-seeds";
 
 const brandStaticSvg = bolota(DEFAULT_SEED);

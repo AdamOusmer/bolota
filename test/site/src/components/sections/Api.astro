@@ -43,7 +43,7 @@ const SYMBOLS = [
           <span>bolota — static render</span>
           <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
         </div>
-        <pre><code><span class={K}>import</span> {"{"} bolota {"}"} <span class={K}>from</span> <span class={S}>"bolota"</span>;
+        <pre><code><span class={K}>import</span> {"{"} bolota {"}"} <span class={K}>from</span> <span class={S}>"@luzir/bolota"</span>;
 
 <span class={C}>// deterministic: same seed, same bytes, always</span>
 <span class={K}>const</span> svg = bolota(<span class={S}>"any-string"</span>, {"{"} size: <span class={S}>64</span> {"}"});
@@ -55,7 +55,7 @@ container.innerHTML = svg;</code></pre>
           <span>parts — framework adapter</span>
           <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
         </div>
-        <pre><code><span class={K}>import</span> {"{"} parts {"}"} <span class={K}>from</span> <span class={S}>"bolota"</span>;
+        <pre><code><span class={K}>import</span> {"{"} parts {"}"} <span class={K}>from</span> <span class={S}>"@luzir/bolota"</span>;
 
 <span class={C}>// {"{"} cls, bg, inner, vars {"}"}: build your own element,</span>
 <span class={C}>// wire `inner` through an innerHTML-style sink</span>
@@ -67,7 +67,7 @@ container.innerHTML = svg;</code></pre>
           <span>mountEngine — bloub engine</span>
           <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
         </div>
-        <pre><code><span class={K}>import</span> {"{"} mountEngine {"}"} <span class={K}>from</span> <span class={S}>"bolota/engine"</span>;
+        <pre><code><span class={K}>import</span> {"{"} mountEngine {"}"} <span class={K}>from</span> <span class={S}>"@luzir/bolota/engine"</span>;
 
 <span class={K}>const</span> handle = mountEngine(svgEl, <span class={S}>"any-string"</span>);
 <span class={C}>// starts on "idle"; handle.destroy() unmounts</span></code></pre>
@@ -100,7 +100,7 @@ handle.setExpression(<span class={K}>null</span>);      <span class={C}>// clear
           <span>sequences</span>
           <button class="copy-btn" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-btn__label">copy</span></button>
         </div>
-        <pre><code><span class={K}>import</span> {"{"} runSequence {"}"} <span class={K}>from</span> <span class={S}>"bolota/sequences"</span>;
+        <pre><code><span class={K}>import</span> {"{"} runSequence {"}"} <span class={K}>from</span> <span class={S}>"@luzir/bolota/sequences"</span>;
 
 <span class={C}>// "entrance" | "burst" | "orbit" | "comet"</span>
 runSequence(handle, <span class={S}>"entrance"</span>);</code></pre>

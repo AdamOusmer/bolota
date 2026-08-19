@@ -1,4 +1,4 @@
-import type { EngineHandle } from "bolota/engine";
+import type { EngineHandle } from "@luzir/bolota/engine";
 import { animate, cubicBezier } from "motion";
 import { getSeed, onSeedChange, setSeed } from "../lib/seed-store";
 import { DEFAULT_SEED, randomSeed } from "../lib/curated-seeds";
@@ -15,7 +15,7 @@ const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
  * (`bolota()`, ~14us, free enough to call inline at build time) into
  * `[data-hero-avatar-static]`, a sibling layer under the live engine host,
  * so the specimen is real pixels in the initial HTML with zero JS wait. The
- * engine itself (`bolota/engine`, the bloub port, the heavy part) is loaded
+ * engine itself (`@luzir/bolota/engine`, the bloub port, the heavy part) is loaded
  * with a dynamic `import()` here rather than a static one: a static import
  * would put the whole engine back in site.ts's single eager chunk, which is
  * exactly the "everything waits on everything" bundle this is working
@@ -51,11 +51,11 @@ export function setupHero() {
   if (!wrap || !svgHost) return;
 
   let handle: EngineHandle | null = null;
-  let enginePromise: Promise<typeof import("bolota/engine")> | null = null;
+  let enginePromise: Promise<typeof import("@luzir/bolota/engine")> | null = null;
   let gen = 0;
 
   function ensureEngine() {
-    if (!enginePromise) enginePromise = import("bolota/engine");
+    if (!enginePromise) enginePromise = import("@luzir/bolota/engine");
     return enginePromise;
   }
 

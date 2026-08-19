@@ -1,5 +1,5 @@
-import type { EngineHandle } from "bolota/engine";
-import { runSequence, type SequenceName } from "bolota/sequences";
+import type { EngineHandle } from "@luzir/bolota/engine";
+import { runSequence, type SequenceName } from "@luzir/bolota/sequences";
 import { ensureEngine } from "../lib/live-engine";
 import { onSeedChange, getSeed } from "../lib/seed-store";
 import { DEFAULT_SEED } from "../lib/curated-seeds";

@@ -1,4 +1,4 @@
-import type { EngineHandle } from "bolota/engine";
+import type { EngineHandle } from "@luzir/bolota/engine";
 import { ensureEngine } from "../lib/live-engine";
 import { onSeedChange, getSeed } from "../lib/seed-store";
 import { DEFAULT_SEED } from "../lib/curated-seeds";
