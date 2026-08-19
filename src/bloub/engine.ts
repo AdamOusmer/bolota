@@ -334,7 +334,20 @@ export class BotEngine {
       // drawing its own catalog of body shapes) lives on unrenamed at
       // github.com/AdamOusmer/bloub.
       const scale = pose.sil.radii.reduce((a, b) => a + b, 0) / pose.sil.radii.length
-      pose = { ...pose, sil: { ...pose.sil, radii: shape.map((r) => r * scale) } }
+      // bolota addition, found by actually rendering frames (a debug page,
+      // not the numeric containment/alpha tests, which never checked eye
+      // SIZE and so never caught this): `scale` above resizes the body, but
+      // left `pose.eyes[i].w/h` untouched — a state whose body renders
+      // smaller than the resting ball (every non-`baseBody` state with a
+      // dynamic collapse, `burst`/`comet`, AND every one with a constant
+      // sub-1.0 scale, `orbit`/`play` — both render bloub's own triangle
+      // profile at this choke point, mean radius ~0.86, not 1.0) carried a
+      // FULL-SIZE face on a shrunken body: an eye rendering nearly as big
+      // as the whole ball, or (orbit/play) a persistently ~16% oversized
+      // one. The face now scales in lockstep with the body it sits on, for
+      // every state that reaches this branch, not per-state patches.
+      const scaledEyes = pose.eyes.map((e) => ({ ...e, w: e.w * scale, h: e.h * scale })) as typeof pose.eyes
+      pose = { ...pose, sil: { ...pose.sil, radii: shape.map((r) => r * scale) }, eyes: scaledEyes }
     }
     if (def.baseFace && expr) {
       pose = { ...pose, gaze: expr.gaze, split: expr.split, eyes: expr.eyes }
