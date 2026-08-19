@@ -1,0 +1,60 @@
+---
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+import "../styles/tokens.css";
+import "../styles/fonts.css";
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = "bolota, one string, one face, forever",
+  description = "Deterministic SVG avatars from any string, with a motion engine for when they need to move. A Luzir project.",
+} = Astro.props;
+
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+
+// Favicon is a real bolota, not a placeholder swatch: public/favicon.svg
+// is the library's own output for the fixed brand seed (same seed the nav
+// mark uses — lib/curated-seeds.ts's DEFAULT_SEED, "bolota"), regenerated
+// by hand via scripts/gen-favicon.ts, not drawn here. See that script's
+// header for why it isn't called live on every request/build.
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+    <link rel="canonical" href={canonicalURL} />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:site_name" content="bolota" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- [data-reveal]'s resting state is opacity: 0 until src/script/lib/
+         motion.ts's setupReveal() (or, under prefers-reduced-motion, its
+         own reduced-motion branch) runs; this is the fallback for when JS
+         never runs at all, so content never gets stuck invisible. -->
+    <noscript>
+      <style>
+        [data-reveal] {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+      </style>
+    </noscript>
+  </head>
+  <body>
+    <div data-nav-sentinel aria-hidden="true" style="position:absolute; top:0; left:0; width:1px; height:1px;"></div>
+    <div class="lightfield" data-lightfield aria-hidden="true">
+      <canvas class="lightfield__motes" data-motes></canvas>
+      <div class="lightfield__torch"></div>
+      <div class="lightfield__grain"></div>
+    </div>
+    <slot />
+    <script src="../script/site.ts"></script>
+  </body>
+</html>

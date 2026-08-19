@@ -1,0 +1,115 @@
+---
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+import SectionHead from "../ui/SectionHead.astro";
+import StateTile from "../ui/StateTile.astro";
+import { engineStates } from "@luzir/bolota/engine";
+
+// Owner's fix (PR #13): the tile shell is a real Astro component
+// (StateTile.astro), rendered here at build time off the real roster —
+// engineStates() is a plain synchronous roster lookup (see engine.ts's own
+// doc comment on it), free to call in frontmatter, same technique
+// Api.astro already uses for its setExpression example id. All 14 tiles
+// are therefore structurally identical HTML in the initial response, not
+// ad hoc innerHTML strings assembled per tile client-side (that was the
+// owner's own diagnosis for the inconsistent row dividers). The engine
+// itself still only mounts client-side — script/sections/states.ts finds
+// these pre-rendered shells by [data-state-tile] and fills in the live
+// avatar, it no longer builds any markup of its own.
+const STATES = engineStates();
+---
+
+<section class="section wrap" id="states">
+  <SectionHead kicker="Specimens" title="States" description="Every state, live, looping, side by side." />
+
+  <div class="specimens" data-states-grid data-reveal style="--reveal-i:1">
+    {STATES.map((id) => <StateTile state={id} />)}
+  </div>
+</section>
+
+<style is:global>
+  /* Boxless specimen collection (spec §4): no tile chrome, no card, no
+     border around each entry. Separation comes from generous spacing and a
+     hairline rule between rows only, drawn with the fixed column counts
+     below so `:nth-child` can tell which items sit in row one at each
+     breakpoint. `is:global` because .specimen/.specimen__avatar/
+     .specimen__label are StateTile.astro's own elements, a different
+     component than this one — Astro's scoping hash wouldn't reach across
+     that boundary from a scoped style here.
+     Divider rule: each breakpoint block first resets every tile to
+     bordered, THEN removes the border for exactly that breakpoint's own
+     row-one set. Not "leave the previous breakpoint's border rule as the
+     default and only add an override for the new row-one" (the shape this
+     used to have): that leaves row one correct only for whichever
+     `:nth-child(-n+K)` selector happens to win the cascade against the
+     others it overlaps, and different tiles landed on different sides of
+     that depending on their position — the bug this replaces (some row-one
+     tiles kept a stray divider, inconsistently, per owner screenshot).
+     Resetting first makes every breakpoint's row-one set unconditionally
+     correct regardless of source order or what an earlier query set. */
+  .specimens {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    column-gap: clamp(24px, 5vw, 56px);
+  }
+
+  .specimen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding-block: clamp(28px, 4vw, 44px);
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+  }
+
+  .specimens > .specimen:nth-child(-n + 2) {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .specimen__avatar {
+    width: var(--avatar-size, 64px);
+    height: var(--avatar-size, 64px);
+  }
+
+  .specimen__label {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-variant: all-small-caps;
+    letter-spacing: 0.04em;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+
+  @media (min-width: 620px) {
+    .specimens {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .specimens > .specimen {
+      border-top: 1px solid var(--border-color);
+      padding-top: clamp(28px, 4vw, 44px);
+    }
+
+    .specimens > .specimen:nth-child(-n + 3) {
+      border-top: none;
+      padding-top: 0;
+    }
+  }
+
+  @media (min-width: 960px) {
+    .specimens {
+      grid-template-columns: repeat(5, 1fr);
+    }
+
+    .specimens > .specimen {
+      border-top: 1px solid var(--border-color);
+      padding-top: clamp(28px, 4vw, 44px);
+    }
+
+    .specimens > .specimen:nth-child(-n + 5) {
+      border-top: none;
+      padding-top: 0;
+    }
+  }
+</style>

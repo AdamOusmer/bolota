@@ -1,7 +1,9 @@
+/* Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE. */
+
 /*
  * Self-hosted @font-face declarations for the redesign's three typefaces.
  * Replaces the v1 @fontsource(bricolage-grotesque, space-mono) imports in
- * Base.astro: those were npm packages, these are woff2 files fetched
+ * Layout.astro: those were npm packages, these are woff2 files fetched
  * straight from Fontshare (Clash Display, Switzer) and Google Fonts (Spline
  * Sans Mono, not on Fontshare) and committed under public/fonts/, referenced
  * here by absolute path so Astro serves them unprocessed.

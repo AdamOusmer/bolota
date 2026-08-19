@@ -1,0 +1,30 @@
+---
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+// Owner's fix (PR #13, States section divider bug): every state specimen
+// renders through this one component instead of being hand-templated as an
+// innerHTML string per tile in script/sections/states.ts — that ad hoc
+// per-tile markup was the owner's own suspicion for why the row-divider
+// styling applied inconsistently, and States.astro now enumerates the real
+// roster (`engineStates()`) at build time so all 14 come from here,
+// structurally identical. The engine itself only mounts client-side (see
+// `[data-specimen-avatar]` below and states.ts's own header), so this is a
+// shell: label is real (humanizeId is a pure string function, free at
+// build time), the avatar slot is empty until the deferred engine chunk
+// fills it in.
+import { humanizeId } from "../../script/lib/humanize";
+
+interface Props {
+  /** A `StateId` from `engineStates()`. Typed as `string`, not the
+   * engine's own union, so this component doesn't import the engine's
+   * runtime module just for a type — States.astro already imports
+   * `engineStates` itself and is the only caller. */
+  state: string;
+}
+
+const { state } = Astro.props;
+---
+
+<div class="specimen" data-state-tile={state}>
+  <div class="specimen__avatar" data-specimen-avatar></div>
+  <div class="specimen__label">{humanizeId(state)}</div>
+</div>

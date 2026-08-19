@@ -1,16 +1,17 @@
 ---
-import Base from "../layouts/Base.astro";
-import Nav from "../components/Nav.astro";
-import Hero from "../components/Hero.astro";
-import Determinism from "../components/Determinism.astro";
-import Expressions from "../components/Expressions.astro";
-import States from "../components/States.astro";
-import Sequences from "../components/Sequences.astro";
-import Api from "../components/Api.astro";
-import Footer from "../components/Footer.astro";
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/layout/Nav.astro";
+import Footer from "../components/layout/Footer.astro";
+import Hero from "../components/sections/Hero.astro";
+import Determinism from "../components/sections/Determinism.astro";
+import Expressions from "../components/sections/Expressions.astro";
+import States from "../components/sections/States.astro";
+import Sequences from "../components/sections/Sequences.astro";
+import Api from "../components/sections/Api.astro";
 ---
 
-<Base>
+<Layout>
   <Nav />
   <main>
     <Hero />
@@ -21,4 +22,4 @@ import Footer from "../components/Footer.astro";
     <Api />
   </main>
   <Footer />
-</Base>
+</Layout>

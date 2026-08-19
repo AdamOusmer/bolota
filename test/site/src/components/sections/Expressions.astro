@@ -1,0 +1,160 @@
+---
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+import SectionHead from "../ui/SectionHead.astro";
+import { engineExpressions } from "@luzir/bolota/engine";
+
+// Count comes off the real roster at build time, same technique as
+// States.astro, so adding a face (love landed after this copy was first
+// written) never leaves the headline claiming a stale number.
+const faceCount = engineExpressions().length;
+const firstFace = engineExpressions()[0];
+---
+
+<section class="section wrap expr" id="expressions" data-expressions>
+  <SectionHead kicker="Faces" title="Expressions" description={`${faceCount} faces, one held pose at a time.`} />
+
+  <div class="expr__layout">
+    <div class="expr__stage" data-reveal style="--reveal-i:1">
+      <div class="light-pool" aria-hidden="true"></div>
+      <div class="expr__avatar" data-expr-stage></div>
+      <p class="expr__current" data-expr-label>{firstFace.charAt(0).toUpperCase() + firstFace.slice(1)}</p>
+    </div>
+
+    <div class="expr__picker" data-expr-picker data-reveal style="--reveal-i:2"></div>
+  </div>
+</section>
+
+<style>
+  /* Two-column stage: a big held-pose blob standing in its own light pool on
+     the left, the 4x4 round-tile picker on the right (spec §3). Stacks on
+     narrow viewports since a 4x4 grid next to a full-size blob has nowhere
+     to go at phone widths. */
+  .expr__layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 340px) 1fr;
+    align-items: center;
+    gap: clamp(32px, 6vw, 72px);
+  }
+
+  .expr__stage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .expr__avatar {
+    width: clamp(180px, 22vw, 300px);
+    aspect-ratio: 1;
+  }
+
+  .expr__current {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.1rem;
+    color: var(--text-main);
+  }
+
+  /* 4x4 round-tile picker. Fixed four columns per spec, easing to two on
+     phones so a tile never drops below a comfortable tap size. */
+  .expr__picker {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: clamp(20px, 3vw, 32px) clamp(12px, 2vw, 20px);
+    justify-items: center;
+  }
+
+  @media (max-width: 640px) {
+    .expr__layout {
+      grid-template-columns: 1fr;
+      justify-items: center;
+      text-align: center;
+    }
+
+    /* Stacked, the picker sits below the stage and is taller than a phone
+       viewport, so scrolling to the tile you want scrolls the face you are
+       choosing for off the screen. The stage sticks under the nav instead,
+       and the veil keeps tiles legible as they pass beneath it. Sticky needs
+       every ancestor to avoid `overflow: hidden`; `body` uses `overflow-x:
+       clip`, which does not create a scroll container, so it holds. */
+    .expr__stage {
+      position: sticky;
+      top: calc(var(--nav-h) + 8px);
+      z-index: 2;
+      align-self: start;
+      padding-bottom: 14px;
+      background: linear-gradient(
+        to bottom,
+        var(--bg-color) 0%,
+        var(--bg-color) 76%,
+        transparent 100%
+      );
+    }
+
+    /* Smaller while it is pinned: at full size it would eat a third of the
+       viewport for the whole length of the picker. */
+    .expr__avatar {
+      width: clamp(132px, 34vw, 190px);
+    }
+
+    .expr__picker {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+</style>
+
+<style is:global>
+  /* Picker item chrome: kept global (not `.expr__` scoped) since the class
+     names are built in script/sections/expressions.ts, which has no Astro
+     scope hash to target. Sized to the spec's 65-70px round tile, ring +
+     lift for the selected state, small-caps label underneath. */
+  .picker__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .picker__circle {
+    position: relative;
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-color);
+    box-shadow: inset 0 0 0 1px rgb(var(--white-rgb) / 0.06);
+    transition: box-shadow 220ms var(--ease-smooth), transform 220ms var(--ease-smooth);
+  }
+
+  .picker__circle span {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    color: var(--text-faint);
+  }
+
+  .picker__item:hover .picker__circle {
+    box-shadow: inset 0 0 0 1px rgb(var(--white-rgb) / 0.06), 0 0 0 1px rgb(var(--light-rgb) / 0.4);
+  }
+
+  .picker__item.is-active .picker__circle {
+    box-shadow: 0 0 0 2px var(--accent);
+    transform: translateY(-3px);
+  }
+
+  .picker__item.is-active .picker__label {
+    color: var(--accent);
+  }
+
+  .picker__label {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-variant: all-small-caps;
+    letter-spacing: 0.04em;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    transition: color 200ms ease;
+  }
+</style>
