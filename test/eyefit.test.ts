@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BotEngine, type Look } from "../src/bloub/engine";
-import { eyePoses } from "../src/bloub/face";
+import { eyePoses, REST_GAZE } from "../src/bloub/face";
 import { r2 } from "../src/bloub/math";
 import { radiusAtAngle, superellipseProfile, toPoints } from "../src/bloub/shape";
 import { ORBIT_PERIOD, STATE_BY_ID, WINK_PERIOD, type StateId } from "../src/bloub/states";
@@ -157,6 +157,44 @@ describe("idle — the no-state neutral: fixed gaze, no wander/drift, still aliv
       heights.add(Math.round((Math.max(...ys) - Math.min(...ys)) * 100) / 100);
     }
     expect(heights.size).toBeGreaterThan(1);
+  });
+});
+
+describe("swirl — carries bloub's own resting glance (REST_GAZE), not a swept neutral", () => {
+  // Regression guard for a two-step history on this state's gaze: an
+  // earlier pass on this branch swept `swirl` (alongside `burst`/`comet`)
+  // to `NEUTRAL_GAZE`; compared directly against bloub running live, that
+  // was wrong for THIS state specifically — bloub's own `arrival` entrance
+  // (`swirl`'s upstream original, `../../bloub`'s `states.ts`) never
+  // touches `gaze` at all, i.e. keeps `base()`'s own `REST_GAZE` default —
+  // and reverted (`states.ts`'s own comment on the `swirl` entry has the
+  // full history). `burst`/`comet` are NOT part of this guard: their own
+  // sweep to `NEUTRAL_GAZE` stands, unrelated to this state.
+  const swirlDef = STATE_BY_ID.get("swirl")!;
+
+  test("pose(t).gaze equals base()'s own REST_GAZE default at every sampled t, not NEUTRAL_GAZE", () => {
+    for (let t = 0; t <= swirlDef.duration; t += swirlDef.duration / 10) {
+      const gaze = swirlDef.pose(t).gaze;
+      expect(gaze.yaw).toBe(REST_GAZE.yaw);
+      expect(gaze.pitch).toBe(REST_GAZE.pitch);
+      expect(gaze.roll).toBe(REST_GAZE.roll);
+      // and NOT the swept value, spelled out so a future re-sweep fails
+      // this test even if `REST_GAZE`'s own numbers ever move too
+      expect(gaze.yaw).not.toBe(0);
+      expect(gaze.pitch).not.toBe(0);
+      expect(gaze.roll).not.toBe(0);
+    }
+  });
+
+  test("matches bloub upstream exactly: pose(t) declares no gaze override at all (inherits base())", () => {
+    // White-box companion to the black-box check above: `base({...})`'s own
+    // spread means an explicit `gaze: { ...REST_GAZE }` and simply omitting
+    // the field are indistinguishable from `pose()`'s return value alone —
+    // this reads the SOURCE to confirm it's the latter (bloub's own
+    // authoring shape), not a swirl-local `{ ...REST_GAZE }` copy that
+    // would silently go stale if `REST_GAZE` itself ever moved.
+    const src = swirlDef.pose.toString();
+    expect(src).not.toContain("gaze");
   });
 });
 
@@ -479,56 +517,77 @@ describe("orbit — eyes ride the body's own wobbling center", () => {
     }
   });
 
-  test("gaze is pinned to idle's own neutral — no bloub sweep, no wander/look leak", () => {
-    // Regression guard for the two things this state's `gaze` line has
-    // swung between: bloub's own verbatim sweep (+-65deg yaw, tried and
-    // reverted — see `states.ts`'s comment on this line) and a genuine
-    // wander/look leak composing on top of the constant (checked, not
-    // found — same comment). `pose(t).gaze` itself must equal `idle`'s own
-    // gaze, unchanged, at every `t`: any reintroduced sweep or per-`t` term
-    // shows up here directly, before rendering or `ownsLiveliness` gating
-    // even get a chance to hide or reveal it.
+  test("gaze jostles around idle's own neutral — real travel, zero-mean, no bloub-sweep-sized swing", () => {
+    // Regression guard for round C of this state's `gaze` line (`states.ts`'s
+    // own comment on it has the full history): round A was bloub's verbatim
+    // sweep (+-65deg yaw, `sin(t*6.5)` unsynced with `rot`'s own period, ridden
+    // on the settle transient `back` — not loop-safe); round B over-corrected
+    // to a flat constant (no motion at all, reported as its own bug — "the
+    // eyes sit still while the body visibly tumbles"); round C (current) is a
+    // jostle tied to `rot` — the SAME already-periodic signal driving
+    // `sil.cx/cy` — small enough it never approaches round A's swing, but
+    // large enough to be real, readable motion, and centered on
+    // `NEUTRAL_GAZE` rather than replacing it.
     //
-    // The constant this pins against is `idle`'s own current gaze, read
-    // fresh off `STATE_BY_ID` rather than hardcoded, so this test doesn't
-    // silently go stale if idle's neutral value ever moves again the way
-    // it did once already (`REST_GAZE` -> dead ahead) — `orbit`'s own
-    // doc comment (`states.ts`) explicitly ties itself to "idle's own
-    // neutral," so this assertion should track the same source it does.
-    const idleGaze = STATE_BY_ID.get("idle")!.pose(0).gaze
-    for (let t = 0; t <= ORBIT_PERIOD; t += ORBIT_PERIOD / 20) {
+    // "Real travel": total absolute frame-to-frame change in each gaze
+    // channel over one whole `ORBIT_PERIOD`, at a fine enough step (480
+    // samples) that discretization error is negligible against the floor.
+    // Measured at the current amplitude (`ORBIT_JOSTLE_YAW/PITCH/ROLL`,
+    // `states.ts`): ~255/160/191 degrees of total travel — floors below are
+    // set well under that, so this catches a reintroduced flat gaze (travel
+    // -> 0) without being a re-tune tripwire on every amplitude nudge.
+    const dt = ORBIT_PERIOD / 480
+    let prev = orbitDef.pose(0).gaze
+    let travelYaw = 0
+    let travelPitch = 0
+    let travelRoll = 0
+    let sumYaw = 0
+    let sumPitch = 0
+    let sumRoll = 0
+    let samples = 0
+    for (let t = dt; t <= ORBIT_PERIOD; t += dt) {
       const gaze = orbitDef.pose(t).gaze
-      expect(gaze.yaw).toBe(idleGaze.yaw)
-      expect(gaze.pitch).toBe(idleGaze.pitch)
-      expect(gaze.roll).toBe(idleGaze.roll)
+      travelYaw += Math.abs(gaze.yaw - prev.yaw)
+      travelPitch += Math.abs(gaze.pitch - prev.pitch)
+      travelRoll += Math.abs(gaze.roll - prev.roll)
+      sumYaw += gaze.yaw
+      sumPitch += gaze.pitch
+      sumRoll += gaze.roll
+      samples++
+      prev = gaze
+    }
+    expect(travelYaw).toBeGreaterThan(150)
+    expect(travelPitch).toBeGreaterThan(90)
+    expect(travelRoll).toBeGreaterThan(100)
+
+    // "Zero-mean, composes with neutral direction": the jostle is a pure
+    // sin/cos of `rot`, and `rot` completes exactly 4 whole turns over
+    // `ORBIT_PERIOD` (`states.ts`'s own `period` comment) — so the average
+    // gaze across the whole loop should land back on `NEUTRAL_GAZE`, not
+    // some other resting direction the eyes drift toward.
+    const idleGaze = STATE_BY_ID.get("idle")!.pose(0).gaze
+    expect(sumYaw / samples).toBeCloseTo(idleGaze.yaw, 1)
+    expect(sumPitch / samples).toBeCloseTo(idleGaze.pitch, 1)
+    expect(sumRoll / samples).toBeCloseTo(idleGaze.roll, 1)
+
+    // "No bloub-sweep-sized swing": every sampled instant stays well inside
+    // round A's own +-65deg yaw envelope — the jostle reads as shaken, not
+    // as the eyes swinging out toward profile.
+    for (let t = 0; t <= ORBIT_PERIOD; t += ORBIT_PERIOD / 40) {
+      const gaze = orbitDef.pose(t).gaze
+      expect(Math.abs(gaze.yaw)).toBeLessThan(30)
+      expect(Math.abs(gaze.pitch)).toBeLessThan(30)
+      expect(Math.abs(gaze.roll)).toBeLessThan(30)
     }
 
-    // And the composed, rendered gaze (life + look on top of `pose`, no
-    // look target set) matches a from-scratch reconstruction off that same
-    // constant, to the engine's own rounding — the same method `bug 2`'s
-    // wander parity checks use, confirming `ownsLiveliness` actually zeroes
-    // `life.dYaw/dPitch/dRoll` here rather than merely returning a
-    // constant `pose` that something downstream still perturbs.
-    const seed = superellipseProfile(3, 0.6, 1);
-    const engine = new BotEngine(R, "orbit", seed);
-    for (const t of [0.2, 0.9, 1.7, 2.5, 3.1]) {
-      const raw = orbitDef.pose(t);
-      const scale = raw.sil.radii.reduce((a, b) => a + b, 0) / raw.sil.radii.length;
-      const sil = { ...raw.sil, radii: seed.map((r) => r * scale) };
-      const bodyRadiusAt = (x: number, y: number) => radiusAtAngle(sil.radii, Math.atan2(y, x) - sil.rot);
-      const expected = eyePoses(idleGaze, R, raw.split)
-        .filter((e) => e.depth > 0.02)
-        .map((e) => ({
-          x: r2(e.x * bodyRadiusAt(e.x, e.y) + sil.cx * R),
-          y: r2(e.y * bodyRadiusAt(e.x, e.y) + sil.cy * R)
-        }));
-      const actual = eyeCenters(engine.sample(t).eyes);
-      expect(actual.length).toBe(expected.length);
-      actual.forEach((a, i) => {
-        expect(a.x).toBeCloseTo(expected[i]!.x, 1);
-        expect(a.y).toBeCloseTo(expected[i]!.y, 1);
-      });
-    }
+    // Loop-safe: `gaze` at the wrap point matches `t = 0` (both endpoints of
+    // a pure, whole-turns function of `rot`), same continuity story the
+    // phase-continuity test below already holds every other channel to.
+    const atStart = orbitDef.pose(0).gaze
+    const atWrap = orbitDef.pose(ORBIT_PERIOD).gaze
+    expect(atWrap.yaw).toBeCloseTo(atStart.yaw, 6)
+    expect(atWrap.pitch).toBeCloseTo(atStart.pitch, 6)
+    expect(atWrap.roll).toBeCloseTo(atStart.roll, 6)
   });
 
   test("blink and breathing stay alive during orbit despite the pinned gaze", () => {

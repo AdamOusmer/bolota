@@ -3,7 +3,11 @@ import { _layout, bolota } from "../src/bolota";
 import { engineStates, mountEngine, type EngineHandle } from "../src/engine";
 import { runSequence } from "../src/sequences";
 import { BotEngine } from "../src/bloub/engine";
+import { eyePoses } from "../src/bloub/face";
+import { r2 } from "../src/bloub/math";
 import { PROFILE_SAMPLES } from "../src/bloub/profiles";
+import { radiusAtAngle } from "../src/bloub/shape";
+import { STATE_BY_ID } from "../src/bloub/states";
 
 /**
  * A minimal fake SVG DOM covering exactly what `mountEngine` touches
@@ -566,11 +570,22 @@ describe("orbit decor and eye-pair fidelity to bloub", () => {
    * apart, and does not (verified: it keeps passing with `bodyCx`/`bodyCy`
    * zeroed out by hand). A perfectly circular `radii` array pins that
    * confound (`bodyRadius` returns the same 1.0 at every angle, so `fit`
-   * never moves), which isolates the one channel under test: with the eyes'
-   * own gaze constant (orbit's is, by design -- `states.ts`), the eye-pair
-   * midpoint minus the body's own bbox center should be a near-constant
-   * vector (the fixed gaze offset) at every t, while the body's own center
-   * itself traces `spinningTriangle`'s circle -- i.e. the eyes ride it.
+   * never moves), which isolates the one channel under test.
+   *
+   * `orbit`'s own gaze is no longer a constant (round C of that state's
+   * `gaze:` line, `states.ts` -- a small jostle tied to the same `rot`
+   * signal driving `sil.cx/cy`), so "eye-pair midpoint minus body center
+   * stays near-constant" is no longer the right shape for this check: the
+   * jostle itself moves that difference on purpose. What still must hold,
+   * jostle and all, is that the eyes are riding the body's own translation
+   * rather than sitting pinned to world origin while the body orbits around
+   * them -- checked here by reconstructing the expected eye-pair midpoint
+   * directly from `orbit.pose(t)`'s own `gaze`/`split` (the same method
+   * `test/eyefit.test.ts`'s parity checks use) and comparing it against the
+   * DOM-rendered one, at every sampled `t`. The pre-fix bug (eyes pinned to
+   * origin) fails this immediately: the reconstruction already includes
+   * `sil.cx/cy`, so a pinned-origin renderer would miss it by the full
+   * `TRI_ORBIT`-scaled wobble, not by a rounding error.
    */
   function circleFrame(t: number) {
     const shape = new Array(PROFILE_SAMPLES).fill(1);
@@ -618,20 +633,33 @@ describe("orbit decor and eye-pair fidelity to bloub", () => {
     // fix): `spinningTriangle`'s cx/cy wobble is ~0.213 x R either axis.
     expect(centerSpreadX + centerSpreadY, "fixture: body wobbles").toBeGreaterThan(10);
 
-    const rel = eyeMid.map((e, i) => ({ x: e.x - centers[i]!.x, y: e.y - centers[i]!.y }));
-    const relSpreadX = Math.max(...rel.map((r) => r.x)) - Math.min(...rel.map((r) => r.x));
-    const relSpreadY = Math.max(...rel.map((r) => r.y)) - Math.min(...rel.map((r) => r.y));
     // The pre-fix bug: eyes at a fixed screen position while the body
-    // (bbox center above) orbits around them -- `eyeMid - bodyCenter` would
-    // then swing by the SAME amount the body itself does. Post-fix, that
-    // difference stays close to flat: the gaze is constant (orbit's own
-    // `REST_GAZE`), so the only residual wobble is the per-eye radius-fit
-    // term this fixture already pinned to 1.0, i.e. near zero.
-    expect(relSpreadX, "eye-body offset stays ~constant (eyes ride the body)").toBeLessThan(
-      centerSpreadX * 0.25,
-    );
-    expect(relSpreadY, "eye-body offset stays ~constant (eyes ride the body)").toBeLessThan(
-      centerSpreadY * 0.25,
-    );
+    // (bbox center above) orbits around them. The regression guard for
+    // that is a direct reconstruction, not a "stays flat" heuristic (which
+    // stopped being the right shape once `orbit`'s own gaze picked up its
+    // jostle -- this test's own doc comment above has the full reasoning):
+    // rebuild the expected eye-pair midpoint from `orbit.pose(t)`'s own
+    // `gaze`/`split` plus `sil.cx/cy`, the exact same construction
+    // `test/eyefit.test.ts`'s parity checks use, and require the DOM-
+    // rendered midpoint to match it at every sampled `t`. A pinned-origin
+    // renderer misses this by the full `TRI_ORBIT` wobble (~21 units at
+    // R=100), nowhere near the engine's own two-decimal rounding.
+    const orbitDef = STATE_BY_ID.get("orbit")!;
+    const circleShape = new Array(PROFILE_SAMPLES).fill(1);
+    for (const [i, t] of ts.entries()) {
+      const raw = orbitDef.pose(t);
+      const scale = raw.sil.radii.reduce((a, b) => a + b, 0) / raw.sil.radii.length;
+      const sil = { ...raw.sil, radii: circleShape.map((r) => r * scale) };
+      const bodyRadiusAt = (x: number, y: number) => radiusAtAngle(sil.radii, Math.atan2(y, x) - sil.rot);
+      const eyes = eyePoses(raw.gaze, 100, raw.split).filter((e) => e.depth > 0.02);
+      const expectedMid = {
+        x:
+          eyes.reduce((sum, e) => sum + (e.x * bodyRadiusAt(e.x, e.y) + sil.cx * 100), 0) / eyes.length,
+        y:
+          eyes.reduce((sum, e) => sum + (e.y * bodyRadiusAt(e.x, e.y) + sil.cy * 100), 0) / eyes.length
+      };
+      expect(eyeMid[i]!.x, `t=${t}`).toBeCloseTo(r2(expectedMid.x), 0);
+      expect(eyeMid[i]!.y, `t=${t}`).toBeCloseTo(r2(expectedMid.y), 0);
+    }
   });
 });
