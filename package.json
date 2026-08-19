@@ -1,7 +1,17 @@
 {
-  "name": "blobatar-workspace",
+  "name": "blobatar",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
+  "//exports": "Shim for git-dependency consumers: `bun add git+https://github.com/AdamOusmer/blobatar` resolves package identity from THIS root package.json, not packages/blobatar/package.json — a git dependency has no npm registry entry to read a nested workspace member's manifest from. Forwards each subpath straight into the workspace member's TS source, so a consumer gets the same framework-agnostic, source-only package `packages/blobatar` itself ships. Kept in sync with packages/blobatar/package.json's own `exports`.",
+  "sideEffects": ["*.css"],
+  "exports": {
+    ".": "./packages/blobatar/src/index.ts",
+    "./blob": "./packages/blobatar/src/blob.ts",
+    "./uri": "./packages/blobatar/src/uri.ts",
+    "./expression": "./packages/blobatar/src/expression.ts",
+    "./motion.css": "./packages/blobatar/src/motion.css"
+  },
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "dev": "bun --filter demo dev",
