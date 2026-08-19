@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { BotEngine, type Look } from "../src/bloub/engine";
-import { radiusAtAngle, superellipseProfile } from "../src/bloub/shape";
-import type { StateId } from "../src/bloub/states";
+import { eyePoses } from "../src/bloub/face";
+import { r2 } from "../src/bloub/math";
+import { radiusAtAngle, superellipseProfile, toPoints } from "../src/bloub/shape";
+import { STATE_BY_ID, type StateId } from "../src/bloub/states";
 
 // `BotEngine.sample(t)` is pure and DOM-free ("moteur sans horloge" — see its own
 // doc comment), so every check here drives it with an explicit clock instead of a
@@ -189,5 +191,142 @@ describe("bug 4 — eyes stay alive through comet/burst collapse", () => {
         expect(eye.alpha).toBeLessThan(1);
       }
     }
+  });
+});
+
+describe("orbit — eyes ride the body's own wobbling center", () => {
+  // `orbit` is the one state with a nonzero, ANIMATED `sil.cx/cy` (its
+  // silhouette recenters every frame — `spinningTriangle`'s `TRI_ORBIT`-scaled
+  // offset, up to +-0.213 of ball radius, itself spinning with `rot`). The
+  // body path was drawn at `sil.cx + offX` all along; the eye matrix, before
+  // this fix, added only `offX` — so the body visibly orbited its own center
+  // and the eyes stayed pinned to world origin, drifting off the face.
+  //
+  // "Inside the body's bbox" per the report's own framing: for each sampled
+  // instant, rebuild the exact silhouette `sample()` rendered (bloub's own
+  // `orbit.pose(t)` triangle-to-ball blend, mean-radius-scaled onto the
+  // seed — the same construction `bloub/engine.ts`'s `posed()` does) and
+  // check both eye centers fall within its axis-aligned bounding box, with a
+  // small margin since a capsule eye has its own extent beyond its center
+  // point (the matrix's e,f is the eye's origin corner in bloub's own SVG
+  // path convention, not its visual centroid).
+  const orbitDef = STATE_BY_ID.get("orbit")!;
+  const seeds = [
+    superellipseProfile(2.5, 1, 0.55), // flat/wide
+    superellipseProfile(3, 0.6, 1), // tall/narrow
+    superellipseProfile(6, 1, 0.82), // rounded-square-ish
+    new Array(64).fill(1) // perfect circle, sanity baseline
+  ];
+
+  for (const [i, seed] of seeds.entries()) {
+    test(`eye centers stay within the rotating body's bbox — seed ${i}, full cycle`, () => {
+      const engine = new BotEngine(R, "orbit", seed);
+      let sampled = 0;
+      // 4s covers orbit's 3.4s duration plus a bit of the next loop's start.
+      for (let t = 0; t <= 4; t += 0.04) {
+        const rawPose = orbitDef.pose(t);
+        const scale = rawPose.sil.radii.reduce((a, b) => a + b, 0) / rawPose.sil.radii.length;
+        const sil = { ...rawPose.sil, radii: seed.map((r) => r * scale) };
+        const contour = toPoints(sil, R);
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        let maxY = -Infinity;
+        for (const p of contour) {
+          minX = Math.min(minX, p.x);
+          maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y);
+          maxY = Math.max(maxY, p.y);
+        }
+        // Measured directly (pre-fix vs post-fix, same seeds/states/t-grid):
+        // the missing `sil.cx/cy` term put eye centers 17.7-20.2 units outside
+        // this exact bbox at the worst sampled instant; with the term added,
+        // the worst distance outside is 0.00 across all four seeds. A tight
+        // margin here is a real regression guard, not slack for an expected
+        // fudge factor.
+        const margin = 5;
+        const frame = engine.sample(t);
+        for (const eye of eyeCenters(frame.eyes)) {
+          sampled++;
+          expect(eye.x).toBeGreaterThan(minX - margin);
+          expect(eye.x).toBeLessThan(maxX + margin);
+          expect(eye.y).toBeGreaterThan(minY - margin);
+          expect(eye.y).toBeLessThan(maxY + margin);
+        }
+      }
+      expect(sampled).toBeGreaterThan(0);
+    });
+  }
+
+  test("no eye-center discontinuity across the orbit loop wrap (t=duration -> t=0)", () => {
+    const engine = new BotEngine(R, "orbit", superellipseProfile(3, 0.6, 1));
+    // BotEngine.sample is a pure function of `now` and does not itself loop —
+    // the bridge's `tick()` calls `engine.reset(current, clock)` on wrap. Model
+    // that directly: sample the tail end of one cycle and the head of the
+    // next on a freshly-reset engine, and check the eye center doesn't jump.
+    const before = eyeCenters(engine.sample(orbitDef.duration - 0.01).eyes)[0]!;
+    engine.reset("orbit", 0);
+    const after = eyeCenters(engine.sample(0.01).eyes)[0]!;
+    // Not a tight bound (the pose itself is discontinuous at the loop point in
+    // bloub's own design — `rot` resets, the ring fade re-triggers — so some
+    // jump is real and expected); this catches the eyes specifically snapping
+    // much FARTHER than the body's own frame-to-frame travel would.
+    expect(dist(before, after)).toBeLessThan(R);
+  });
+
+  test("orbit's own pose drives the eyes exclusively — idle wander contributes zero", () => {
+    // Reconstruct the eye center independently from orbit's OWN raw `pose(t)`
+    // gaze, with NO liveliness term added at all — the same construction
+    // `bloub/engine.ts`'s `sample()` uses, minus `life`. If `ownsLiveliness`
+    // is actually gating idle's wander/drift/breath to zero for this state,
+    // `engine.sample(t)`'s real output should match this reconstruction
+    // exactly (up to the engine's own `r2` two-decimal rounding); if wander
+    // were leaking through, the two would disagree by its amplitude (this
+    // round's own tuning: up to ~16deg yaw/pitch, an eye-center miss of
+    // several units at R=100 — not a rounding-sized gap).
+    const seed = superellipseProfile(3, 0.6, 1);
+    const engine = new BotEngine(R, "orbit", seed);
+    for (const t of [0.1, 0.6, 1.2, 1.9, 2.5, 3.1]) {
+      const raw = orbitDef.pose(t);
+      const scale = raw.sil.radii.reduce((a, b) => a + b, 0) / raw.sil.radii.length;
+      const sil = { ...raw.sil, radii: seed.map((r) => r * scale) };
+      const bodyRadiusAt = (x: number, y: number) => radiusAtAngle(sil.radii, Math.atan2(y, x) - sil.rot);
+      const expected = eyePoses(raw.gaze, R, raw.split)
+        .filter((e) => e.depth > 0.02) // same culling `sample()` applies
+        .map((e) => ({
+          x: r2(e.x * bodyRadiusAt(e.x, e.y) + sil.cx * R),
+          y: r2(e.y * bodyRadiusAt(e.x, e.y) + sil.cy * R)
+        }));
+      const actual = eyeCenters(engine.sample(t).eyes);
+      expect(actual.length).toBe(expected.length);
+      actual.forEach((a, i) => {
+        expect(a.x).toBeCloseTo(expected[i]!.x, 1);
+        expect(a.y).toBeCloseTo(expected[i]!.y, 1);
+      });
+    }
+  });
+
+  test("wander resumes once a non-owning state (idle) takes over", () => {
+    // idle does NOT set `ownsLiveliness` — its gaze is a constant `REST_GAZE`
+    // for its whole duration, so any deviation from the pure constant-gaze
+    // reconstruction (same method as the parity test above) is wander/drift
+    // actually contributing, proving the gate is state-scoped, not a global
+    // kill switch that broke idle's own liveliness as a side effect.
+    const engine = new BotEngine(R, "idle");
+    let anyDeviation = false;
+    for (let t = 0.5; t <= 8; t += 0.5) {
+      const raw = STATE_BY_ID.get("idle")!.pose(t);
+      const bodyRadiusAt = (x: number, y: number) => radiusAtAngle(raw.sil.radii, Math.atan2(y, x) - raw.sil.rot);
+      const expected = eyePoses(raw.gaze, R, raw.split).map((e) => ({
+        x: e.x * bodyRadiusAt(e.x, e.y),
+        y: e.y * bodyRadiusAt(e.x, e.y)
+      }));
+      const actual = eyeCenters(engine.sample(t).eyes);
+      if (Math.abs(actual[0]!.x - expected[0]!.x) > 0.1 || Math.abs(actual[0]!.y - expected[0]!.y) > 0.1) {
+        anyDeviation = true;
+        break;
+      }
+    }
+    expect(anyDeviation).toBe(true);
   });
 });
