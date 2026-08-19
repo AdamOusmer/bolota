@@ -339,6 +339,19 @@ bun run check     # all three, the gate CI runs
 The determinism fixture is regenerated deliberately, never as a side effect:
 `bun run golden` refuses to write without `--write` and says so.
 
+The repository is the library at its root, plus one app:
+
+```
+src/   the library (renderer, parts seam, engine, expressions)
+test/  unit, geometry and determinism suites
+web/   the showcase site, an Astro app linking the library above
+```
+
+`web/` depends on the library through `file:..`, so it resolves the compiled
+`dist/` through the exports map, never the source. Build the library first
+(`bun run build`, or `bun run lib:build` from inside `web/`) and then
+`bun run dev` there.
+
 ***
 
 ## Releasing
