@@ -10,6 +10,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Rewritten for the flat, standalone library (no more apps/, no workspace
+# filters). `probe`/`smoke`/the two-browser composition gate went with the
+# scripts they exercised, which no longer exist — see the flatten commit.
 jobs:
   library:
     name: library
@@ -21,95 +24,25 @@ jobs:
         with:
           bun-version: latest
 
-      # The smoke test runs under Node on purpose — see scripts/smoke.mjs.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - run: bun install --frozen-lockfile
 
       - name: Typecheck
-        run: bunx tsc -p packages/blobatar/tsconfig.json --noEmit
+        run: bunx tsc --noEmit
 
       - name: Tests
-        run: bun --filter blobatar test
+        run: bun test
 
       - name: Size budgets
-        run: bun --filter blobatar size
-
-      # `probe-compose.ts` warns and exits 0 when it finds no browser, so that a
-      # local run without one is not a hard stop. In CI that would turn the only
-      # check that can see a CSS-versus-geometry divergence into a silent pass,
-      # so both engines are asserted present before it runs.
-      - name: Assert both engines are on the runner
-        run: |
-          google-chrome --version
-          firefox --version
-
-      - name: Composition gate
-        run: bun --filter blobatar probe
+        run: bun run size
 
       - name: Build
-        run: bun --filter blobatar build
-
-      # Links the built package under Node, through its own `exports` map. This
-      # is the step that catches a dist that is broken for everyone outside Bun.
-      - name: Smoke the built package
-        run: bun --filter blobatar smoke
+        run: bun run build
 
       - name: Pack
-        run: npm pack --workspace blobatar --pack-destination /tmp
+        run: npm pack --pack-destination /tmp
 
       - uses: actions/upload-artifact@v4
         with:
           name: tarball
           path: /tmp/blobatar-*.tgz
           retention-days: 7
-
-  apps:
-    name: apps
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - run: bun install --frozen-lockfile
-
-      # The apps resolve `blobatar/*` to source through tsconfig paths, so this
-      # builds the library from source as a side effect — which is the point: it
-      # is the check that an alias and the package's `exports` have not drifted
-      # apart into two different libraries.
-      - name: Build the site
-        run: bun run build:site
-
-      # `apps/api` is the exception to the alias above: it has no `blobatar/*`
-      # paths, so anything reaching it resolves the library through `exports`
-      # and needs a dist first. That is deliberate — it is the endpoint anyone
-      # can deploy, and it should be tested against what they will install.
-      #
-      # It is built here rather than in the endpoint step because the site's
-      # Worker imports the endpoint from `apps/api/src`, so the site's tests
-      # cross into that unaliased resolution too.
-      - name: Build the library
-        run: bun --filter blobatar build
-
-      - name: Site tests
-        run: bun --filter site test
-
-      - name: Endpoint tests, against the built package
-        run: bun --filter blobatar-api test
-
-      # Bundles `blobatar` the way a deploy does: through the workspace symlink
-      # and therefore through the real `exports` map, not the tsconfig alias to
-      # source that `build:site` above uses. Breaking an export path fails here
-      # rather than in production.
-      #
-      # It also proves the asset directory exists and the routes parse, which is
-      # everything about the deploy that can be checked without performing one.
-      - name: Workers bundle against the published exports
-        run: |
-          cd apps/site && bunx wrangler deploy --dry-run --outdir /tmp/site-dry
-          cd ../api && bunx wrangler deploy --dry-run --outdir /tmp/api-dry

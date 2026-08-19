@@ -1,36 +1,47 @@
 {
   "name": "blobatar",
   "version": "2.0.0",
-  "private": true,
+  "description": "Deterministic geometric blobatars from any string. No dependencies.",
   "type": "module",
-  "//exports": "Shim for git-dependency consumers: `bun add git+https://github.com/AdamOusmer/blobatar` resolves package identity from THIS root package.json, not packages/blobatar/package.json — a git dependency has no npm registry entry to read a nested workspace member's manifest from. Forwards each subpath straight into the workspace member's TS source, so a consumer gets the same framework-agnostic, source-only package `packages/blobatar` itself ships. Kept in sync with packages/blobatar/package.json's own `exports`.",
+  "//sideEffects": "Not `false`. That would license bundlers to drop `import \"blobatar/motion.css\"` as dead weight, and animated blobatars would silently render static for everyone shipping through a bundler.",
   "sideEffects": ["*.css"],
+  "files": ["dist", "src", "README.md", "CHANGELOG.md", "LICENSE"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "//exports": "Framework-agnostic JS/TS-only source library. This fork ships `src` and resolves `exports` straight at TS — no build step between a consumer and the source. `dist` (see `main`/`types` below and `scripts/build.ts`) is kept only as an optional bundled fallback for tooling that needs it.",
   "exports": {
-    ".": "./packages/blobatar/src/index.ts",
-    "./blob": "./packages/blobatar/src/blob.ts",
-    "./uri": "./packages/blobatar/src/uri.ts",
-    "./expression": "./packages/blobatar/src/expression.ts",
-    "./motion.css": "./packages/blobatar/src/motion.css",
-    "./engine": "./packages/blobatar/src/engine.ts",
-    "./sequences": "./packages/blobatar/src/sequences.ts"
+    ".": "./src/index.ts",
+    "./blob": "./src/blob.ts",
+    "./uri": "./src/uri.ts",
+    "./expression": "./src/expression.ts",
+    "./motion.css": "./src/motion.css",
+    "./engine": "./src/engine.ts",
+    "./sequences": "./src/sequences.ts",
+    "./package.json": "./package.json"
   },
-  "workspaces": ["packages/*", "apps/*"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "dev": "bun --filter demo dev",
-    "site": "bun --filter site dev",
-    "//api": "The library build first, both here and in `deploy:api`. `apps/api` resolves `blobatar` through its `exports` map — built JS that is not in the repo — so unlike the site, which aliases the library to source, it cannot start against a fresh clone.",
-    "api": "bun --filter blobatar build && bun --filter blobatar-api dev",
-    "build:site": "bun --filter site build",
-    "preview": "bun --filter site preview",
-    "deploy": "bun --filter site deploy",
-    "deploy:api": "bun --filter blobatar build && bun --filter blobatar-api deploy",
-    "test": "bun --filter blobatar test",
-    "size": "bun --filter blobatar size",
-    "media": "bun scripts/media.ts",
-    "check": "bun --filter '*' check"
+    "test": "bun test",
+    "size": "bun scripts/size.ts",
+    "build": "bun scripts/build.ts",
+    "//golden": "Regenerating is a deliberate act, so the script refuses without `--write` and says why. `check` does not call it — `bun test` already asserts against the fixture, which is the direction that matters.",
+    "golden": "bun scripts/golden.ts",
+    "check": "bun test && bun run size && bun run build",
+    "prepack": "bun run build"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "typescript": "^7.0.2"
-  }
+    "typescript": "^5"
+  },
+  "keywords": ["blobatar", "avatar", "identicon", "svg", "deterministic", "no-dependencies"],
+  "license": "MIT",
+  "author": "Alain",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alain00/blobatar.git"
+  },
+  "homepage": "https://github.com/Alain00/blobatar#readme",
+  "bugs": "https://github.com/Alain00/blobatar/issues"
 }
