@@ -444,7 +444,7 @@ function mountEngineSvg(container: HTMLElement, name: string, size: number, opts
   // our own timer so the status label and manual prev/next stay in sync
   // with what's on screen, including the resting "idle" beats.
   const timeline: string[] = [
-    "idle", "thinking", "idle", "alert", "idle", "sleep",
+    "idle", "thinking", "idle", "alert", "idle", "snooze",
     "idle", "exclaim", "idle", "burst", "idle", "comet", "idle",
   ];
   const STEP_MS = 3000;
