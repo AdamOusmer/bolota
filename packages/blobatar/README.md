@@ -304,3 +304,13 @@ few to tune against.
 `test/geometry.test.ts` covers what eyeballing cannot: that no name anywhere in
 the space puts an eye off the body, fuses two capsules together, detaches a
 petal, or pushes geometry outside the frame.
+
+## Credits
+
+`src/frames.css`, `src/decor.ts` and `src/sequences.ts` — the burst/orbit/comet
+decorative animations — are ported from
+[bloub](https://github.com/jeremyPerret/bloub) (MIT License, Copyright (c)
+2026 Jérémy Perret): its measured easing curves, burst-collapse timing, and
+particle/ring parameters, re-expressed as CSS keyframes and static SVG rather
+than its per-frame JS renderer. Each file's header says exactly what was
+carried over and what was not.
