@@ -1,17 +1,19 @@
 # blobatar
 
+> **Fork.** Framework-agnostic fork of
+> [Alain00/blobatar](https://github.com/Alain00/blobatar). The bundled React
+> adapter (`blobatar/react`) is removed; `parts` — the renderer seam it was
+> built on — is public instead, so an adapter for any framework (React, Vue,
+> Svelte, vanilla) can be built on top of it. Consumed as TS source, not a
+> compiled `dist`. See [Animation](#animation) below for what building on
+> `parts` looks like.
+
 Deterministic geometric blobatars from any string. No dependencies, ~4.4 KB gzipped.
 
 ```ts
 import { blobatar } from "blobatar";
 
 blobatar("alain@example.com"); // => '<svg xmlns="..." viewBox="0 0 100 100">…'
-```
-
-```tsx
-import { Blobatar } from "blobatar/react";
-
-<Blobatar name={user.email} size={48} />;
 ```
 
 A blobatar always stands for somebody — a user, a bot, a team, a repo — so the
@@ -131,11 +133,17 @@ Off by default. When on, the blobatar idles: a soft breathe, a bob, a blink, and
 the occasional glance to one side. Every timing and direction is drawn from the
 name, so a grid reads as a crowd rather than a drill team.
 
-```tsx
-import { Blobatar } from "blobatar/react";
+There is no bundled component. `parts` is the seam an adapter builds on — it
+returns `{ cls, bg, inner, vars }` for a renderer that owns the outer `<svg>`
+itself:
+
+```ts
+import { parts } from "blobatar";
 import "blobatar/motion.css"; // required — nothing animates without it
 
-<Blobatar name={user.email} animate="hover" size={48} />;
+const { cls, bg, vars, inner } = parts(user.email, { animate: "hover" });
+// cls, bg and vars go on real attributes; only `inner` goes through an
+// innerHTML-style sink — see `src/blobatar.ts` for why the split matters.
 ```
 
 **Turning this on changes the rendering mode, and that is not free.** A static
@@ -157,11 +165,11 @@ pixel. It is worth the most on a profile header, which is what `"always"` is
 for. Eyes may cross outside the body outline on a hard glance; that is intended,
 and reads as a face turning rather than as a bug.
 
-Currently `blobatar/react` only. The string API still returns static markup:
-supporting `animate` there means every consumer of `blobatar()` carries the motion
-code whether they animate or not, which is a real cost for a feature most
-callers will never use. If you need animated markup without React, open an issue
-— it wants its own entry point rather than a branch inside `blobatar()`.
+No adapter ships in this fork — bring your own, built on `parts`. The string
+API still returns static markup: supporting `animate` there means every
+consumer of `blobatar()` carries the motion code whether they animate or not,
+which is a real cost for a feature most callers will never use. It wants its
+own entry point rather than a branch inside `blobatar()`.
 
 ## Expressions
 

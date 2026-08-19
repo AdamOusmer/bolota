@@ -1,6 +1,11 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    // Framework-agnostic package: no JSX here, so no `react` type entry
+    // point to resolve. The root config's `["bun", "react"]` is shared with
+    // the workspace apps, which do use JSX; this package overrides it rather
+    // than carrying an unused `@types/react` dependency.
+    "types": ["bun"],
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src", "test", "scripts"]

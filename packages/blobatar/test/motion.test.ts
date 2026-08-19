@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { motionVars } from "../src/animate";
-import { blobatar, _layout, _parts } from "../src/blobatar";
+import { blobatar, _layout, parts } from "../src/blobatar";
 import { traits } from "../src/traits";
 
 const SEEDS = Array.from({ length: 300 }, (_, i) => `user-${i}`);
@@ -19,7 +19,7 @@ describe("markup", () => {
   });
 
   test("animating nests the transform layers and marks each eye", () => {
-    const { cls, inner } = _parts("alain", { animate: "hover" });
+    const { cls, inner } = parts("alain", { animate: "hover" });
 
     // One transform property per element, so hover-lift, breathe and bob need
     // three elements or they overwrite each other. The hover-lift one is the
@@ -36,7 +36,7 @@ describe("markup", () => {
     // inside `@keyframes` stops interpolating in Gecko — see the rule below and
     // `docs/expression-followups.md` §8. Collapsing these two elements back into
     // one is silent in Chrome and breaks the morph in Firefox.
-    const { inner } = _parts("alain", { animate: "hover" });
+    const { inner } = parts("alain", { animate: "hover" });
     expect(
       inner.match(/<g class="mo-eye" style="[^"]+"><path d="[^"]+"\/><\/g>/g),
     ).toHaveLength(2);
@@ -69,7 +69,7 @@ describe("markup", () => {
   test("both eyes share one group, so they glance together", () => {
     // Independent eye movement reads as a lazy eye instantly, so the saccade
     // layer has to sit on the shared group with blink underneath it.
-    const { inner } = _parts("alain", { animate: "hover" });
+    const { inner } = parts("alain", { animate: "hover" });
     const group = inner.slice(inner.indexOf("mo-eyes"));
     expect(inner.match(/class="mo-eyes"/g)).toHaveLength(1);
     expect(group.match(/class="mo-eye"/g)).toHaveLength(2);
@@ -81,7 +81,7 @@ describe("markup", () => {
     // axes and shears the capsule. Without the value there is nothing to
     // counter-rotate *by* — and the failure is silent, because a sheared eye is
     // still an eye.
-    const { inner } = _parts("alain", { animate: "hover" });
+    const { inner } = parts("alain", { animate: "hover" });
     const leans = [...inner.matchAll(/--mo-lean:(-?[\d.]+)/g)].map((m) =>
       Number(m[1]),
     );
@@ -95,7 +95,7 @@ describe("markup", () => {
     // The wrap layer's tilt converges the two eyes toward the pole, and its
     // foreshortening is heavier on whichever eye leads the turn. Both read this
     // sign. Same sign on both would turn a sphere back into a head tilting.
-    const { inner } = _parts("alain", { animate: "hover" });
+    const { inner } = parts("alain", { animate: "hover" });
     expect(inner).toContain('style="--mo-wrap:-1;');
     expect(inner).toContain('style="--mo-wrap:1;');
     expect(inner.match(/--mo-wrap:/g)).toHaveLength(2);
@@ -106,7 +106,7 @@ describe("markup", () => {
   });
 
   test("always mode is a class, not a second code path", () => {
-    expect(_parts("alain", { animate: "always" }).cls).toBe(
+    expect(parts("alain", { animate: "always" }).cls).toBe(
       "mo-root mo-always",
     );
   });
@@ -115,27 +115,29 @@ describe("markup", () => {
     // A plate that hover-lifts and breathes with the creature stops being a
     // plate. It used to be a string concatenated ahead of the wrapper; now it
     // leaves as `bg` so the adapter can draw it as a sibling of the root `<g>`
-    // — which is what lets the root `<g>` be a real React element at all.
-    const { bg, inner } = _parts("alain", {
+    // — which is what lets the root `<g>` be a real element in whatever
+    // framework the adapter is written for.
+    const { bg, inner } = parts("alain", {
       animate: "hover",
       background: "square",
     });
     expect(bg).toEqual({ d: "M0 0H100V100H0Z", fill: expect.any(String) });
     expect(inner).not.toContain("M0 0H100V100H0Z");
-    expect(_parts("alain", { animate: "hover" }).bg).toBeUndefined();
+    expect(parts("alain", { animate: "hover" }).bg).toBeUndefined();
   });
 
   test("the title never enters the markup string", () => {
     // `<title>` names the element it is the first child of, so it has to be a
-    // child of the `<svg>`. React renders it, which also means React escapes it.
-    const { inner } = _parts("alain", { animate: "hover", title: "Ada" });
+    // child of the `<svg>`. A framework adapter renders it, which also means
+    // the framework escapes it.
+    const { inner } = parts("alain", { animate: "hover", title: "Ada" });
     expect(inner).not.toContain("<title>");
     expect(inner).toStartWith('<g class="mo-breathe">');
   });
 
   test("markup stays balanced with the wrapper in place", () => {
     for (const s of SEEDS.slice(0, 50)) {
-      const { inner } = _parts(s, { animate: "hover" });
+      const { inner } = parts(s, { animate: "hover" });
       const open = (inner.match(/<(?!\/)[a-z]/g) ?? []).length;
       const close =
         (inner.match(/<\/[a-z]/g) ?? []).length +
@@ -281,7 +283,7 @@ describe("timing", () => {
       expect(blobatar(s)).toBe(before);
       // Same shapes, same numbers — the animated build differs only by the
       // wrapper and the eye class.
-      expect(geometry(_parts(s, { animate: "hover" }).inner)).toEqual(
+      expect(geometry(parts(s, { animate: "hover" }).inner)).toEqual(
         geometry(before),
       );
     }

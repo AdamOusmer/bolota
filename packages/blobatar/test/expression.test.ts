@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { blobatar, _layout, _parts } from "../src/blobatar";
+import { blobatar, _layout, parts } from "../src/blobatar";
 import {
   bakePose,
   happy,
@@ -104,31 +104,31 @@ describe("the contract", () => {
   test("the animated markup does not depend on the expression", () => {
     // The invariant the whole custom-property design rests on: when animating,
     // a pose is *style*, so changing expression must change no byte of the
-    // markup. It is asserted here rather than left implicit because React hands
-    // this string to `dangerouslySetInnerHTML` — a single character of drift
-    // rebuilds the subtree, which kills the morph (there is no previous
+    // markup. It is asserted here rather than left implicit because a framework
+    // adapter hands this string to an innerHTML-style sink — a single character
+    // of drift rebuilds the subtree, which kills the morph (there is no previous
     // computed value to transition from) and restarts every idle animation
     // underneath it. Both symptoms are invisible to a static-markup test and
     // very visible on screen.
     for (const s of SEEDS.slice(0, 50))
       for (const [name, e] of ALL)
         expect(
-          _parts(s, { animate: "always", expression: e }).inner,
+          parts(s, { animate: "always", expression: e }).inner,
           name,
-        ).toBe(_parts(s, { animate: "always" }).inner);
+        ).toBe(parts(s, { animate: "always" }).inner);
   });
 
   test("a non-idle expression still marks the root class", () => {
     // The other half of the invariant above: `mo-expr` carries the enter/return
     // timing asymmetry (§7), so it has to keep existing — just not inside the
     // markup string.
-    expect(_parts("alain", { animate: "hover" }).cls).toBe("mo-root");
-    expect(_parts("alain", { animate: "hover", expression: idle }).cls).toBe(
+    expect(parts("alain", { animate: "hover" }).cls).toBe("mo-root");
+    expect(parts("alain", { animate: "hover", expression: idle }).cls).toBe(
       "mo-root",
     );
     for (const [name, e] of NAMED)
       expect(
-        _parts("alain", { animate: "hover", expression: e }).cls,
+        parts("alain", { animate: "hover", expression: e }).cls,
         name,
       ).toBe("mo-root mo-expr");
   });
