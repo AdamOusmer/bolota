@@ -10,7 +10,46 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
-## 0.1.4
+## 0.1.1
+
+### Added
+
+- **`play(state, { for })`: repeat a state until a deadline.** `hold` freezes a
+  finished pose for a beat; this replays the state until the time asked for is
+  filled, which is what a caller wants when a gesture has to cover a slot it is
+  shorter than. A 1.3s `swirl` asked for four seconds swirls three times rather
+  than swirling once and sitting there.
+
+  The deadline is a floor, never a cut: the hand-back waits for the cycle that
+  crosses it, so the state always finishes what it started. Repeats restart on
+  the same `duration + morph` boundary a looping state uses, past the transient
+  particle and ribbon windows, so a repeat is as clean as a loop. `loop` still
+  wins over `for`, since it never ends.
+
+- `runSequence()` takes `play`'s options, so a sequence can be given `for`,
+  `hold` or `rest` without the caller having to know which state the name maps
+  to.
+
+### Changed
+
+- **A one-shot state now dwells on its finished pose, then blends back into
+  the face it interrupted.** Two things were wrong with the hand-back. It
+  fired the instant the state's `duration` elapsed, which is the exact moment
+  the choreography settles, so the settled pose was never actually seen and a
+  burst or an orbit read as "it did something and immediately undid it". And
+  it handed back to a hard-coded `idle`, the still neutral, so a bot that was
+  alive before the gesture went static after it.
+
+  `play()` takes `hold` (seconds to dwell, default `STATE_HOLD`, 0.45) and
+  `rest` (where to settle, default: whatever was playing before). A looped
+  state becomes the resting face automatically, so `play("wander", { loop:
+  true })` followed by `play("burst")` returns to `wander` with the held
+  expression still on. `hold: 0` restores the old immediate hand-back.
+
+  The transition itself was already a cross-fade over the outgoing state's
+  own `morph` and stays one. A test now steps frame by frame across a whole
+  gesture, hand-back included, and fails on any single frame that moves the
+  eyes further than a morph would.
 
 ### Fixed
 
@@ -48,52 +87,6 @@ generation change ships as a major, never as a patch.
   by however much of the sideways one is spent, so the extremes stay reachable
   and the corners, where an eye actually leaves the body, stay inside.
 
-## 0.1.3
-
-### Added
-
-- **`play(state, { for })`: repeat a state until a deadline.** `hold` freezes a
-  finished pose for a beat; this replays the state until the time asked for is
-  filled, which is what a caller wants when a gesture has to cover a slot it is
-  shorter than. A 1.3s `swirl` asked for four seconds swirls three times rather
-  than swirling once and sitting there.
-
-  The deadline is a floor, never a cut: the hand-back waits for the cycle that
-  crosses it, so the state always finishes what it started. Repeats restart on
-  the same `duration + morph` boundary a looping state uses, past the transient
-  particle and ribbon windows, so a repeat is as clean as a loop. `loop` still
-  wins over `for`, since it never ends.
-
-- `runSequence()` takes `play`'s options, so a sequence can be given `for`,
-  `hold` or `rest` without the caller having to know which state the name maps
-  to.
-
-## 0.1.2
-
-### Changed
-
-- **A one-shot state now dwells on its finished pose, then blends back into
-  the face it interrupted.** Two things were wrong with the hand-back. It
-  fired the instant the state's `duration` elapsed, which is the exact moment
-  the choreography settles, so the settled pose was never actually seen and a
-  burst or an orbit read as "it did something and immediately undid it". And
-  it handed back to a hard-coded `idle`, the still neutral, so a bot that was
-  alive before the gesture went static after it.
-
-  `play()` takes `hold` (seconds to dwell, default `STATE_HOLD`, 0.45) and
-  `rest` (where to settle, default: whatever was playing before). A looped
-  state becomes the resting face automatically, so `play("wander", { loop:
-  true })` followed by `play("burst")` returns to `wander` with the held
-  expression still on. `hold: 0` restores the old immediate hand-back.
-
-  The transition itself was already a cross-fade over the outgoing state's
-  own `morph` and stays one. A test now steps frame by frame across a whole
-  gesture, hand-back included, and fails on any single frame that moves the
-  eyes further than a morph would.
-
-## 0.1.1
-
-### Fixed
 
 - **The tracked gaze can look down.** `handle.follow()` treated the resting
   pitch bias (10 degrees above the equator, so the bot reads as attentive
