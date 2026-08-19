@@ -310,6 +310,21 @@ export class BotEngine {
     expr: BotExpression | null
   ): Pose {
     let pose = def.pose(t)
+    // Expression composition: a state that accepts a chosen expression
+    // (`def.baseFace` — idle/swirl, the "resting face" states — or
+    // `def.acceptsExpression` — play/burst/comet, states that keep driving
+    // their own body/decor/timing but hand EYE POSE to the expression when
+    // one is set) gets gaze/split/eyes replaced here, upstream of the
+    // body-scale branch below, so a shrunken body (burst/comet mid-collapse,
+    // orbit/play's constant sub-1.0 scale) shrinks an expression's eyes the
+    // same way it shrinks the state's own instead of pasting a full-size
+    // face on a small body again (the exact bug `scaledEyes` below already
+    // exists to prevent). `eyeAlpha` and `sil` are deliberately untouched
+    // here: the state, not the expression, keeps owning collapse/regrow
+    // alpha and body shape/timing — only the eyes' POSE changes hands.
+    if ((def.baseFace || def.acceptsExpression) && expr) {
+      pose = { ...pose, gaze: expr.gaze, split: expr.split, eyes: expr.eyes }
+    }
     if (def.baseBody && shape) {
       // keep the pose (rotation, offset, squash) and swap only the profile
       pose = { ...pose, sil: { ...pose.sil, radii: shape } }
@@ -348,9 +363,6 @@ export class BotEngine {
       // every state that reaches this branch, not per-state patches.
       const scaledEyes = pose.eyes.map((e) => ({ ...e, w: e.w * scale, h: e.h * scale })) as typeof pose.eyes
       pose = { ...pose, sil: { ...pose.sil, radii: shape.map((r) => r * scale) }, eyes: scaledEyes }
-    }
-    if (def.baseFace && expr) {
-      pose = { ...pose, gaze: expr.gaze, split: expr.split, eyes: expr.eyes }
     }
     return pose
   }

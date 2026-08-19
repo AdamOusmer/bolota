@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BotEngine, type Look } from "../src/bloub/engine";
-import { eyePoses } from "../src/bloub/face";
+import { eyePoses, REST_GAZE } from "../src/bloub/face";
 import { r2 } from "../src/bloub/math";
 import { radiusAtAngle, superellipseProfile, toPoints } from "../src/bloub/shape";
 import { ORBIT_PERIOD, STATE_BY_ID, WINK_PERIOD, type StateId } from "../src/bloub/states";
@@ -475,6 +475,92 @@ describe("orbit — eyes ride the body's own wobbling center", () => {
         expect(a.y).toBeCloseTo(expected[i]!.y, 1);
       });
     }
+  });
+
+  test("gaze is pinned to idle's own neutral — no bloub sweep, no wander/look leak", () => {
+    // Regression guard for the two things this state's `gaze` line has
+    // swung between: bloub's own verbatim sweep (+-65deg yaw, tried and
+    // reverted — see `states.ts`'s comment on this line) and a genuine
+    // wander/look leak composing on top of the constant (checked, not
+    // found — same comment). `pose(t).gaze` itself must be `REST_GAZE`,
+    // unchanged, at every `t`: any reintroduced sweep or per-`t` term
+    // shows up here directly, before rendering or `ownsLiveliness` gating
+    // even get a chance to hide or reveal it.
+    for (let t = 0; t <= ORBIT_PERIOD; t += ORBIT_PERIOD / 20) {
+      const gaze = orbitDef.pose(t).gaze;
+      expect(gaze.yaw).toBe(REST_GAZE.yaw);
+      expect(gaze.pitch).toBe(REST_GAZE.pitch);
+      expect(gaze.roll).toBe(REST_GAZE.roll);
+    }
+
+    // And the composed, rendered gaze (life + look on top of `pose`, no
+    // look target set) matches a from-scratch `REST_GAZE` reconstruction
+    // to the engine's own rounding — the same method `bug 2`'s wander
+    // parity checks use, confirming `ownsLiveliness` actually zeroes
+    // `life.dYaw/dPitch/dRoll` here rather than merely returning a
+    // constant `pose` that something downstream still perturbs.
+    const seed = superellipseProfile(3, 0.6, 1);
+    const engine = new BotEngine(R, "orbit", seed);
+    for (const t of [0.2, 0.9, 1.7, 2.5, 3.1]) {
+      const raw = orbitDef.pose(t);
+      const scale = raw.sil.radii.reduce((a, b) => a + b, 0) / raw.sil.radii.length;
+      const sil = { ...raw.sil, radii: seed.map((r) => r * scale) };
+      const bodyRadiusAt = (x: number, y: number) => radiusAtAngle(sil.radii, Math.atan2(y, x) - sil.rot);
+      const expected = eyePoses(REST_GAZE, R, raw.split)
+        .filter((e) => e.depth > 0.02)
+        .map((e) => ({
+          x: r2(e.x * bodyRadiusAt(e.x, e.y) + sil.cx * R),
+          y: r2(e.y * bodyRadiusAt(e.x, e.y) + sil.cy * R)
+        }));
+      const actual = eyeCenters(engine.sample(t).eyes);
+      expect(actual.length).toBe(expected.length);
+      actual.forEach((a, i) => {
+        expect(a.x).toBeCloseTo(expected[i]!.x, 1);
+        expect(a.y).toBeCloseTo(expected[i]!.y, 1);
+      });
+    }
+  });
+
+  test("blink and breathing stay alive during orbit despite the pinned gaze", () => {
+    // Same pairing `idle`'s own test group checks ("blink + breathe still
+    // alive" — `ownsLiveliness` only gates ambient wander/drift, never
+    // `liveliness`'s `lid`/`breath`, both keyed on `alive`/`blink` alone).
+    // Orbit needs its own version because its body never holds still —
+    // `bodyPath`'s bbox height mixing in `rot`'s own rotation/offset would
+    // swamp any breath-driven change and give a false pass either way.
+    // `rot`'s period is exactly 0.8s (`spinningTriangle`, `-TAU*1.25*t`),
+    // so sampling at multiples of it holds silhouette rotation, offset AND
+    // scale bit-for-bit identical across samples — any height difference
+    // left is breath, and nothing else.
+    const seed = superellipseProfile(3, 0.6, 1);
+    const engine = new BotEngine(R, "orbit", seed);
+    const bboxHeight = (d: string) => {
+      const ys = [...d.matchAll(/-?\d+\.?\d*/g)].map(Number).filter((_, i) => i % 2 === 1);
+      return Math.max(...ys) - Math.min(...ys);
+    };
+    const heights = new Set<number>();
+    for (const t of [0, 0.8, 1.6, 2.4]) {
+      heights.add(Math.round(bboxHeight(engine.sample(t).bodyPath) * 100) / 100);
+    }
+    expect(heights.size).toBeGreaterThan(1);
+
+    // Blink lands on the eye's rendered (matrix-scaled) height, not the
+    // unscaled capsule `d` — `engine.ts` applies `blinkScale(lid)` to the
+    // matrix's y-basis, not the path. First scheduled blink is at t=1.4
+    // (`BLINKS`, `face.ts`, deterministic), well inside `ORBIT_PERIOD`.
+    const screenH = (d: string, matrix: string) => {
+      const [a, b, c, dd, e, f] = matrix.slice(7, -1).split(",").map(Number);
+      const ys = [...d.matchAll(/(-?\d+\.?\d*)[ ,](-?\d+\.?\d*)/g)].map(
+        (m) => b! * Number(m[1]) + dd! * Number(m[2]) + f!
+      );
+      return Math.max(...ys) - Math.min(...ys);
+    };
+    const eyeAt = (t: number) => engine.sample(t).eyes[0]!;
+    const openEye = eyeAt(1.3);
+    const closedEye = eyeAt(1.48);
+    const open = screenH(openEye.d, openEye.matrix);
+    const closed = screenH(closedEye.d, closedEye.matrix);
+    expect(closed).toBeLessThan(open * 0.3);
   });
 
   test("wander resumes once a non-owning state (wander) takes over", () => {

@@ -350,8 +350,14 @@ export function engineStates(): StateId[] {
 
 /** All 16 named eye expressions bloub's face customizer exposes — a separate
  * axis from `states` above (see `bloub/expressions.ts`): a state is a
- * time-bounded animation, an expression is a held pose that only shows on
- * the states flagged `baseFace` (`idle`, `swirl` — `bloub/states.ts`). */
+ * time-bounded animation, an expression is a held pose that only shows on a
+ * state that accepts one — `baseFace` (`idle`, `wander`, `swirl`: the
+ * "resting face" states) or the bolota-added `acceptsExpression` (`play`,
+ * `burst`, `comet`: states that keep driving their own body/decor/timing —
+ * and, for `burst`/`comet`, their own collapse/regrow eye alpha — but hand
+ * the eyes' POSE to the expression when one is set — `bloub/states.ts`,
+ * each flag's own doc comment). Every other state choreographs its own
+ * gaze/eyes as part of the gesture and ignores `setExpression` entirely. */
 export function engineExpressions(): string[] {
   return EXPRESSIONS.map((e) => e.id);
 }
@@ -377,11 +383,14 @@ export interface EngineHandle {
   states: string[];
   /**
    * Sets (or, given `null`, clears) the held eye expression by id (see
-   * `expressions`). Throws on an unknown id. Only visible while the current
-   * state is `baseFace` (`idle`, `swirl`); the transition eases over
-   * `BotEngine.SHAPE_MORPH` via bloub's own `exprAtTime`/`blendExpression`
-   * path — the same eased in-out interpolation `setShape` already rides,
-   * not a new easing system.
+   * `expressions`). Throws on an unknown id. Only visible on a state that
+   * accepts one (`idle`/`wander`/`swirl` via `baseFace`, `play`/`burst`/
+   * `comet` via `acceptsExpression` — see `engineExpressions`'s own doc
+   * comment); ignored on every other state, which keeps full ownership of
+   * its own eyes. The transition eases over `BotEngine.SHAPE_MORPH` via
+   * bloub's own `exprAtTime`/`blendExpression` path — the same eased
+   * in-out interpolation `setShape` already rides, not a new easing
+   * system.
    */
   setExpression(name: string | null): void;
   /** Every expression id, `bun test`-stable order (`bloub/expressions.ts`). */

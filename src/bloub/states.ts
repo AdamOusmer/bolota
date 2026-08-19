@@ -237,6 +237,22 @@ export interface StateDef {
    */
   baseFace: boolean
   /**
+   * bolota addition (not from bloub): true = this state's own `pose.gaze`/
+   * `split`/`eyes` are replaceable by a chosen expression too, same as
+   * `baseFace`, WITHOUT taking on `baseFace`'s other two meanings —
+   * cursor-follow eligibility (`engine.ts`'s `stateOwnsGaze`) and the
+   * "resting face" identity `eyefit.ts`'s doc comments tie to it. A state
+   * flagged here keeps driving its own body motion, decor and timing (and,
+   * for `burst`/`comet`, its own collapse/regrow `eyeAlpha` — see each
+   * one's own comment: only eye POSE changes hands, not visibility) — the
+   * expression only ever wins the eyes' pose, on top of everything else
+   * this state already owns. `play`/`burst`/`comet` set it; every other
+   * non-`baseFace` state (the ones that actually choreograph their own
+   * gaze/eyes as part of the gesture — `wander`, `wink`, `thinking`, ...)
+   * leaves it unset and keeps full, uncontested ownership of its eyes.
+   */
+  acceptsExpression?: boolean
+  /**
    * bolota addition (not from bloub — every other flag on this interface
    * is verbatim): true = idle's background liveliness (`face.ts`'s
    * wander/drift — NOT blink or breathing, see below) must contribute
@@ -574,6 +590,10 @@ export const STATES: StateDef[] = [
     duration: 2,
     morph: 0.5,
     baseFace: false,
+    // Body/decor/timing (the triangle, the sweeping bouquet) stay this
+    // state's own; a chosen expression is free to drive the eyes on top
+    // (`acceptsExpression`'s own doc comment, `StateDef`).
+    acceptsExpression: true,
     baseBody: false,
     blinkIn: true,
     pose: (t) => {
@@ -663,23 +683,41 @@ export const STATES: StateDef[] = [
       const fade = clamp(t / 0.8) * clamp((ORBIT_PERIOD - t) / 0.9)
       return base({
         sil,
-        // bolota divergence from verbatim bloub (user-sanctioned, see
-        // src/engine.ts's header): bloub's own reference had the eyes race
-        // around the sphere ~3x faster than the silhouette (+-65deg yaw,
-        // its own separate 6.5rad/s sweep, no relation to `rot`'s 0.8s
-        // period or `ORBIT_PERIOD`) — a THIRD independent frequency, and
-        // reintroducing it here would put right back the exact class of bug
-        // `period` above exists to kill: another channel wrapping (or not
-        // wrapping) on its own schedule. It also read as chaotic on its own
-        // merits, independent of any phase bug — measured before removal,
-        // a single 1/60s frame during the sweep moved an eye center 16+
-        // viewBox units on a R=100 ball. Calm, forward, level eyes while
-        // the body drifts and the rings do the spectacle instead: fewer
-        // moving parts to desync, and readable.
+        // Two rounds on this line. Round A tried restoring bloub's verbatim
+        // sweep (+-65deg yaw, `sin(t*6.5)`, `pitch` ramping via `back`) —
+        // real bloub choreography, but `back` (the spinning-triangle ->
+        // settled-ball transient the sweep's amplitude/pitch rode) has no
+        // loop-safe analog in a state that repeats forever (`back(0) = 0`,
+        // `back(ORBIT_PERIOD) = 1`, no "settled" to actually reach), and
+        // the amplitude alone was enough to swing an eye behind the head's
+        // own depth cull (`engine.ts`, `e.depth <= 0.02`) on every pass —
+        // real bloub behavior (verbatim, same formula, same cull) but a
+        // busier read than intended for a state that also has to carry the
+        // rings.
+        //
+        // Round B (final, user call): orbit's eyes hold `idle`'s own
+        // neutral instead — the same `REST_GAZE` constant `idle`'s `pose`
+        // already returns unmodified, not a divergent one this state
+        // invents. Checked and confirmed clean, not just asserted: with
+        // `ownsLiveliness` (above) zeroing `life.dYaw/dPitch/dRoll` and
+        // `driftX/Y` (`engine.ts`'s `wander`/`float` gates, both keyed off
+        // this flag), the ONLY inputs left to `gaze` are this constant and
+        // `look` (cursor-follow, gated the same way `idle`'s own doc
+        // comment describes — composes on top when active, off otherwise,
+        // symmetric with `idle`, not a leak) — measured max deviation
+        // between orbit's rendered eye position and a from-scratch
+        // reconstruction off this exact `REST_GAZE` (no look, no wander):
+        // 0.006 units, i.e. the engine's own two-decimal rounding, not a
+        // residual pin. Blink and breathing are untouched by any of this
+        // (`liveliness`'s `lid`/`breath`, gated on `alive`/`blink` alone,
+        // never on `ownsLiveliness`) — measured directly off the rendered
+        // frame too: eye height (matrix-scaled, not the unscaled `d`) dips
+        // 25.16 -> 1.76 -> 25.16 across the first scheduled blink, and
+        // `bodyPath`'s own bbox height still varies sample to sample at
+        // t's where `rot`'s own 0.8s period holds silhouette/position
+        // otherwise identical (203.42 / 204.44 / 203.61 / 202.45 at
+        // t=0/0.8/1.6/2.4) — both alive, neither owned by this flag.
         gaze: { ...REST_GAZE },
-        // Constant too (was `0.34 + back * 0.07`, another `back`-driven
-        // grow that would have reset every loop) — same reasoning as `rot`
-        // and `sil` above, one fewer channel with a start/end to desync.
         eyes: pair(0.18, 0.34),
         // the rings enter one by one over 0.8s
         arcs: RINGS.map((s, i) => ({
@@ -746,6 +784,11 @@ export const STATES: StateDef[] = [
     minDuration: 2.4,
     morph: 0.4,
     baseFace: false,
+    // Body/decor/timing (the collapse, the particles) and the collapse-fade
+    // `eyeAlpha` below stay this state's own; a chosen expression is free
+    // to drive the eyes' POSE on top (`acceptsExpression`'s own doc
+    // comment, `StateDef`) — visibility during the collapse is unaffected.
+    acceptsExpression: true,
     baseBody: false,
     blinkIn: false,
     // bolota eye-visibility audit, user-reversed: an earlier pass kept the
@@ -797,6 +840,10 @@ export const STATES: StateDef[] = [
     minDuration: 2.4,
     morph: 0.45,
     baseFace: false,
+    // Same as `burst` above: body/decor/timing and the collapse-fade
+    // `eyeAlpha` stay this state's own, a chosen expression only drives
+    // eye POSE (`acceptsExpression`'s own doc comment, `StateDef`).
+    acceptsExpression: true,
     baseBody: false,
     blinkIn: false,
     // bolota eye-visibility audit, user-reversed: same case as `burst`

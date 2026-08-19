@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { BotEngine } from "../src/bloub/engine";
+import { EXPRESSION_BY_ID } from "../src/bloub/expressions";
+import { STATE_BY_ID } from "../src/bloub/states";
 import { mountEngine } from "../src/engine";
 
 /**
@@ -136,5 +139,73 @@ describe("expressions on the engine handle", () => {
     const cleared = eyeD(svg);
 
     expect(cleared).not.toBe(held);
+  });
+});
+
+describe("expressions compose with play/burst/comet — state keeps body/decor/alpha, expression wins eye pose", () => {
+  const R = 100;
+  const seed = Array.from({ length: 64 }, (_, i) => 1 + 0.2 * Math.sin(i));
+  const scared = EXPRESSION_BY_ID.get("scared")!;
+
+  for (const stateId of ["play", "burst", "comet"] as const) {
+    test(`${stateId}: a chosen expression changes eye pose but not bodyPath or eye alpha`, () => {
+      // `t` values spanning each state's own choreography, always short of
+      // its `duration` so both engines are still on the same iteration.
+      for (const t of [0.05, 0.9, 1.5]) {
+        const plain = new BotEngine(R, stateId, seed);
+        const expressed = new BotEngine(R, stateId, seed);
+        expressed.setExpression(scared, 0);
+
+        const plainFrame = plain.sample(t);
+        const expressedFrame = expressed.sample(t);
+
+        // Body/decor/timing: this state's own, untouched by the expression.
+        expect(expressedFrame.bodyPath).toBe(plainFrame.bodyPath);
+        expect(expressedFrame.arcs).toEqual(plainFrame.arcs);
+        expect(expressedFrame.dots).toEqual(plainFrame.dots);
+
+        // Eyes: same count and alpha (collapse-fade ownership stays with
+        // the state, per `burst`/`comet`'s own `acceptsExpression` comment)
+        // — but a different pose whenever an eye is actually visible on
+        // both sides to compare (deep mid-collapse can cull it on both,
+        // which is not a pose disagreement to fail on).
+        expect(expressedFrame.eyes.length).toBe(plainFrame.eyes.length);
+        expressedFrame.eyes.forEach((e, i) => {
+          expect(e.alpha).toBeCloseTo(plainFrame.eyes[i]!.alpha, 6);
+        });
+        if (plainFrame.eyes.length > 0) {
+          expect(expressedFrame.eyes[0]!.matrix).not.toBe(plainFrame.eyes[0]!.matrix);
+        }
+      }
+    });
+  }
+
+  test("burst/comet: expression cannot force the eyes visible through full collapse", () => {
+    for (const stateId of ["burst", "comet"] as const) {
+      const def = STATE_BY_ID.get(stateId)!;
+      // Deepest collapse per each state's own measured curve (`states.ts`):
+      // burst's `collapseFrac` saturates by t=0.7, comet's by t=0.55.
+      const deepT = stateId === "burst" ? 0.7 : 0.55;
+      expect(def.pose(deepT).eyeAlpha).toBeLessThan(0.02);
+
+      const engine = new BotEngine(R, stateId, seed);
+      engine.setExpression(scared, 0);
+      expect(engine.sample(deepT).eyes).toHaveLength(0);
+    }
+  });
+
+  test("states that own their eyes ignore setExpression entirely (wink, thinking, orbit)", () => {
+    for (const stateId of ["wink", "thinking", "orbit"] as const) {
+      const def = STATE_BY_ID.get(stateId)!;
+      expect(def.baseFace).toBe(false);
+      expect(def.acceptsExpression).toBeUndefined();
+
+      const plain = new BotEngine(R, stateId, seed);
+      const expressed = new BotEngine(R, stateId, seed);
+      expressed.setExpression(scared, 0);
+      for (const t of [0.1, 0.5, 1.0]) {
+        expect(expressed.sample(t).eyes).toEqual(plain.sample(t).eyes);
+      }
+    }
   });
 });
