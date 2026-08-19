@@ -1,0 +1,67 @@
+/*
+ * The whole color palette, and nothing else. Every color anywhere else in
+ * this codebase (global.css, .astro components, inline styles, the canvas
+ * fillStyle math in lib/lightfield.ts) is a `var(--token)` read from here,
+ * never a raw hex/rgb/hsl literal, this file is the single place a color
+ * value is allowed to be written down. Naming follows the Portfolio's own
+ * convention (~/WebstormProjects/Portfolio/src/styles/style.css: --bg-color,
+ * --surface-color, --text-main/--text-muted/--text-faint, --border-color)
+ * for the tokens that map onto it directly; the rest (accent, lightfield
+ * hues, status colors, code-token colors) are new but named the same way:
+ * lowercase, hyphenated, semantic role first.
+ *
+ * `-rgb` tokens hold bare "R G B" triplets (no `rgb()` wrapper) so call
+ * sites can compose them with an alpha at the point of use via CSS Color 4
+ * syntax: `rgb(var(--light-rgb) / 0.4)`. That is also what lets
+ * lib/lightfield.ts's canvas drawing pull the same values via
+ * `getComputedStyle` instead of hardcoding its own copy of the mote hues.
+ *
+ * Exception, deliberately not tokenized: the favicon in Base.astro is a
+ * `data:` URI SVG, resolved by the browser before the page's stylesheet
+ * exists, so it cannot reference a CSS custom property. Its two hex values
+ * are kept in sync with --bg-color/--light by hand.
+ *
+ * Exception, structurally not a token: colors the *library* computes at
+ * runtime from a seed (bolota's own OKLCh palette) are per-avatar data,
+ * not site chrome, nothing to define here.
+ */
+
+:root {
+  /* ground: the one token under active iteration. Swap this to re-tune the
+     whole page, --surface-color and --border-color below are color-mix()
+     steps off of it, not independent hex values. */
+  --bg-color: #262730;
+  --surface-color: color-mix(in srgb, var(--bg-color) 86%, white 14%);
+  --border-color: color-mix(in srgb, var(--bg-color) 70%, white 30%);
+
+  /* text, copied verbatim from the Portfolio's own values */
+  --text-main: #e5e7eb;
+  --text-main-rgb: 229 231 235;
+  --text-muted: #b2bcc7;
+  --text-faint: rgb(var(--text-main-rgb) / 0.4);
+
+  /* accent: Luzir's one warm "light" color, standing in for the Portfolio's
+     --primary-green everywhere that color is used */
+  --light: #e8b34d;
+  --light-rgb: 232 179 77;
+  --light-deep: #a5771e;
+
+  /* lightfield: the restored-verbatim v1 background's two-tone glow (warm +
+     cool), its canvas motes (brighter than --light-rgb on purpose, small
+     dots read as washed-out at the accent's own tone), and its pointer-
+     torch color, plus a plain white wash for small hover washes that
+     aren't accent-tinted. lib/lightfield.ts reads --mote-warm-rgb/
+     --glow-cool-rgb via getComputedStyle for its canvas fillStyle, since a
+     <canvas> 2D context can't resolve var() itself. */
+  --mote-warm-rgb: 255 207 114;
+  --glow-cool-rgb: 159 194 255;
+  --torch-rgb: 255 235 190;
+  --white-rgb: 255 255 255;
+
+  /* status */
+  --ok: #6ee7b7;
+  --bad: #fca5a5;
+
+  /* API code-block syntax tokens */
+  --code-keyword: #7dd3fc;
+}
