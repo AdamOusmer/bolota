@@ -1,15 +1,22 @@
 ---
 import SectionHead from "../ui/SectionHead.astro";
+import { engineExpressions } from "@luzir/bolota/engine";
+
+// Count comes off the real roster at build time, same technique as
+// States.astro, so adding a face (love landed after this copy was first
+// written) never leaves the headline claiming a stale number.
+const faceCount = engineExpressions().length;
+const firstFace = engineExpressions()[0];
 ---
 
 <section class="section wrap expr" id="expressions" data-expressions>
-  <SectionHead kicker="Faces" title="Expressions" description="Sixteen faces, one held pose at a time." />
+  <SectionHead kicker="Faces" title="Expressions" description={`${faceCount} faces, one held pose at a time.`} />
 
   <div class="expr__layout">
     <div class="expr__stage" data-reveal style="--reveal-i:1">
       <div class="light-pool" aria-hidden="true"></div>
       <div class="expr__avatar" data-expr-stage></div>
-      <p class="expr__current" data-expr-label>Neutral</p>
+      <p class="expr__current" data-expr-label>{firstFace.charAt(0).toUpperCase() + firstFace.slice(1)}</p>
     </div>
 
     <div class="expr__picker" data-expr-picker data-reveal style="--reveal-i:2"></div>
