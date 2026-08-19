@@ -1,8 +1,7 @@
-import { engineStates } from "bolota/engine";
 import { onSeedChange, getSeed } from "../lib/seed-store";
 import { curatedSeedAt } from "../lib/curated-seeds";
 import { humanizeId } from "../lib/humanize";
-import { mountLiveTile } from "../lib/live-engine";
+import { ensureEngine, mountLiveTile } from "../lib/live-engine";
 import { observeReveals } from "../lib/motion";
 
 /** Every state the engine can play, one live looping specimen each, labels
@@ -12,11 +11,18 @@ import { observeReveals } from "../lib/motion";
  * small-caps name, no tile chrome. Seeded: every specimen shares the
  * visitor's identity. Unseeded: they cycle across the curated shape-family
  * list instead, so the grid itself demonstrates bolota's silhouette variety.
+ *
+ * `engineStates()` itself is cheap (it's just a static roster, not the
+ * engine's runtime), but it lives in the same `bolota/engine` module as
+ * everything else, so it rides the same deferred `ensureEngine()` chunk as
+ * `mountLiveTile`'s own engine use rather than pulling that module back
+ * into the eager initial bundle on its own.
  */
-export function setupStates() {
+export async function setupStates() {
   const grid = document.querySelector<HTMLElement>("[data-states-grid]");
   if (!grid) return;
 
+  const { engineStates } = await ensureEngine();
   const states = engineStates();
   const tiles = states.map((id, i) => {
     const cell = document.createElement("div");

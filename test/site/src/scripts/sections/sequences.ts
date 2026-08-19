@@ -1,5 +1,6 @@
-import { mountEngine, type EngineHandle } from "bolota/engine";
+import type { EngineHandle } from "bolota/engine";
 import { runSequence, type SequenceName } from "bolota/sequences";
+import { ensureEngine } from "../lib/live-engine";
 import { onSeedChange, getSeed } from "../lib/seed-store";
 import { DEFAULT_SEED } from "../lib/curated-seeds";
 import { humanizeId } from "../lib/humanize";
@@ -58,6 +59,13 @@ export function setupSequences() {
   let seed = getSeed() ?? DEFAULT_SEED;
   let step = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  // See hero.ts/live-engine.ts's own copies of this pattern.
+  let gen = 0;
+  // Whether the stage is currently on-screen, tracked separately from
+  // `timer` because `advance()` can no-op (handle still null, engine chunk
+  // not resolved yet) even while the tile is visible; `mount()` uses this
+  // to know it should kick `advance()` off itself once the engine lands.
+  let visible = false;
 
   function setLabel(text: string) {
     if (label!.textContent === text) return;
@@ -84,13 +92,17 @@ export function setupSequences() {
     }
   }
 
-  function mount(nextSeed: string) {
+  async function mount(nextSeed: string) {
+    const myGen = ++gen;
     seed = nextSeed;
     clearTimer();
+    const { mountEngine } = await ensureEngine();
+    if (myGen !== gen) return; // a newer mount() call already won the race
     handle?.destroy();
     handle = mountEngine(svg, seed);
     step = 0;
     setLabel("Idle");
+    if (visible && !reduceMotion.matches && !timer) advance();
   }
 
   mount(seed);
@@ -99,10 +111,12 @@ export function setupSequences() {
   onVisible(
     svg,
     () => {
+      visible = true;
       if (reduceMotion.matches) return;
       if (!timer) advance();
     },
     () => {
+      visible = false;
       clearTimer();
       handle?.stop();
     },
