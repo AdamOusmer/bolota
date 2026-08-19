@@ -35,8 +35,11 @@
  */
 import type { BlobatarOptions } from "./blobatar";
 import { _layout } from "./blobatar";
-import { BotEngine, type BotFrame } from "./bloub/engine";
+import { BotEngine, type BotFrame, type Look } from "./bloub/engine";
 import { EXPRESSIONS, EXPRESSION_BY_ID } from "./bloub/expressions";
+import { MAX_PITCH_DRIFT, MAX_YAW_DRIFT } from "./bloub/face";
+import { PITCH } from "./bloub/gaze";
+import { clamp } from "./bloub/math";
 import { PROFILE_SAMPLES } from "./bloub/profiles";
 import { POSES, STATE_BY_ID, type StateId } from "./bloub/states";
 import { superellipse } from "./shape";
@@ -203,6 +206,20 @@ function firstPoint(d: string, out: { x: number; y: number }): boolean {
   return true;
 }
 
+/** Translate (`e`, `f`) of an eye's `matrix(a,b,c,d,e,f)` transform — the
+ * same "one representative point drives the whole zone's blur" idea as
+ * `firstPoint` above, applied to the eyes so a fast cursor-follow sweep
+ * (see `aimGaze` below) gets the same velocity-proportional blur treatment
+ * as the body/arcs/dots already do. */
+const MATRIX_TRANSLATE = /matrix\([^,]+,[^,]+,[^,]+,[^,]+,(-?[\d.]+),(-?[\d.]+)\)/;
+function eyeTranslate(matrix: string, out: { x: number; y: number }): boolean {
+  const m = MATRIX_TRANSLATE.exec(matrix);
+  if (!m) return false;
+  out.x = +m[1]!;
+  out.y = +m[2]!;
+  return true;
+}
+
 /**
  * Speed-to-blur curve, shared by every fast element: 0 at rest, saturating
  * at `MAX_BLUR` once `speed` (viewBox units/second) clears `SATURATE`.
@@ -213,6 +230,77 @@ function firstPoint(d: string, out: { x: number; y: number }): boolean {
 const MAX_BLUR = 2.2;
 const SATURATE = 140; // viewBox units / second
 const blurFor = (speed: number) => Math.min(1, speed / SATURATE) * MAX_BLUR;
+
+// --- cursor-follow gaze (bloub port, src/bloub/gaze.ts) --------------------
+//
+// bloub's own `lookTarget` (BloubBot.vue's `aim()`) bakes in two things that
+// are specific to bloub's own settings-panel chrome, not to "eyes track the
+// pointer" as a portable library feature: a constant `-TURN` yaw bias (the
+// bot looks left, toward its own settings panel, even with the pointer
+// centered) and a `tour` ramp tied to bloub's view-entry swirl animation,
+// which blobatar has no equivalent of. Both are dropped; `followLook` below
+// is this bridge's own replacement, not a call into `gaze.ts`'s `lookTarget`.
+//
+// Deflection range is `MAX_YAW_DRIFT`/`MAX_PITCH_DRIFT` (16deg/16deg,
+// `bloub/face.ts`) rather than `gaze.ts`'s own `YAW_MAX`/`PITCH_MAX`
+// (16deg/13deg): those were bloub's numbers for bloub's own, much smaller
+// idle wander (+-7.1/+-5.5deg pre-port); this branch's own eye-anchoring
+// work already widened blobatar's idle wander to exactly
+// MAX_YAW_DRIFT/MAX_PITCH_DRIFT and proved (`test/eyefit.test.ts`, long
+// sweeps) that `eyefit.ts`'s containment solve stays safe at that bound —
+// reusing it here means a tracked cursor near the viewport edge drives the
+// gaze to the *same* proven-safe max the idle drift already reaches, which
+// reads as a bigger, more deliberate sweep than idle wander's own (idle
+// rarely sits at its own peak; a tracked pointer can hold there). `PITCH`
+// (the rest-height bias, cursor centered) is still `gaze.ts`'s own 10deg —
+// untouched, unrelated to the amplitude question above.
+export const FOLLOW_MAX_YAW = MAX_YAW_DRIFT;
+export const FOLLOW_MAX_PITCH = MAX_PITCH_DRIFT;
+
+/**
+ * Pure pointer-position -> gaze-target math, no DOM: `nx`/`ny` are already
+ * normalized to [-1, 1] (see `aimGaze`, below, for how a raw pointer
+ * position becomes these). Exported for direct testing of the deflection
+ * range independent of the DOM bridge (`test/follow.test.ts`) — the same
+ * "test the pure rule on its own" split `gaze.ts`'s own `lookTarget` uses.
+ */
+export function followLook(nx: number, ny: number): Look {
+  return {
+    yaw: nx * FOLLOW_MAX_YAW,
+    // tangage positif = regard vers le haut, alors que le y de l'ecran descend
+    pitch: PITCH - ny * FOLLOW_MAX_PITCH,
+    mix: 1,
+    spin: 0,
+    wander: 0,
+  };
+}
+
+// `BotEngine.LOOK_MORPH` (0.24s) is bloub's own constant for its settings-
+// panel arrival — an occasional, discrete retarget, not a continuously-
+// updating pointer stream. Driving `setLook` off a live `pointermove`
+// stream at that duration reads as laggy: each move resets the morph's own
+// clock (see `BotEngine.setLook`'s own doc comment — no stale-target
+// guard, by design, so a *moving* target never fully lands), and at 0.24s
+// the per-frame progress from a near-continuous stream of resets is small
+// enough that a fast sweep visibly trails the cursor by most of a second.
+// A short, dedicated pointer-tracking constant fixes this without a new
+// easing curve (still `easeInOutCubic`, still `BotEngine`'s own morph):
+// simulated against a 1s linear sweep across the full deflection range,
+// 0.24s trails by 15.3 of 16deg at t=1s; 0.08s trails by 7.1deg; 0.05s by
+// 2.1deg. 0.08s is the pick — fast enough that a *held* pointer (the
+// common case, since `aimGaze` only calls `setLook` when the target
+// actually moves) completes its single clean arrival in well under the
+// 100ms "starts moving" bar, while staying long enough (~5 frames) to
+// still read as an eased arrival rather than a binary snap for quick,
+// repeated micro-movements.
+export const FOLLOW_MORPH = 0.08;
+
+// "idle wander yields to follow while pointer active, resumes a few
+// seconds after the pointer stops [moving]": a cursor parked motionless
+// over the tracked target should not pin the gaze there forever — after
+// this many seconds of no *new* position, `aimGaze` releases back to
+// `null` (idle's own pose + wander), same as an actual pointerleave.
+export const FOLLOW_IDLE_RESUME_DELAY = 3;
 
 function el<K extends keyof SVGElementTagNameMap>(
   doc: Document,
@@ -243,6 +331,14 @@ export interface EngineHandle {
   play(state: string, opts?: { loop?: boolean }): void;
   /** Freezes the current frame; breathing/blinking/morph all pause. */
   stop(): void;
+  /**
+   * Enables or disables cursor-follow: the eyes track the pointer while it
+   * moves over `target` (an element, or `"window"` for the whole page), and
+   * fall back to idle drift the instant it leaves. `false` disables tracking
+   * and releases the gaze back to whatever state is playing. Off by default;
+   * omitting `target` on an enabling call is shorthand for `"window"`.
+   */
+  follow(target?: Element | "window" | false): void;
   /** Stops and removes every node this call to `mountEngine` created. */
   destroy(): void;
   /** Every playable state id, `bun test`-stable order (`bloub/states.ts`). */
@@ -305,6 +401,7 @@ export function mountEngine(
   const bodyBlurEl = mkFilter("blur-body");
   const arcBlurEl = mkFilter("blur-arcs");
   const dotBlurEl = mkFilter("blur-dots");
+  const eyeBlurEl = mkFilter("blur-eyes");
 
   const root = el(doc, "g", { transform: `translate(${body.cx} ${body.cy})` });
   const defs = el(doc, "defs");
@@ -330,6 +427,12 @@ export function mountEngine(
   const dotPt = { x: 0, y: 0 };
   let dotPtValid = false;
   let dotBlur = 0;
+  // Only the first eye's own translate is tracked — same "one point per
+  // zone" budget as arcs/dots above, and both eyes move together (they
+  // share the same `Look`), so one is enough to drive a shared filter.
+  const eyePt = { x: 0, y: 0 };
+  let eyePtValid = false;
+  let eyeBlur = 0;
 
   const arcGroup = (frame: BotFrame, half: "back" | "front", group: SVGGElement) => {
     const attrs: Record<string, string | number> = {};
@@ -418,9 +521,26 @@ export function mountEngine(
       dotBlur = damp(dotBlur, 0, Math.max(dt, 0.001), 0.08);
     }
 
+    // Fast cursor-follow retargets (`aimGaze`) are the main source of eye
+    // speed here — idle wander and blink never move the eye centers this
+    // fast — so this is deliberately the same damped speed->blur curve as
+    // body/arcs/dots, not a bespoke one: a quick sweep gets a *subtle* blur
+    // (see `MAX_BLUR`/`SATURATE`'s own doc comment), never a heavy smear.
+    const e0 = frame.eyes[0];
+    if (e0 && eyeTranslate(e0.matrix, scratch)) {
+      if (dt > 0 && eyePtValid) eyeBlur = damp(eyeBlur, blurFor(speed(eyePt, scratch)), dt, 0.08);
+      eyePt.x = scratch.x;
+      eyePt.y = scratch.y;
+      eyePtValid = true;
+    } else {
+      eyePtValid = false;
+      eyeBlur = damp(eyeBlur, 0, Math.max(dt, 0.001), 0.08);
+    }
+
     bodyBlurEl.setAttribute("stdDeviation", String(Math.round(bodyBlur * 100) / 100));
     arcBlurEl.setAttribute("stdDeviation", String(Math.round(arcBlur * 100) / 100));
     dotBlurEl.setAttribute("stdDeviation", String(Math.round(dotBlur * 100) / 100));
+    eyeBlurEl.setAttribute("stdDeviation", String(Math.round(eyeBlur * 100) / 100));
   };
 
   const render = (frame: BotFrame) => {
@@ -464,6 +584,8 @@ export function mountEngine(
     if (bodyBlur > 0.05) bodyPath.setAttribute("filter", `url(#${uid}-blur-body)`);
     else bodyPath.removeAttribute("filter");
 
+    if (eyeBlur > 0.05) eyes.setAttribute("filter", `url(#${uid}-blur-eyes)`);
+    else eyes.removeAttribute("filter");
     eyes.replaceChildren(
       ...frame.eyes.map((e) =>
         el(doc, "path", { d: e.d, transform: e.matrix, opacity: e.alpha, fill: eye }),
@@ -485,6 +607,105 @@ export function mountEngine(
   let loop = false;
   let stateStart = 0;
   let current: StateId = "idle";
+
+  // --- cursor-follow gaze (bloub port, src/bloub/gaze.ts) ------------------
+  // Math (`followLook`) and the pointer-tracking constants below it are
+  // module-level, not per-instance — see their own doc comments above.
+  let following = false;
+  let pointer: { x: number; y: number } | null = null;
+  let followCleanup: (() => void) | null = null;
+  // Last target actually handed to `engine.setLook`, so `aimGaze` can skip
+  // redundant calls (see `FOLLOW_MORPH`'s own doc comment on why every
+  // call unconditionally resets `BotEngine`'s own morph clock) and can
+  // tell a genuinely new position apart from a merely-still-known one.
+  let lastNx: number | null = null;
+  let lastNy: number | null = null;
+  /** Clock time `nx`/`ny` last actually changed — drives `IDLE_RESUME_DELAY`. */
+  let lastMoveAt = 0;
+  /** True once this idle period's release (`setLook(null, ...)`) has fired,
+   * so a still-motionless pointer doesn't re-issue it every tick. */
+  let released = false;
+
+  function detachFollow() {
+    followCleanup?.();
+    followCleanup = null;
+    following = false;
+    pointer = null;
+  }
+
+  function attachFollow(target: Element | "window") {
+    detachFollow();
+    const view = doc.defaultView;
+    if (!view) return;
+    const moveTarget: EventTarget = target === "window" ? view : target;
+    // pointerleave never fires on `window` itself; bloub listens on
+    // `document` for the same "pointer left the page" signal.
+    const leaveTarget: EventTarget = target === "window" ? doc : target;
+    const onMove = (event: Event) => {
+      const e = event as PointerEvent;
+      // Touch has no cursor that lingers: a lifted finger would leave the
+      // gaze stuck on the last touched point, which reads as a bug.
+      if (e.pointerType === "touch") return;
+      pointer = { x: e.clientX, y: e.clientY };
+    };
+    const onLeave = () => {
+      pointer = null;
+    };
+    moveTarget.addEventListener("pointermove", onMove);
+    leaveTarget.addEventListener("pointerleave", onLeave);
+    followCleanup = () => {
+      moveTarget.removeEventListener("pointermove", onMove);
+      leaveTarget.removeEventListener("pointerleave", onLeave);
+    };
+    following = true;
+    lastNx = null;
+    lastNy = null;
+    released = false;
+    ensureRunning();
+  }
+
+  /**
+   * Re-evaluated every tick — the avatar's own box can move under a fixed
+   * pointer (scroll, layout, resize), and bloub re-reads it every frame for
+   * the same reason ("le rectangle est relu a chaque image") — but only
+   * calls into `engine.setLook` when the resulting target actually differs
+   * from the last one applied, or when `FOLLOW_IDLE_RESUME_DELAY` has
+   * elapsed since it last did (see the notes above `lastNx`/`lastMoveAt`).
+   */
+  function aimGaze(now: number) {
+    if (!following) return;
+    const box = svgRoot.getBoundingClientRect();
+    // A zero-area box means nothing to aim at, and normalizing below would
+    // divide by zero into a `NaN` that `engine.setLook` would then hold
+    // onto forever (it keeps the last *finite* target on purpose).
+    if (!box || box.width === 0 || box.height === 0) return;
+    if (!pointer) {
+      if (lastNx !== null || lastNy !== null) {
+        lastNx = null;
+        lastNy = null;
+        released = true;
+        engine.setLook(null, now);
+      }
+      return;
+    }
+    const view = doc.defaultView!;
+    const halfW = Math.max(1, view.innerWidth / 2);
+    const halfH = Math.max(1, view.innerHeight / 2);
+    const nx = clamp((pointer.x - (box.left + box.width / 2)) / halfW, -1, 1);
+    const ny = clamp((pointer.y - (box.top + box.height / 2)) / halfH, -1, 1);
+    if (nx !== lastNx || ny !== lastNy) {
+      lastNx = nx;
+      lastNy = ny;
+      lastMoveAt = now;
+      released = false;
+      engine.setLook(followLook(nx, ny), now, FOLLOW_MORPH);
+      return;
+    }
+    if (!released && now - lastMoveAt >= FOLLOW_IDLE_RESUME_DELAY) {
+      released = true;
+      engine.setLook(null, now);
+    }
+  }
 
   render(engine.sample(0));
 
@@ -538,6 +759,7 @@ export function mountEngine(
       engine.setState("idle", clock);
     }
 
+    aimGaze(clock);
     const frame = engine.sample(clock);
     updateBlur(frame, dt);
     render(frame);
@@ -601,7 +823,20 @@ export function mountEngine(
         raf = 0;
       }
     },
+    follow(target = "window") {
+      if (target === false) {
+        detachFollow();
+        engine.setLook(null, clock);
+        return;
+      }
+      // Matches the rest of this file: reduced motion means one static
+      // frame and no render loop, so there is nothing for a tracked pointer
+      // to ever animate — skip attaching listeners for it entirely.
+      if (reducedMotion) return;
+      attachFollow(target);
+    },
     destroy() {
+      detachFollow();
       if (raf) doc.defaultView!.cancelAnimationFrame(raf);
       raf = 0;
       root.remove();

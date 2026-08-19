@@ -345,6 +345,34 @@ function mountEngineSvg(container: HTMLElement, name: string, size: number, opts
   c.appendChild(btn);
 }
 
+// ---- Cursor follow (engine, handle.follow) ----
+{
+  const c = card("Cursor follow (engine)");
+  const { handle } = mountEngineSvg(c, "cursor-follow-blob", 200);
+  // Idle life (blink/breathe) keeps running underneath — `follow` only ever
+  // overrides the gaze direction (`Look.mix`/`yaw`/`pitch`), never the body.
+  handle.play("idle", { loop: true });
+
+  const status = document.createElement("div");
+  status.className = "status";
+  c.appendChild(status);
+
+  const btn = document.createElement("button");
+  let following = true;
+  const sync = () => {
+    btn.textContent = following ? "stop following" : "follow the pointer";
+    status.textContent = following ? "following: window" : "following: off";
+  };
+  handle.follow("window");
+  sync();
+  btn.addEventListener("click", () => {
+    following = !following;
+    handle.follow(following ? "window" : false);
+    sync();
+  });
+  c.appendChild(btn);
+}
+
 // ---- All 15 bloub engine states ----
 {
   const c = card("All 15 bloub engine states (one engine per tile)", true);
