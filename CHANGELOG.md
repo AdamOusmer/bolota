@@ -10,6 +10,19 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.1.3
+
+### Changed
+
+- **A change of expression takes longer and starts from rest.** 0.45s on an
+  ease-out quintic still read as a snap, because that curve puts about 15% of
+  the whole distance into the first frame: the eyes arrive before the eye can
+  follow them. Expressions get their own `EXPRESSION_MORPH` (0.8s) on a
+  symmetric ease now, separate from `SHAPE_MORPH`, which stays where it is
+  because a silhouette swap is masked by a blink and wants to be over quickly.
+  Measured on the same transition, the largest single frame went from 18% of
+  the trip to 6%.
+
 ## 0.1.2
 
 ### Fixed

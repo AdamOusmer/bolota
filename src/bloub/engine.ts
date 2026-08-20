@@ -182,6 +182,20 @@ export class BotEngine {
   static readonly SHAPE_MORPH = 0.45
 
   /**
+   * How long a change of expression takes, and why it is not `SHAPE_MORPH`.
+   *
+   * A body shape swap is a silhouette change: it wants to be over quickly, and
+   * a blink masks it. A change of expression is the face itself moving, in
+   * full view, and at 0.45s on an ease-out quintic it still read as a snap:
+   * that curve puts about 15% of the whole distance into the FIRST frame, so
+   * the eye arrives before the eye can follow it.
+   *
+   * Nearly twice as long, on a symmetric ease, so the movement starts from
+   * rest instead of leaping: 4% in the first frame rather than 15%.
+   */
+  static readonly EXPRESSION_MORPH = 0.8
+
+  /**
    * Catch-up duration of the gaze toward its target. Shorter than
    * `SHAPE_MORPH`: a following gaze should read as attentive, not sluggish.
    * Since the target is reset on every mouse move, it's this duration that
@@ -236,7 +250,7 @@ export class BotEngine {
     const to = this.expr
     const from = this.exprPrev
     if (to === from) return { from, to, k: 1 }
-    const k = clamp((now - this.exprAt) / BotEngine.SHAPE_MORPH)
+    const k = clamp((now - this.exprAt) / BotEngine.EXPRESSION_MORPH)
     return { from, to, k }
   }
 
@@ -363,7 +377,7 @@ export class BotEngine {
       const blended =
         expr.k >= 1
           ? face(expr.to)
-          : blendExpression(face(expr.from), face(expr.to), easings.easeOutQuint(expr.k))
+          : blendExpression(face(expr.from), face(expr.to), easings.easeInOutCubic(expr.k))
       pose = { ...pose, gaze: blended.gaze, split: blended.split, eyes: blended.eyes }
     }
     if (def.baseBody && shape) {

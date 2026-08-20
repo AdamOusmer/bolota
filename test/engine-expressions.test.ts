@@ -122,7 +122,7 @@ describe("expressions on the engine handle", () => {
     const before = eyeD(svg);
 
     handle.setExpression("sleepy"); // sleepy: half-shut, tilted eyes -- far from neutral
-    run(doc, 500); // > BotEngine.SHAPE_MORPH (0.45s): fully eased in
+    run(doc, 900); // > BotEngine.EXPRESSION_MORPH (0.8s): fully eased in
 
     const after = eyeD(svg);
     expect(after).not.toBe(before);
@@ -280,7 +280,7 @@ describe("`idle` (no expression set) is the true straight-ahead resting face", (
     const plainIdle = new BotEngine(R, "idle");
     const idleWithWanderExpr = new BotEngine(R, "idle");
     idleWithWanderExpr.setExpression(wanderExpr, 0);
-    // From `SHAPE_MORPH` on, not from zero: adopting an expression eases out
+    // From well into `EXPRESSION_MORPH`, not from zero: adopting an expression eases out
     // of the state's own face now, so at the instant it is set the two engines
     // agree by design (see `exprBlend`).
     for (const t of [0.5, 1, 2]) {
@@ -403,13 +403,15 @@ describe("adopting and clearing an expression eases, like swapping one does", ()
     engine.setExpression(scared, 1);
 
     // The whole distance the pose has to cover, measured once it has settled.
-    const total = distanceFromPlain(engine, plain, 1 + BotEngine.SHAPE_MORPH + 0.2);
+    const total = distanceFromPlain(engine, plain, 1 + BotEngine.EXPRESSION_MORPH + 0.2);
     expect(total).toBeGreaterThan(5); // scared is far from idle, or this proves nothing
 
-    // A cut covers all of it in one frame. An ease-out front-loads, so the
-    // first frame is the biggest, but a quintic still leaves it well under a
-    // quarter of the trip.
-    expect(worstStep(engine, 1, 2)).toBeLessThan(total * 0.25);
+    // A cut covers all of it in one frame. A symmetric ease starts from rest,
+    // so the biggest frame is around 6% of the trip: 10% is the ceiling, and
+    // it also fails if the curve is swapped back to a front-loaded one (an
+    // ease-out quintic put 15% into the first frame, which is what this read
+    // as a snap through).
+    expect(worstStep(engine, 1, 2)).toBeLessThan(total * 0.1);
   });
 
   test("clearing one eases back to the state's own face", () => {
@@ -420,7 +422,7 @@ describe("adopting and clearing an expression eases, like swapping one does", ()
     const plainRef = new BotEngine(R, "idle");
     const total = distanceFromPlain(engine, plainRef, 1);
     engine.setExpression(null, 1);
-    expect(worstStep(engine, 1, 2)).toBeLessThan(total * 0.25);
+    expect(worstStep(engine, 1, 2)).toBeLessThan(total * 0.15);
 
     // and it does actually get back: well past the morph, the eyes match an
     // engine that never wore an expression at all
@@ -428,15 +430,15 @@ describe("adopting and clearing an expression eases, like swapping one does", ()
     expect(engine.sample(4).eyes[0]!.matrix).toBe(plain.sample(4).eyes[0]!.matrix);
   });
 
-  test("the morph runs for SHAPE_MORPH, not a frame and not forever", () => {
+  test("the morph runs for EXPRESSION_MORPH, not a frame and not forever", () => {
     const engine = new BotEngine(R, "idle");
     const plain = new BotEngine(R, "idle");
     engine.setExpression(scared, 0);
     // mid-morph: between the two poses, matching neither
-    const mid = engine.sample(BotEngine.SHAPE_MORPH / 2).eyes[0]!.matrix;
-    expect(mid).not.toBe(plain.sample(BotEngine.SHAPE_MORPH / 2).eyes[0]!.matrix);
+    const mid = engine.sample(BotEngine.EXPRESSION_MORPH / 2).eyes[0]!.matrix;
+    expect(mid).not.toBe(plain.sample(BotEngine.EXPRESSION_MORPH / 2).eyes[0]!.matrix);
     // past it: fully wearing the expression, so a later sample is stable
-    const after = engine.sample(BotEngine.SHAPE_MORPH + 0.01).eyes[0]!.matrix;
+    const after = engine.sample(BotEngine.EXPRESSION_MORPH + 0.01).eyes[0]!.matrix;
     expect(after).not.toBe(mid);
   });
 });
