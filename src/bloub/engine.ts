@@ -190,10 +190,13 @@ export class BotEngine {
    * that curve puts about 15% of the whole distance into the FIRST frame, so
    * the eye arrives before the eye can follow it.
    *
-   * Nearly twice as long, on a symmetric ease, so the movement starts from
-   * rest instead of leaping: 4% in the first frame rather than 15%.
+   * Longer than a shape swap, on a symmetric ease, so the movement starts from
+   * rest instead of leaping. 0.8s was the first value that read as easing
+   * rather than arriving; 0.55 is where it stops feeling sluggish while the
+   * curve still does the work (measured: the worst single frame carries under
+   * a tenth of the travel either way).
    */
-  static readonly EXPRESSION_MORPH = 0.8
+  static readonly EXPRESSION_MORPH = 0.55
 
   /**
    * Catch-up duration of the gaze toward its target. Shorter than

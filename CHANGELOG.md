@@ -10,6 +10,17 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.1.6
+
+### Changed
+
+- **A change of expression is quicker: `EXPRESSION_MORPH` 0.8s to 0.55s.** 0.8
+  was the first value that read as easing rather than arriving, which made it
+  the right place to stop while chasing the snap; with the blend and both axes
+  now on one clock, it reads as sluggish. The curve still does the work: the
+  worst single frame carries 9% of the travel, against 6% at 0.8s and the whole
+  distance before any of this.
+
 ## 0.1.5
 
 Skips 0.1.4: that number was published by mistake and unpublished, and npm
