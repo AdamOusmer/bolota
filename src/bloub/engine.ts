@@ -12,7 +12,7 @@
  * English (see ../engine.ts's header for the provenance note).
  */
 import { arcRender, type ArcRender, type DotRender } from './decor'
-import { blendExpression, type BotExpression } from './expressions'
+import { EXPRESSIONS, blendExpression, type BotExpression } from './expressions'
 import { eyeOffset } from './eyefit'
 import { blinkScale, eyePoses, liveliness } from './face'
 import { clamp, easings, lerp, r2 } from './math'
@@ -214,13 +214,30 @@ export class BotEngine {
   }
 
   /** Effective expression at instant `now`, morph in progress included. */
-  private exprAtTime(now: number): BotExpression | null {
+  /**
+   * Both ends of the expression change and how far along it is.
+   *
+   * This used to collapse to `return to` whenever either end was null, which
+   * meant the two most common transitions were cuts: adopting the FIRST
+   * expression (nothing to blend from) and CLEARING one (nothing to blend to).
+   * Only expression-to-expression eased. Reported as the eyes jumping rather
+   * than easing, and it is the eyes specifically because an expression only
+   * ever moves gaze, split and eye shape.
+   *
+   * Null is not "no pose", it is "the state's own face", which lives in the
+   * pose rather than here — so the blend is resolved in `posed()`, where both
+   * are in hand, and this reports the ends rather than resolving them.
+   */
+  private exprBlend(now: number): {
+    from: BotExpression | null
+    to: BotExpression | null
+    k: number
+  } {
     const to = this.expr
     const from = this.exprPrev
-    if (!to || !from) return to
-    const k = (now - this.exprAt) / BotEngine.SHAPE_MORPH
-    if (k >= 1) return to
-    return blendExpression(from, to, easings.easeOutQuint(clamp(k)))
+    if (to === from) return { from, to, k: 1 }
+    const k = clamp((now - this.exprAt) / BotEngine.SHAPE_MORPH)
+    return { from, to, k }
   }
 
   /**
@@ -313,7 +330,7 @@ export class BotEngine {
     def: StateDef,
     t: number,
     shape: number[] | null,
-    expr: BotExpression | null
+    expr: { from: BotExpression | null; to: BotExpression | null; k: number }
   ): Pose {
     let pose = def.pose(t)
     // Expression composition: a state that accepts a chosen expression
@@ -328,8 +345,26 @@ export class BotEngine {
     // exists to prevent). `eyeAlpha` and `sil` are deliberately untouched
     // here: the state, not the expression, keeps owning collapse/regrow
     // alpha and body shape/timing — only the eyes' POSE changes hands.
-    if ((def.baseFace || def.acceptsExpression) && expr) {
-      pose = { ...pose, gaze: expr.gaze, split: expr.split, eyes: expr.eyes }
+    if (def.baseFace || def.acceptsExpression) {
+      // A null end means the state's own face, so both ends are real poses and
+      // the blend is the same interpolation either way: adopting an
+      // expression, swapping one for another, and dropping back to the bare
+      // state all ease identically.
+      // Only the face is blended, never through `blendPose`: that one also
+      // interpolates decor, so routing the expression through it made a held
+      // pose bleed into the state's own dots and arcs (caught by
+      // `test/engine-expressions.test.ts`, which pins decor as the state's).
+      // The state's own face, shaped as an expression so the same blend covers
+      // "adopting one", "swapping one" and "dropping back to none". Its `id`
+      // is the roster's own first entry purely to satisfy the union; nothing
+      // downstream of the blend reads it.
+      const face = (e: BotExpression | null): BotExpression =>
+        e ?? { ...EXPRESSIONS[0]!, gaze: pose.gaze, split: pose.split, eyes: pose.eyes }
+      const blended =
+        expr.k >= 1
+          ? face(expr.to)
+          : blendExpression(face(expr.from), face(expr.to), easings.easeOutQuint(expr.k))
+      pose = { ...pose, gaze: blended.gaze, split: blended.split, eyes: blended.eyes }
     }
     if (def.baseBody && shape) {
       // keep the pose (rotation, offset, squash) and swap only the profile
@@ -495,7 +530,7 @@ export class BotEngine {
   private origin(
     now: number,
     shape: number[] | null,
-    expr: BotExpression | null
+    expr: { from: BotExpression | null; to: BotExpression | null; k: number }
   ): Pose | null {
     if (this.frozenStart) return this.frozenStart
     if (!this.prev) return null
@@ -511,7 +546,7 @@ export class BotEngine {
   private composedPose(now: number): Pose {
     const def = STATE_BY_ID.get(this.cur)!
     const shape = this.shapeAtTime(now)
-    const expr = this.exprAtTime(now)
+    const expr = this.exprBlend(now)
     const pose = this.posed(def, this.wrapped(def, Math.max(0, now - this.tCur)), shape, expr)
     const since = now - this.tCur
     if (since >= def.morph) return pose
@@ -565,7 +600,7 @@ export class BotEngine {
     const R = this.scale
     const def = STATE_BY_ID.get(this.cur)!
     const shape = this.shapeAtTime(now)
-    const expr = this.exprAtTime(now)
+    const expr = this.exprBlend(now)
     let pose = this.posed(def, this.wrapped(def, Math.max(0, now - this.tCur)), shape, expr)
     let offset = this.offsetAtTime(now, this.cur)
 
