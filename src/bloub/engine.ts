@@ -446,30 +446,41 @@ export class BotEngine {
       start: number,
       duration: number,
       a: { x: number; y: number },
-      b: { x: number; y: number }
+      b: { x: number; y: number },
+      ease: (t: number) => number
     ) => {
       if (a === b) return b
       const k = (now - start) / duration
       if (k >= 1) return b
-      const t = easings.easeOutQuint(clamp(k))
+      const t = ease(clamp(k))
       return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) }
     }
 
     // expression axis, for each of the two shapes in play
+    // Same duration AND same curve as the expression's own pose blend, or the
+    // two halves of one movement run at different speeds: this axis would
+    // front-load and finish in 0.45s while the pose was still easing through
+    // 0.8s, so the eyes lurched to their new correction and the rest of the
+    // face caught up afterwards. Two-stage, and read as a jump even though
+    // both halves were technically interpolating.
     const byShape = (radii: number[] | null) =>
       alongAxis(
         this.exprAt,
-        BotEngine.SHAPE_MORPH,
+        BotEngine.EXPRESSION_MORPH,
         eyeOffset(radii, state, this.exprPrev?.id ?? null),
-        eyeOffset(radii, state, this.expr?.id ?? null)
+        eyeOffset(radii, state, this.expr?.id ?? null),
+        easings.easeInOutCubic
       )
 
     // then the shape axis
+    // The shape axis keeps its own timing: a silhouette swap is masked by a
+    // blink and is not the movement being watched here.
     return alongAxis(
       this.shapeAt,
       BotEngine.SHAPE_MORPH,
       byShape(this.shapePrev),
-      byShape(this.shape)
+      byShape(this.shape),
+      easings.easeOutQuint
     )
   }
 

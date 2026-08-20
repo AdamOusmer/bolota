@@ -10,6 +10,23 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.1.5
+
+Skips 0.1.4: that number was published by mistake and unpublished, and npm
+never allows an unpublished version to be reused.
+
+### Fixed
+
+- **The eye correction moves on the same clock as the pose it belongs to.** An
+  expression change moves two things: the pose (gaze, split, eye shape) and
+  eyefit's per-shape offset correction. The offset axis was interpolating over
+  `SHAPE_MORPH` on an ease-out quintic while the pose used `EXPRESSION_MORPH`
+  on a symmetric ease, so it front-loaded, finished in 0.45s, and left the pose
+  still easing for another 0.35s. Both halves interpolated and the movement
+  still read as a jump, because it arrived in two stages. Measured on a capsule
+  seed across four expressions, the worst single frame is now a consistent 6%
+  of the total travel.
+
 ## 0.1.3
 
 ### Changed

@@ -2,6 +2,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { BotEngine } from "../src/bloub/engine";
+import { _layout } from "../src/bolota";
+import { _seededSilhouette } from "../src/engine";
 import { EXPRESSION_BY_ID, EXPRESSIONS } from "../src/bloub/expressions";
 import { eyePoses } from "../src/bloub/face";
 import { STATE_BY_ID } from "../src/bloub/states";
@@ -440,5 +442,87 @@ describe("adopting and clearing an expression eases, like swapping one does", ()
     // past it: fully wearing the expression, so a later sample is stable
     const after = engine.sample(BotEngine.EXPRESSION_MORPH + 0.01).eyes[0]!.matrix;
     expect(after).not.toBe(mid);
+  });
+});
+
+describe("the eyefit offset moves on the same clock as the pose it belongs to", () => {
+  // The last jump, and the subtlest: an expression change moves TWO things,
+  // the pose (gaze/split/eye shape) and eyefit's per-(shape, state, expression)
+  // offset correction. The offset axis was interpolating over SHAPE_MORPH on an
+  // ease-out quintic while the pose used EXPRESSION_MORPH on a symmetric ease,
+  // so it front-loaded, finished in 0.45s, and left the pose easing for another
+  // 0.35s. Both halves interpolated; the movement still read as a jump,
+  // because it happened in two stages.
+  //
+  // A seeded silhouette matters here: the offset table is keyed by shape, and
+  // a plain circle can land on a zero correction that hides the whole thing.
+  const seeded = () => {
+    const l = _layout("seed-6") as never as {
+      body: { rx: number };
+      draw?: (b: never) => string;
+      petals: { cx: number; cy: number; r: number }[];
+      extra: string[];
+    };
+    return {
+      scale: l.body.rx,
+      shape: _seededSilhouette(l.body as never, l.draw as never, l.petals, l.extra),
+    };
+  };
+
+  const eyeMid = (engine: BotEngine, t: number) => {
+    const eyes = engine.sample(t).eyes;
+    const pts = eyes.map(({ matrix }) => {
+      const n = matrix.slice(7, -1).split(",").map(Number);
+      return { x: n[4]!, y: n[5]! };
+    });
+    return {
+      x: pts.reduce((a, p) => a + p.x, 0) / (pts.length || 1),
+      y: pts.reduce((a, p) => a + p.y, 0) / (pts.length || 1),
+    };
+  };
+
+  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
+
+  for (const id of ["scared", "laughing", "sleepy", "love"] as const) {
+    test(`"${id}" on a seeded body: no frame carries more than a tenth of the movement`, () => {
+      const { scale, shape } = seeded();
+      const engine = new BotEngine(scale, "idle", shape);
+      const plain = new BotEngine(scale, "idle", shape);
+      engine.sample(1);
+      engine.setExpression(EXPRESSION_BY_ID.get(id)!, 1);
+
+      const settled = 1 + BotEngine.EXPRESSION_MORPH + 0.4;
+      const total = dist(eyeMid(engine, settled), eyeMid(plain, settled));
+      expect(total).toBeGreaterThan(1);
+
+      let worst = 0;
+      let prev = eyeMid(engine, 1);
+      for (let t = 1 + 1 / 60; t <= settled; t += 1 / 60) {
+        const now = eyeMid(engine, t);
+        worst = Math.max(worst, dist(now, prev));
+        prev = now;
+      }
+      expect(worst).toBeLessThan(total * 0.1);
+    });
+  }
+
+  test("still moving at SHAPE_MORPH: the offset does not finish on its own, earlier clock", () => {
+    const { scale, shape } = seeded();
+    const engine = new BotEngine(scale, "idle", shape);
+    engine.sample(1);
+    engine.setExpression(EXPRESSION_BY_ID.get("scared")!, 1);
+
+    // The bug in one assertion: with the offset axis on SHAPE_MORPH it was
+    // done by 0.45s, so the eyes stopped, then started again. On one shared
+    // clock the movement is still under way there.
+    const atShapeMorph = eyeMid(engine, 1 + BotEngine.SHAPE_MORPH);
+    const justAfter = eyeMid(engine, 1 + BotEngine.SHAPE_MORPH + 1 / 30);
+    expect(dist(atShapeMorph, justAfter)).toBeGreaterThan(0.02);
+
+    // and it is finished once EXPRESSION_MORPH is past
+    const settled = eyeMid(engine, 1 + BotEngine.EXPRESSION_MORPH + 0.2);
+    const later = eyeMid(engine, 1 + BotEngine.EXPRESSION_MORPH + 0.4);
+    expect(dist(settled, later)).toBeLessThan(0.6);
   });
 });
