@@ -10,6 +10,22 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.1.2
+
+### Fixed
+
+- **Adopting or clearing an expression eases, instead of cutting.** The blend
+  collapsed to the target outright whenever either end was null, so only
+  expression-to-expression transitions interpolated: putting the FIRST
+  expression on a face jumped, and taking one off jumped back. A cycling
+  avatar, which clears between holds, therefore jumped on every change.
+
+  Null is not "no pose", it is "the state's own face", so both ends are real
+  poses now and all three cases run the same interpolation. Blended through
+  the expression blend rather than the pose blend, because the pose blend also
+  interpolates decor and routing a held face through it bled the expression
+  into the state's own dots and arcs.
+
 ## 0.1.1
 
 ### Added
