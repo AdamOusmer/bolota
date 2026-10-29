@@ -10,7 +10,7 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
-## Unreleased
+## 0.1.7
 
 ### Changed
 
