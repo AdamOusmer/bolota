@@ -523,6 +523,69 @@ function el<K extends keyof SVGElementTagNameMap>(
   return node;
 }
 
+const written = new WeakMap<Element, Map<string, string>>();
+
+function setAttrs(node: Element, attrs: Record<string, string | number>): void {
+  let cache = written.get(node);
+  if (!cache) written.set(node, (cache = new Map()));
+  for (const k in attrs) {
+    const v = String(attrs[k]);
+    if (cache.get(k) === v) continue;
+    cache.set(k, v);
+    node.setAttribute(k, v);
+  }
+}
+
+const childLists = new WeakMap<Element, Element[]>();
+
+function setChildren(parent: Element, next: Element[]): void {
+  const prev = childLists.get(parent);
+  if (prev && prev.length === next.length && prev.every((node, i) => node === next[i])) return;
+  childLists.set(parent, next);
+  parent.replaceChildren(...next);
+}
+
+type FrameTick = (ms: number) => void;
+
+// One requestAnimationFrame per window, however many bolotas it hosts.
+const frameLoops = new WeakMap<Window, { ticks: Set<FrameTick>; id: number }>();
+
+function frameLoop(view: Window) {
+  let loop = frameLoops.get(view);
+  if (!loop) frameLoops.set(view, (loop = { ticks: new Set(), id: 0 }));
+  return loop;
+}
+
+function runFrame(view: Window, ms: number): void {
+  const loop = frameLoop(view);
+  loop.id = 0;
+  if (loop.ticks.size === 0) return;
+  loop.id = view.requestAnimationFrame((next) => runFrame(view, next));
+  for (const tick of [...loop.ticks]) {
+    try {
+      tick(ms);
+    } catch (error) {
+      queueMicrotask(() => {
+        throw error;
+      });
+    }
+  }
+}
+
+function startFrames(view: Window, tick: FrameTick): void {
+  const loop = frameLoop(view);
+  loop.ticks.add(tick);
+  if (!loop.id) loop.id = view.requestAnimationFrame((ms) => runFrame(view, ms));
+}
+
+function stopFrames(view: Window, tick: FrameTick): void {
+  const loop = frameLoop(view);
+  loop.ticks.delete(tick);
+  if (loop.ticks.size > 0 || !loop.id) return;
+  view.cancelAnimationFrame(loop.id);
+  loop.id = 0;
+}
+
 /** Bloub's own catalog, plus `swirl` (an interface-only transition in
  * bloub, kept here because it costs nothing to expose) and `wander`
  * (bolota's own addition — the wandering-gaze choreography `idle` used to
@@ -690,92 +753,98 @@ export function mountEngine(
   root.append(defs, back, bodyPath, eyes, front);
   svgRoot.appendChild(root);
 
-  const arcGroup = (frame: BotFrame, half: "back" | "front", group: SVGGElement) => {
-    group.replaceChildren(
-      ...frame.arcs.map((a) =>
-        el(doc, "path", {
-          d: a[half],
-          stroke: `url(#${uid}-${a.id})`,
-          "stroke-width": a.width,
-          opacity: a.opacity,
-        }),
-      ),
-    );
+  // Every node is created once and reused by position: a frame only rewrites
+  // the attributes that changed, and a layer's child list is touched only when
+  // its count changes. Rebuilding them per frame cost the page a DOM mutation
+  // storm, a style recalc for each new node and the garbage behind it.
+  const pools = new Map<string, SVGElement[]>();
+  const take = <K extends keyof SVGElementTagNameMap>(pool: string, tag: K, index: number) => {
+    let nodes = pools.get(pool);
+    if (!nodes) pools.set(pool, (nodes = []));
+    while (nodes.length <= index) nodes.push(el(doc, tag));
+    return nodes[index] as SVGElementTagNameMap[K];
   };
 
-  const dotGroup = (frame: BotFrame, group: SVGGElement) => {
-    group.replaceChildren(
-      ...frame.dots.map((d) =>
-        d.d
-          ? el(doc, "path", {
-              d: d.d,
-              transform: `translate(${d.x} ${d.y}) rotate(${d.rot ?? 0}) scale(${body.rx})`,
-              fill: d.color ?? head,
-              opacity: d.opacity,
-            })
-          : el(doc, "circle", { cx: d.x, cy: d.y, r: d.r, fill: d.color ?? head, opacity: d.opacity }),
-      ),
-    );
-  };
+  const dots = el(doc, "g");
+  const notif = el(doc, "circle", { fill: "#2496e8" });
 
-  let dotsBack: SVGGElement | null = null;
-  let dotsFront: SVGGElement | null = null;
+  const arcPaths = (frame: BotFrame, half: "back" | "front") =>
+    frame.arcs.map((a, i) => {
+      const path = take(`arc-${half}`, "path", i);
+      setAttrs(path, {
+        d: a[half],
+        stroke: `url(#${uid}-${a.id})`,
+        "stroke-width": a.width,
+        opacity: a.opacity,
+      });
+      return path;
+    });
+
+  const gradients = (frame: BotFrame) =>
+    frame.arcs.map((a, i) => {
+      const grad = take("gradient", "linearGradient", i);
+      setAttrs(grad, {
+        id: `${uid}-${a.id}`,
+        gradientUnits: "userSpaceOnUse",
+        x1: a.grad.x1, y1: a.grad.y1, x2: a.grad.x2, y2: a.grad.y2,
+      });
+      const last = a.grad.stops.length - 1;
+      setChildren(grad, a.grad.stops.map((c, s) => {
+        const stop = take(`stop-${i}`, "stop", s);
+        setAttrs(stop, { offset: last > 0 ? s / last : 0, "stop-color": c });
+        return stop;
+      }));
+      return grad;
+    });
+
+  const dotNodes = (frame: BotFrame) => {
+    let paths = 0;
+    let circles = 0;
+    return frame.dots.map((d) => {
+      if (d.d) {
+        const path = take("dot-path", "path", paths++);
+        setAttrs(path, {
+          d: d.d,
+          transform: `translate(${d.x} ${d.y}) rotate(${d.rot ?? 0}) scale(${body.rx})`,
+          fill: d.color ?? head,
+          opacity: d.opacity,
+        });
+        return path;
+      }
+      const circle = take("dot-circle", "circle", circles++);
+      setAttrs(circle, { cx: d.x, cy: d.y, r: d.r, fill: d.color ?? head, opacity: d.opacity });
+      return circle;
+    });
+  };
 
   const render = (frame: BotFrame) => {
-    defs.replaceChildren(
-      ...frame.arcs.map((a) => {
-        const grad = el(doc, "linearGradient", {
-          id: `${uid}-${a.id}`,
-          gradientUnits: "userSpaceOnUse",
-          x1: a.grad.x1, y1: a.grad.y1, x2: a.grad.x2, y2: a.grad.y2,
-        });
-        grad.append(
-          ...a.grad.stops.map((c, i) =>
-            el(doc, "stop", {
-              offset: a.grad.stops.length > 1 ? i / (a.grad.stops.length - 1) : 0,
-              "stop-color": c,
-            }),
-          ),
-        );
-        return grad;
-      }),
-    );
+    setChildren(defs, gradients(frame));
+    setChildren(dots, dotNodes(frame));
 
-    arcGroup(frame, "back", back);
-    arcGroup(frame, "front", front);
-
-    // Particles behind the body (bloub's burst) vs. in front: same DOM slot
-    // either way, just moved between `back`/`front`'s children each frame —
-    // cheaper than keeping two permanently-mounted groups toggling opacity,
-    // and the dot count is tiny (<=5).
-    if (dotsBack) dotsBack.remove();
-    if (dotsFront) dotsFront.remove();
-    const slot = frame.dotsBehind ? back : front;
-    const group = el(doc, "g");
-    slot.appendChild(group);
-    dotGroup(frame, group);
-    if (frame.dotsBehind) dotsBack = group;
-    else dotsFront = group;
-
-    bodyPath.setAttribute("d", frame.bodyPath);
-    bodyPath.setAttribute("opacity", String(frame.bodyAlpha));
-
-    eyes.replaceChildren(
-      ...frame.eyes.map((e) =>
-        el(doc, "path", { d: e.d, transform: e.matrix, opacity: e.alpha, fill: eye }),
-      ),
-    );
-
+    // Particles sit behind the body for bloub's burst and in front otherwise:
+    // the one `dots` group moves between the two layers.
+    const behind = frame.dotsBehind;
+    setChildren(back, behind ? [...arcPaths(frame, "back"), dots] : arcPaths(frame, "back"));
+    const forward: SVGElement[] = arcPaths(frame, "front");
+    if (!behind) forward.push(dots);
     if (frame.notif) {
-      front.appendChild(
-        el(doc, "circle", { cx: frame.notif.x, cy: frame.notif.y, r: frame.notif.r, fill: "#2496e8" }),
-      );
+      setAttrs(notif, { cx: frame.notif.x, cy: frame.notif.y, r: frame.notif.r });
+      forward.push(notif);
     }
+    setChildren(front, forward);
+
+    setAttrs(bodyPath, { d: frame.bodyPath, opacity: frame.bodyAlpha });
+
+    setChildren(eyes, frame.eyes.map((e, i) => {
+      const path = take("eye", "path", i);
+      setAttrs(path, { d: e.d, transform: e.matrix, opacity: e.alpha, fill: eye });
+      return path;
+    }));
   };
 
   const reducedMotion = doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
-  let raf = 0;
+  let running = false;
   let last = 0;
   let clock = 0;
   let loop = false;
@@ -962,7 +1031,6 @@ export function mountEngine(
   render(engine.sample(0));
 
   function tick(ms: number) {
-    raf = doc.defaultView!.requestAnimationFrame(tick);
     // Tighter than bloub's own 64ms: a hitch slows time down instead of
     // jumping the pose forward, which reads as a stutter rather than a snap.
     // Still bounded, for the same reason bloub bounds it: a backgrounded tab
@@ -1033,10 +1101,17 @@ export function mountEngine(
   }
 
   function ensureRunning() {
-    if (!raf && !reducedMotion) {
+    if (!running && !reducedMotion) {
       last = 0;
-      raf = doc.defaultView!.requestAnimationFrame(tick);
+      running = true;
+      startFrames(doc.defaultView!, tick);
     }
+  }
+
+  function halt() {
+    if (!running) return;
+    running = false;
+    stopFrames(doc.defaultView!, tick);
   }
 
   return {
@@ -1104,12 +1179,7 @@ export function mountEngine(
       engine.setExpression(expr ?? null, clock);
       ensureRunning();
     },
-    stop() {
-      if (raf) {
-        doc.defaultView!.cancelAnimationFrame(raf);
-        raf = 0;
-      }
-    },
+    stop: halt,
     follow(target = "window") {
       if (target === false) {
         detachFollow();
@@ -1124,8 +1194,7 @@ export function mountEngine(
     },
     destroy() {
       detachFollow();
-      if (raf) doc.defaultView!.cancelAnimationFrame(raf);
-      raf = 0;
+      halt();
       root.remove();
     },
   };
