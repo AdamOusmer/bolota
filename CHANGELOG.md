@@ -10,6 +10,19 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.1.7
+
+### Changed
+
+- **`mountEngine` shares one animation frame per window and reuses its SVG
+  nodes.** Every bolota on a page now ticks from a single
+  `requestAnimationFrame`, and a frame rewrites only the attributes that
+  changed instead of rebuilding the eyes, rings, gradients and particles. With
+  23 bolotas idling, DOM child-list mutations drop from about 4,100 a second to
+  none and main-thread task time from 130ms to 101ms a second; with all of them
+  orbiting, task time drops from 455ms to 334ms. Faces and motion are
+  unchanged.
+
 ## 0.1.6
 
 ### Changed

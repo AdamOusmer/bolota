@@ -196,8 +196,11 @@ const ENTRIES: {
     // Raised from 17400 (2026-08-20) for the per-seed gaze solve: the window
     // fillers, and `_safeGaze` walking a real silhouette with the eye's own
     // extent at mount. Measured 17618, so this keeps the usual ~3% of room.
+    // Raised from 18200 (2026-10-29) for the shared per-window frame loop and
+    // the node pools that let a frame update the SVG in place instead of
+    // rebuilding it. Measured 18220 on CI's linux runner, so ~3% of room again.
     name: "engine",
-    budget: 18200,
+    budget: 18800,
     external: [],
     source: `import { mountEngine } from "../../src/engine";
              globalThis.x = mountEngine;`,
