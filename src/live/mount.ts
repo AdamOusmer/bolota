@@ -8,7 +8,7 @@ import type { Expression } from "../expression";
 import { r3, type Pose } from "../morph";
 import { actTransform, type Act } from "./act";
 import { CHOREO, TRACK_TURN, expressed, type Eyes, type StateId } from "./choreo";
-import { createDecor, type DecorFrame } from "./decor-stub";
+import { createDecor } from "./decor";
 import { fitEyes, type Correction } from "./fit";
 import { cancelRead, readNextFrame, startFrames, stopFrames } from "./frames";
 import { ALIASES, resolveExpression } from "./names";
@@ -52,7 +52,6 @@ function isStatic(id: StateId): boolean {
 }
 
 type Rect = SVGRectElement;
-type Fallback = Timeline & { decorFrames?: (now: number) => DecorFrame[] };
 
 export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = {}): EngineHandle {
   const doc = svg.ownerDocument;
@@ -63,7 +62,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   const { cx: bx, cy: by, rx: R } = L.body;
   const reduced = !!view.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-  const tl: Fallback = new Timeline();
+  const tl = new Timeline();
   const out: Correction = { pull: 0, shrink: 1 };
   const marks: Mark[] = L.eyes.map((e) => ({ x: (e.cx - L.face.cx) / L.face.rx, y: (e.cy - L.face.cy) / L.face.ry }));
 
@@ -96,8 +95,6 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let restLoop = false;
   let exprPose: Pose | null = null;
   let stillId: StateId = "idle";
-  let enteredState: StateId = "idle";
-  let enteredAt = 0;
 
   let following = false;
   let pointer: { x: number; y: number } | null = null;
@@ -253,18 +250,6 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     decor.update([{ state: stillId, local: c.still, weight: 1 }]);
   }
 
-  function decorFrames(now: number, id: StateId): DecorFrame[] {
-    if (tl.decorFrames) return tl.decorFrames(now);
-    // TEMPORARY until Timeline.decorFrames lands: the state's own clock, while it runs.
-    if (id !== enteredState) {
-      enteredState = id;
-      enteredAt = now;
-    }
-    const local = now - enteredAt;
-    const c = CHOREO[id];
-    return id === "idle" || local >= c.duration + c.morph ? [] : [{ state: id, local, weight: 1 }];
-  }
-
   function frame(now: number, dt: number): boolean {
     const id = tl.state(now);
     const c = CHOREO[id];
@@ -301,7 +286,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     cuedTo = now;
     if (cue !== null) cueBlink(svg);
 
-    const frames = decorFrames(now, id);
+    const frames = tl.decorFrames(now);
     if (frames.length || decorOn) decor.update(frames);
     decorOn = frames.length > 0;
 
