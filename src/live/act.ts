@@ -1,0 +1,76 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+// Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
+
+import { r3 } from "../morph";
+
+/**
+ * Everything a state does to the body in one frame, as one rigid-plus-squash
+ * move of the seed's own outline.
+ *
+ * On a seeded bolota every bloub state draws the seed's profile, either as-is
+ * (`baseBody`) or scaled by the pose's mean radius (`BotEngine.posed()`), so
+ * the silhouette a state carries never reaches the screen, only its pose does.
+ * That pose is this record. Ambient life (breath, bob, blink, saccade) is not
+ * in it: `motion.css` keeps that.
+ *
+ * Units are body units, R = 1 = the resting radius (`body.rx`).
+ */
+export interface Act {
+  /** Centre offset, positive = right, in R. `sil.cx + offX`. */
+  x: number;
+  /** Centre offset, positive = down, in R. `sil.cy + offY`. */
+  y: number;
+  /** Rotation in degrees, positive = clockwise on screen. */
+  rot: number;
+  /** Uniform scale, the pose's mean radius. 1 on `baseBody` states. */
+  s: number;
+  /** Squash, applied on screen axes after the rotation. */
+  sx: number;
+  sy: number;
+  /** Face opacity, 0–1. */
+  eyeAlpha: number;
+}
+
+export const IDLE_ACT: Act = { x: 0, y: 0, rot: 0, s: 1, sx: 1, sy: 1, eyeAlpha: 1 };
+
+/**
+ * `a` part-way to `b`, matching `blendPose` channel for channel.
+ *
+ * Linear on every field except `rot`, which takes the short way round as
+ * `shape.ts`'s `blend` does: an orbit handing back at -1300° must unwind the
+ * last fraction of a turn, not three and a half turns.
+ */
+export function blendAct(a: Act, b: Act, t: number): Act {
+  let dRot = b.rot - a.rot;
+  while (dRot > 180) dRot -= 360;
+  while (dRot < -180) dRot += 360;
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+    rot: a.rot + dRot * t,
+    s: a.s + (b.s - a.s) * t,
+    sx: a.sx + (b.sx - a.sx) * t,
+    sy: a.sy + (b.sy - a.sy) * t,
+    eyeAlpha: a.eyeAlpha + (b.eyeAlpha - a.eyeAlpha) * t,
+  };
+}
+
+/**
+ * The act as one SVG `transform` for a group around the static markup, whose
+ * body is centred on (`cx`, `cy`) with radius `R`.
+ *
+ *   translate(cx + x·R, cy + y·R) scale(s·sx, s·sy) rotate(rot) translate(−cx, −cy)
+ *
+ * This is `toPoints`'s order read right to left: a point is taken relative to
+ * the centre, rotated, squashed on screen axes, then moved by the offset. The
+ * uniform `s` is folded into the squash because it commutes with the rotation;
+ * the squash itself does not, which is why it sits outside `rotate`.
+ */
+export function actTransform(act: Act, R: number, cx: number, cy: number): string {
+  return (
+    `translate(${r3(cx + act.x * R)} ${r3(cy + act.y * R)})` +
+    ` scale(${r3(act.s * act.sx)} ${r3(act.s * act.sy)})` +
+    ` rotate(${r3(act.rot)})` +
+    ` translate(${r3(-cx)} ${r3(-cy)})`
+  );
+}

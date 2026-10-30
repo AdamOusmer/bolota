@@ -1,0 +1,250 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+// Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
+
+import { blendAct, type Act } from "./act";
+import { CHOREO, clamp, easeOutQuint, type StateId } from "./choreo";
+
+/**
+ * State playback as a pure function of the command log and the time.
+ *
+ * Two layers of the old engine meet here and are kept as they were: the blend
+ * (`BotEngine`: cross-fade over the incoming state's `morph`, freezing a fade
+ * that is interrupted, wrapping a looped `period`, stretching a `for` window)
+ * and the player (`mountEngine`'s `play`/`tick`: one-shots handing back to the
+ * rest state after `duration + hold`, looped states without a `period`
+ * restarting every `duration + morph`).
+ *
+ * One deliberate difference: the player fired its automatic transitions on the
+ * first frame at or past their threshold, so when they happened depended on
+ * the frame rate. Here they happen at the threshold itself. A driver that
+ * samples on frames sees the same thing up to that one frame of latency.
+ *
+ * The quirks of the old pair are kept because the parity test holds them:
+ * an outgoing state is wrapped by the incoming state's `looping`, a hand-back
+ * plays the rest state unlooped, and replaying the current state only updates
+ * its looping without restarting its blend clock.
+ */
+
+/** `STATE_HOLD` in `../engine.ts`: how long a one-shot dwells before handing back. */
+export const HOLD = 0.45;
+
+/** The longest step one frame may advance the clock, in seconds. */
+export const MAX_FRAME = 0.034;
+
+/**
+ * Seconds a frame at `ms` advances the clock past one at `lastMs`, or 0 for the
+ * first frame (`lastMs` of 0). The clamp turns a hitch or a backgrounded tab
+ * into slowed time rather than a jump.
+ */
+export const frameDt = (lastMs: number, ms: number): number =>
+  lastMs ? Math.min((ms - lastMs) / 1000, MAX_FRAME) : 0;
+
+export interface PlayOptions {
+  /** Repeat until told otherwise; the state becomes the rest state. */
+  loop?: boolean;
+  /** Seconds to dwell on the finished pose before handing back. */
+  hold?: number;
+  /** Where a one-shot hands back to. Defaults to the current rest state. */
+  rest?: StateId;
+  /** A window to fill, in seconds, when longer than the state. */
+  for?: number;
+}
+
+interface Regs {
+  current: StateId;
+  stateStart: number;
+  loop: boolean;
+  rest: StateId;
+  hold: number;
+  windowFor: number;
+  windowStart: number;
+  windowLoop: boolean;
+
+  cur: StateId;
+  prev: StateId | null;
+  frozen: Act | null;
+  tCur: number;
+  tPrev: number;
+  looping: boolean;
+  stretchOf: StateId | null;
+  stretchBy: number;
+}
+
+function local(r: Regs, id: StateId, elapsed: number): number {
+  const period = CHOREO[id].period;
+  const t = id === r.stretchOf ? elapsed * r.stretchBy : elapsed;
+  return r.looping && period ? t % period : t;
+}
+
+function posed(r: Regs, id: StateId, since: number): Act {
+  return CHOREO[id].act(local(r, id, Math.max(0, since)));
+}
+
+function composed(r: Regs, now: number): Act {
+  const act = posed(r, r.cur, now - r.tCur);
+  const since = now - r.tCur;
+  const morph = CHOREO[r.cur].morph;
+  if (since >= morph) return act;
+  const origin = r.frozen ?? (r.prev ? posed(r, r.prev, now - r.tPrev) : null);
+  if (!origin) return act;
+  return blendAct(origin, act, easeOutQuint(clamp(since / morph)));
+}
+
+/**
+ * Only an interrupted fade freezes its origin. Freezing on every change would
+ * stop the outgoing state dead for the whole fade, when outside a fade it is
+ * already exactly what is on screen.
+ */
+function setState(r: Regs, id: StateId, now: number, loop: boolean): void {
+  if (id === r.cur) {
+    r.looping = loop;
+    return;
+  }
+  const midMorph = r.prev !== null && now - r.tCur < CHOREO[r.cur].morph;
+  r.frozen = midMorph ? composed(r, now) : null;
+  r.prev = r.cur;
+  r.tPrev = r.tCur;
+  r.cur = id;
+  r.tCur = now;
+  r.looping = loop;
+}
+
+function stretch(r: Regs, id: StateId | null, scale: number): void {
+  r.stretchOf = id;
+  r.stretchBy = scale > 0 ? scale : 1;
+}
+
+function restartPeriod(r: Regs): number {
+  const c = CHOREO[r.current];
+  return r.loop && !c.period ? c.duration + c.morph : 0;
+}
+
+/** When the next automatic transition fires, from these registers. */
+function due(r: Regs): number {
+  const period = restartPeriod(r);
+  if (period) return r.stateStart + period;
+  if ((r.loop && !r.windowLoop) || r.current === r.rest) return Infinity;
+  const end = r.stateStart + (CHOREO[r.current].duration + r.hold);
+  return r.windowFor === 0 ? end : Math.max(end, r.windowStart + r.windowFor);
+}
+
+/**
+ * Applies every automatic transition up to and including `now`. A looped
+ * restart cuts all history, so only the last one before `now` matters and it
+ * is found in closed form, however far `now` is.
+ */
+function advance(r: Regs, now: number): void {
+  const period = restartPeriod(r);
+  if (period) {
+    const k = Math.floor((now - r.stateStart) / period);
+    if (k < 1) return;
+    const at = r.stateStart + k * period;
+    r.cur = r.current;
+    r.prev = null;
+    r.frozen = null;
+    r.tCur = at;
+    r.tPrev = at;
+    r.looping = false;
+    r.stateStart = at;
+    return;
+  }
+  const at = due(r);
+  if (at > now) return;
+  r.current = r.rest;
+  r.stateStart = at;
+  r.windowFor = 0;
+  r.windowLoop = false;
+  stretch(r, null, 1);
+  setState(r, r.rest, at, false);
+}
+
+function play(r: Regs, id: StateId, o: PlayOptions, now: number): void {
+  const c = CHOREO[id];
+  r.current = id;
+  r.stateStart = now;
+  r.loop = !!o.loop;
+  r.hold = Math.max(0, o.hold ?? HOLD);
+  r.windowStart = now;
+  const asked = r.loop ? 0 : Math.max(0, o.for ?? 0);
+  // A window shorter than the state is a floor already met.
+  r.windowFor = asked > c.duration ? asked : 0;
+  const stretching = r.windowFor > 0 && !c.period && c.fill !== "hold";
+  stretch(r, stretching ? id : null, stretching ? c.duration / r.windowFor : 1);
+  // A periodic state fills a window by running on, so it needs its wrap, and
+  // hands back on a whole number of periods where the wrap is seamless.
+  r.windowLoop = r.windowFor > 0 && !!c.period;
+  if (r.windowLoop) r.windowFor = Math.ceil(r.windowFor / c.period!) * c.period!;
+  r.rest = o.rest ?? (r.loop ? id : r.rest);
+  setState(r, id, now, r.loop || r.windowLoop);
+}
+
+/**
+ * Commands go in with the time they happen, in order; `sample` reads the act at
+ * any time, past ones included, without changing anything. Each command keeps a
+ * snapshot of the registers it left, so a sample replays only the automatic
+ * transitions since the last command before it.
+ */
+export class Timeline {
+  private readonly log: { at: number; regs: Regs }[];
+
+  constructor(initial: StateId = "idle") {
+    this.log = [
+      {
+        at: -Infinity,
+        regs: {
+          current: initial,
+          stateStart: 0,
+          loop: false,
+          rest: initial,
+          hold: HOLD,
+          windowFor: 0,
+          windowStart: 0,
+          windowLoop: false,
+          cur: initial,
+          prev: null,
+          frozen: null,
+          tCur: 0,
+          tPrev: 0,
+          looping: false,
+          stretchOf: null,
+          stretchBy: 1,
+        },
+      },
+    ];
+  }
+
+  private at(now: number): Regs {
+    let i = this.log.length - 1;
+    while (this.log[i]!.at > now) i--;
+    const r = { ...this.log[i]!.regs };
+    advance(r, now);
+    return r;
+  }
+
+  play(id: StateId, now: number, o: PlayOptions = {}): void {
+    if (now < this.log[this.log.length - 1]!.at) {
+      throw new RangeError(`Timeline: command at ${now} is earlier than the last one`);
+    }
+    const r = this.at(now);
+    play(r, id, o, now);
+    this.log.push({ at: now, regs: r });
+  }
+
+  loop(id: StateId, now: number): void {
+    this.play(id, now, { loop: true });
+  }
+
+  /** The state the player is on at `now`, hand-backs included. */
+  state(now: number): StateId {
+    return this.at(now).current;
+  }
+
+  /** When the next automatic transition after `now` fires, or `Infinity`. */
+  next(now: number): number {
+    return due(this.at(now));
+  }
+
+  sample(now: number): Act {
+    return composed(this.at(now), now);
+  }
+}
