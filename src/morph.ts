@@ -78,6 +78,13 @@ export interface Pose {
   esy2: number;
   /** Extra tilt on the right eye only, before the per-side mirroring. */
   tilt2: number;
+  /** Extra drop on the right eye only, positive = down: a head roll lifts one eye over the other. */
+  edy2: number;
+  /**
+   * Eye pair shift, positive = right. Both eyes move the same way, where `edx`
+   * mirrors them: the head turning, with `esx2` narrowing the far eye.
+   */
+  epx: number;
   /**
    * How much of the **seeded** eye lean the pose overrides, 0–1. At 0 the pose's
    * `tilt` adds to whatever lean the seed drew; at 1 the seeded lean is cancelled
@@ -125,6 +132,8 @@ export const IDENT: Pose = {
   esx2: 0,
   esy2: 0,
   tilt2: 0,
+  edy2: 0,
+  epx: 0,
   lock: 0,
   heat: 0,
   shake: 0,
@@ -172,8 +181,8 @@ export function bakePose<L extends Posable>(
         // `--mo-wrap`'s sign, spelled out: -1 on the left eye, +1 on the right,
         // so a positive tilt leans both tops outward and brings the inner edges
         // down. That asymmetry is the entire brow vocabulary available here.
-        cx: e.cx + p.edx * (i ? 1 : -1),
-        cy: e.cy + p.edy,
+        cx: e.cx + p.edx * (i ? 1 : -1) + p.epx,
+        cy: e.cy + p.edy + (i ? p.edy2 : 0),
         // The `*2` differential lands on the right eye only, which is
         // `--mo-sel`'s job on the animated side. It is added *before* the
         // mirroring on `tilt`, matching `calc(var(--mo-t) * var(--mo-wrap))` —
@@ -222,7 +231,7 @@ export function poseTransforms<L extends Posable>(
       const sel = i ? 1 : 0;
       const lean = e.rot;
       return (
-        `translate(${r3(e.cx + p.edx * wrap)} ${r3(e.cy + p.edy)})` +
+        `translate(${r3(e.cx + p.edx * wrap + p.epx)} ${r3(e.cy + p.edy + sel * p.edy2)})` +
         ` rotate(${r3((p.tilt + sel * p.tilt2) * wrap + lean * (1 - p.lock))})` +
         ` scale(${r3(p.esx + sel * p.esx2)} ${r3(p.esy + sel * p.esy2)})` +
         ` rotate(${r3(-lean)})` +

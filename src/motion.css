@@ -100,6 +100,16 @@
   inherits: true;
   initial-value: 0;
 }
+@property --mo-edy2 {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --mo-epx {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
 /**
  * How much of the seeded eye lean the pose overrides, 0–1.
  *
@@ -237,8 +247,8 @@
    * The pose channels and their two parallel lists, hoisted into properties of
    * their own.
    *
-   * Transition lists match up by index, so eleven channels means eleven
-   * durations and eleven easings — stated once here and referenced from the `:hover` rule, which
+   * Transition lists match up by index, so thirteen channels means thirteen
+   * durations and thirteen easings — stated once here and referenced from the `:hover` rule, which
    * used to restate the whole duration list to change one entry. Substitution
    * happens on this element, so `.mo-expr`'s shorter `--mo-morph` still reaches
    * them.
@@ -248,14 +258,16 @@
    * two groups below rather than composed here.
    */
   --mo-tp: --mo-esx, --mo-esy, --mo-tilt, --mo-edy, --mo-edx, --mo-esx2,
-    --mo-esy2, --mo-tilt2, --mo-lock, --mo-shake, --mo-bdy;
+    --mo-esy2, --mo-tilt2, --mo-edy2, --mo-epx, --mo-lock, --mo-shake, --mo-bdy;
   --mo-md: var(--mo-morph), var(--mo-morph), var(--mo-morph), var(--mo-morph),
     var(--mo-morph), var(--mo-morph), var(--mo-morph), var(--mo-morph),
-    var(--mo-morph), var(--mo-morph), var(--mo-morph);
+    var(--mo-morph), var(--mo-morph), var(--mo-morph), var(--mo-morph),
+    var(--mo-morph);
   --mo-me: var(--mo-morph-ease), var(--mo-morph-ease), var(--mo-morph-ease),
     var(--mo-morph-ease), var(--mo-morph-ease), var(--mo-morph-ease),
     var(--mo-morph-ease), var(--mo-morph-ease), var(--mo-morph-ease),
-    var(--mo-morph-ease), var(--mo-morph-ease);
+    var(--mo-morph-ease), var(--mo-morph-ease), var(--mo-morph-ease),
+    var(--mo-morph-ease);
 
   transition-property: --mo-amp, transform, var(--mo-tp);
   transition-duration:
@@ -593,8 +605,8 @@
    * away from the face's midline — the same mirroring `bakePose` applies to the
    * static path, which is what keeps the two renderings of one pose identical.
    */
-  translate: calc(var(--mo-edx) * var(--mo-wrap, 1) * 1px)
-    calc(var(--mo-edy) * 1px);
+  translate: calc((var(--mo-edx) * var(--mo-wrap, 1) + var(--mo-epx)) * 1px)
+    calc((var(--mo-edy) + var(--mo-edy2) * var(--mo-sel)) * 1px);
   /*
    * The pose's tilt, mirrored per side, less however much of the seeded lean the
    * pose claims. It used to be a term added to every stop of `@keyframes

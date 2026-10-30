@@ -174,6 +174,8 @@ export const happy: Expression = {
     esx2: 0.08,
     esy2: 0.05,
     tilt2: -16,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0,
     shake: 0,
@@ -194,6 +196,8 @@ export const sad: Expression = {
     esx2: -0.05,
     esy2: -0.07,
     tilt2: -7,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0,
     shake: 0,
@@ -224,6 +228,8 @@ export const mad: Expression = {
     esx2: 0,
     esy2: -0.03,
     tilt2: 5,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0.62,
     shake: 0.55,
@@ -282,6 +288,8 @@ export const surprised: Expression = {
     esx2: 0.05,
     esy2: 0.07,
     tilt2: 3,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0,
     shake: 0,
@@ -314,6 +322,8 @@ export const wink: Expression = {
     esx2: 0.26,
     esy2: -0.56,
     tilt2: -11,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0,
     shake: 0,
@@ -346,6 +356,8 @@ export const sleepy: Expression = {
     esx2: -0.04,
     esy2: 0.03,
     tilt2: 4,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0,
     shake: 0,
@@ -378,6 +390,8 @@ export const smug: Expression = {
     esx2: 0.06,
     esy2: -0.06,
     tilt2: -36,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0,
     shake: 0,
@@ -410,6 +424,8 @@ export const unsure: Expression = {
     esx2: 0.24,
     esy2: -0.44,
     tilt2: -18,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0,
     shake: 0,
@@ -446,6 +462,8 @@ export const scared: Expression = {
     esx2: -0.04,
     esy2: 0.05,
     tilt2: 4,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0,
     shake: 0.35,
@@ -511,6 +529,8 @@ export const love: Expression = {
     esx2: 0.05,
     esy2: 0.06,
     tilt2: 6,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0.6,
     shake: 0,
@@ -541,6 +561,8 @@ export const shy: Expression = {
     esx2: -0.05,
     esy2: -0.04,
     tilt2: -8,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0.55,
     shake: 0,
@@ -574,6 +596,8 @@ export const sick: Expression = {
     esx2: 0.05,
     esy2: -0.05,
     tilt2: -6,
+    edy2: 0,
+    epx: 0,
     lock: 1,
     heat: 0.6,
     shake: 0.18,
@@ -589,8 +613,13 @@ export const sick: Expression = {
  * seeded eyes. Starting numbers came off a channel-by-channel conversion of
  * each `BotExpression` (eye `w`/`h` over bloub's resting 0.186/0.412 for the
  * scales, `split` for `edx`, `pitch` for `edy`, eye tilt plus head roll for
- * `tilt`), then were tuned against bloub frames of the same seeds. Head `yaw`
- * has no static channel; a sideways glance is the gaze layer's job.
+ * `tilt`), then were tuned against bloub frames of the same seeds.
+ *
+ * Head roll and yaw go through the same composition as the live states'
+ * `head` in `live/choreo.ts`, on a 20-unit eye sphere with the pair 9.5 units
+ * either side: a roll `r` lifts the left eye `9.5·sin r` over the right
+ * (`edy`, `edy2`), and a yaw slides the pair toward the turn (`epx`), closes
+ * it a little (`edx`) and narrows the far eye (`esx`, `esx2`).
  *
  * Sign reminder: bloub's eye tilt is clockwise-positive on both eyes, so a
  * mirrored bloub tilt `t` is `tilt: -t` here, and a shared head roll `r` is the
@@ -610,11 +639,13 @@ export const attentive: Expression = {
     esx: 1.1,
     esy: 1.12,
     tilt: 4,
-    edy: -1,
-    edx: 0.3,
-    esx2: 0,
+    edy: -0.34,
+    edx: 0.28,
+    esx2: -0.08,
     esy2: 0,
     tilt2: -8,
+    edy2: -1.33,
+    epx: 1.23,
     lock: 1,
     heat: 0,
     shake: 0,
@@ -637,10 +668,12 @@ export const excited: Expression = {
     esy: 1,
     tilt: 10,
     edy: 1.2,
-    edx: 1.6,
-    esx2: 0,
+    edx: 1.55,
+    esx2: -0.18,
     esy2: 0,
     tilt2: 0,
+    edy2: 0,
+    epx: 1.84,
     lock: 1,
     heat: 0,
     shake: 0.15,
@@ -666,10 +699,12 @@ export const laughing: Expression = {
     esy: 0.24,
     tilt: -14,
     edy: -2.4,
-    edx: 1.4,
-    esx2: 0,
+    edx: 1.38,
+    esx2: -0.13,
     esy2: 0,
     tilt2: 0,
+    edy2: 0,
+    epx: 1.23,
     lock: 1,
     heat: 0,
     shake: 0.3,
@@ -680,23 +715,27 @@ export const laughing: Expression = {
 };
 
 /**
- * The head tipped: both eyes leaning hard the same way, the far one smaller.
+ * The head tipped and turned: both eyes leaning hard the same way, the right
+ * one raised and narrowed as the far eye.
  *
  * bloub carries curiosity in head roll, and roll on two eyes is a parallel
  * lean, so this is `smug`'s `tilt2 = -2 × tilt` trick at full strength on a
- * portrait capsule. `unsure` is the other asymmetric pose; it squashes one eye
- * to a third and barely leans, where this keeps both eyes open and leans 18°.
+ * portrait capsule, with the roll's lift and bloub's 16° yaw on top. `unsure`
+ * is the other asymmetric pose; it squashes one eye to a third and barely
+ * leans, where this keeps both eyes open and leans 18°.
  */
 export const curious: Expression = {
   p: {
     esx: 1,
     esy: 0.9,
     tilt: 18,
-    edy: 0.6,
-    edx: 0.4,
-    esx2: -0.18,
+    edy: 3.54,
+    edx: 0.03,
+    esx2: -0.27,
     esy2: -0.2,
     tilt2: -36,
+    edy2: -5.87,
+    epx: 4.85,
     lock: 1,
     heat: 0,
     shake: 0,
@@ -719,10 +758,12 @@ export const proud: Expression = {
     esy: 0.32,
     tilt: -12,
     edy: -2.6,
-    edx: 1,
-    esx2: 0,
+    edx: 0.96,
+    esx2: -0.14,
     esy2: 0,
     tilt2: 0,
+    edy2: 0,
+    epx: 1.53,
     lock: 1,
     heat: 0,
     shake: 0,

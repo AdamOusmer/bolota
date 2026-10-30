@@ -14,11 +14,11 @@ import { SEEDS } from "./golden/corpus";
 import { hash } from "./golden/format";
 
 const PINNED = {
-  attentive: "648804f9ee5d524c",
-  excited: "3ab0c69ef8156df1",
-  laughing: "a233ea7afcb97111",
-  curious: "d2ce2a77203eda05",
-  proud: "5f9677372a6824dd",
+  attentive: "c70a807b37590b92",
+  excited: "be3af59ba64f6269",
+  laughing: "7e1ff48510493b70",
+  curious: "38b3f3231da4a846",
+  proud: "eb43b5604f2c3168",
 };
 
 const POSES = { attentive, excited, laughing, curious, proud };

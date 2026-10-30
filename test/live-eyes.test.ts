@@ -49,11 +49,24 @@ describe("per-state eyes", () => {
     expect(CHOREO.wink.eyes(0.6).pose.esy2).toBeCloseTo(0, 12);
   });
 
-  test("notify looks away and orbit's gaze jostles round a full turn", () => {
-    expect(CHOREO.notify.eyes(1).track.x).toBeLessThan(-0.4);
-    const xs = times("orbit").map((t) => CHOREO.orbit.eyes(t).track.x);
-    expect(Math.min(...xs)).toBeLessThan(-0.3);
-    expect(Math.max(...xs)).toBeGreaterThan(0.3);
+  test("notify looks away and orbit's head jostles round a full turn", () => {
+    expect(CHOREO.notify.eyes(1).pose.epx).toBeLessThan(-5);
+    const ps = times("orbit").map((t) => CHOREO.orbit.eyes(t).pose);
+    expect(Math.min(...ps.map((p) => p.epx))).toBeLessThan(-4);
+    expect(Math.max(...ps.map((p) => p.epx))).toBeGreaterThan(4);
+    expect(Math.max(...ps.map((p) => Math.abs(p.edy2)))).toBeGreaterThan(1);
+  });
+
+  test("a head roll lifts one eye over the other, a turn narrows the far eye", () => {
+    const l = _layout("seed-7");
+    const level = (p: Pose) => {
+      const [a, b] = bakePose(l, p).l.eyes;
+      return { drop: b!.cy - a!.cy - (l.eyes[1]!.cy - l.eyes[0]!.cy), width: b!.rx / l.eyes[1]!.rx / (a!.rx / l.eyes[0]!.rx) };
+    };
+    expect(level(CHOREO.wide.eyes(1).pose).drop).toBeGreaterThan(3);
+    expect(level(CHOREO.notify.eyes(1).pose).drop).toBeLessThan(-3);
+    expect(level(CHOREO.notify.eyes(1).pose).width).toBeGreaterThan(1.1);
+    expect(level(CHOREO.play.eyes(1).pose).width).toBeLessThan(0.95);
   });
 
   test("no state fuses the seeded eyes or pushes them off the body", () => {
@@ -61,17 +74,42 @@ describe("per-state eyes", () => {
       const t = (e.rot * Math.PI) / 180;
       return Math.abs(e.rx * Math.cos(t)) + Math.abs(e.ry * Math.sin(t));
     };
-    const layouts = Array.from({ length: 600 }, (_, i) => _layout(`seed-${i}`));
-    for (const id of IDS)
-      for (const t of times(id).filter((_, i) => i % 4 === 0)) {
+    const layouts = Array.from({ length: 600 }, (_, i) => {
+      const l = _layout(`seed-${i}`);
+      return { l, sil: _seededSilhouette(l.body, l.draw, l.petals, l.extra) };
+    });
+    for (const id of IDS) {
+      let gap = Infinity;
+      let slack = Infinity;
+      for (const t of times(id)) {
         const p = CHOREO[id].eyes(t).pose;
-        for (const l of layouts) {
-          const [a, b] = bakePose(l, p).l.eyes as { cx: number; cy: number; rx: number; ry: number; rot: number }[];
-          expect(Math.abs(b!.cx - a!.cx) - reach(a!) - reach(b!), id).toBeGreaterThan(0);
-          for (const e of [a!, b!])
-            expect(Math.abs(e.cx - l.body.cx) + reach(e), id).toBeLessThan(l.body.rx * 1.12);
+        for (const { l, sil } of layouts) {
+          const eyes = bakePose(l, p).l.eyes;
+          const [a, b] = eyes;
+          gap = Math.min(gap, Math.abs(b!.cx - a!.cx) - reach(a!) - reach(b!));
+          for (const e of eyes) {
+            const r = (e.rot * Math.PI) / 180;
+            for (const [u, v] of [[e.rx, e.ry], [e.rx, -e.ry], [-e.rx, e.ry], [-e.rx, -e.ry]] as const) {
+              const x = e.cx + u * Math.cos(r) - v * Math.sin(r) - l.body.cx;
+              const y = e.cy + u * Math.sin(r) + v * Math.cos(r) - l.body.cy;
+              slack = Math.min(slack, radiusAtAngle(sil, Math.atan2(y, x)) - Math.hypot(x, y) / l.body.rx);
+            }
+          }
         }
       }
+      expect(gap, id).toBeGreaterThan(2);
+      expect(slack, id).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("notify's eyes", () => {
+  test("keep the capsule's own aspect or narrow it, never widen it toward square", () => {
+    for (const t of times("notify")) {
+      const p = CHOREO.notify.eyes(t).pose;
+      expect(p.esx, `@${t}`).toBeLessThanOrEqual(p.esy + 1e-12);
+      expect(p.esx + p.esx2, `@${t}`).toBeLessThanOrEqual(p.esy + p.esy2 + 1e-12);
+    }
   });
 });
 

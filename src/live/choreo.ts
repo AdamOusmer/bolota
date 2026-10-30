@@ -23,8 +23,8 @@ import { IDLE_ACT, type Act } from "./act";
  *
  * The eyes are re-expressed rather than transcribed: bloub places its own eyes
  * on a sphere, a bolota keeps its seeded ones, so each state's eye shape, head
- * roll and gaze land on the `Pose` channels and a `Track` that mean the same
- * thing on screen. Eyes ride inside the act's transform, so a state that
+ * roll and yaw land on the `Pose` channels (`head`) and its pitch on a `Track`,
+ * each meaning the same thing on screen. Eyes ride inside the act's transform, so a state that
  * shrinks the body takes the face with it. `orbit` spins the body and keeps the
  * face level through `Act.upright`, as bloub does; `play` holds its triangle
  * unturned, so its face is level without it.
@@ -82,20 +82,56 @@ export const TRACK_TURN = 35;
 
 export const CENTRE: Track = { x: 0, y: 0 };
 
-/** bloub's head `yaw`/`pitch` in degrees as a track. bloub's pitch is up-positive. */
-const look = (yaw: number, pitch: number): Track => ({
-  x: yaw / TRACK_TURN,
-  y: -pitch / TRACK_TURN,
-});
-
-/**
- * bloub's head roll, clockwise-positive degrees: both eyes lean the same way.
- * Locked, because bloub draws every eye at the roll alone; the seeded lean
- * stacked on top doubles it on half the seeds and cancels it on the rest.
- */
-const roll = (deg: number) => ({ tilt: -deg, tilt2: 2 * deg, lock: 1 });
+/** bloub's head `pitch` in degrees as a track. bloub's pitch is up-positive. */
+const nod = (pitch: number): Track => ({ x: 0, y: -pitch / TRACK_TURN });
 
 const pose = (p: Partial<Pose>): Pose => ({ ...IDENT, ...p });
+
+/**
+ * The eye sphere a turn swings the pair on, and the median half spacing of the
+ * pair. bloub's own sphere would be 26 on a median seed (0.8 × `body.rx`);
+ * at 20, `wander`'s 28° glance and `notify`'s 22° keep every seed's eyes
+ * inside its outline.
+ */
+const FACE_R = 20;
+const HALF_GAP = 9.5;
+const SPREAD = Math.asin(HALF_GAP / FACE_R);
+const rad = (deg: number) => (deg * Math.PI) / 180;
+
+/**
+ * `p` with bloub's head roll and yaw composed on, in degrees, clockwise and
+ * rightward positive.
+ *
+ * Roll leans both eyes the same way and turns the pair about its midpoint, so
+ * the right eye drops as far as the left one rises. The lean is locked,
+ * because bloub draws every eye at the roll alone; the seeded lean stacked on
+ * top doubles it on half the seeds and cancels it on the rest.
+ *
+ * Yaw turns the eye sphere: the pair slides toward the turn, closes up a
+ * little, and the far eye narrows against the near one. The near eye keeps its
+ * width: eyes are drawn once and posed by transform, so widening a portrait
+ * capsule would flatten its round caps toward a square.
+ */
+function head(p: Partial<Pose>, roll: number, yaw = 0): Pose {
+  const b = pose(p);
+  const lift = HALF_GAP * Math.sin(rad(roll));
+  const y = rad(yaw);
+  const near = Math.max(Math.cos(y - SPREAD), Math.cos(y + SPREAD));
+  const left = Math.cos(y - SPREAD) / near;
+  const right = Math.cos(y + SPREAD) / near;
+  return {
+    ...b,
+    tilt: -roll,
+    tilt2: 2 * roll,
+    lock: 1,
+    edy: b.edy - lift,
+    edy2: b.edy2 + 2 * lift,
+    epx: b.epx + FACE_R * Math.sin(y) * Math.cos(SPREAD),
+    edx: b.edx + FACE_R * Math.sin(SPREAD) * (Math.cos(y) - 1),
+    esx: b.esx * left,
+    esx2: (b.esx + b.esx2) * right - b.esx * left,
+  };
+}
 
 const REST: Eyes = { pose: IDENT, track: CENTRE, alpha: 1 };
 const EYELESS: Eyes = { pose: IDENT, track: CENTRE, alpha: 0 };
@@ -103,15 +139,15 @@ const rest = (): Eyes => REST;
 const eyeless = (): Eyes => EYELESS;
 
 /** bloub's `REST_GAZE`: the sideways, upward glance `wander` holds. */
-const WANDER_EYES: Eyes = { pose: pose(roll(-13)), track: look(28.49, 28.62), alpha: 1 };
+const WANDER_EYES: Eyes = { pose: head({ edx: 0.6 }, -13, 28.49), track: nod(28.62), alpha: 1 };
 
 /**
  * bloub's open 0.236 × 0.464 eye and its 0.447 × 0.089 slit, as factors on the
  * seeded capsule, which is already taller than bloub's.
  */
-const WINK_OPEN_POSE = pose({ esx: 1.15, esy: 1.05, edx: 0.4, ...roll(6.7) });
-const WINK_SHUT_POSE: Pose = { ...WINK_OPEN_POSE, esx2: 0.7, esy2: -0.85 };
-const WINK_LOOK = look(-5.37, 4.55);
+const WINK_OPEN_POSE = head({ esx: 1.15, esy: 1.05, edx: 0.4 }, 6.7, -5.37);
+const WINK_SHUT_POSE: Pose = { ...WINK_OPEN_POSE, esx2: WINK_OPEN_POSE.esx2 + 0.7, esy2: -0.85 };
+const WINK_LOOK = nod(4.55);
 
 function winkShut(t: number): number {
   if (t < WINK_CLOSE) return easeInOutCubic(clamp(t / WINK_CLOSE));
@@ -126,21 +162,26 @@ function winkShut(t: number): number {
  * downcast instead of startled.
  */
 const WIDE_EYES: Eyes = {
-  pose: pose({ esx: 1.6, esy: 1.4, edx: 1.5, ...roll(11.6) }),
-  track: look(6.92, 0),
+  pose: head({ esx: 1.6, esy: 1.4, edx: 2.2 }, 11.6, 6.92),
+  track: CENTRE,
   alpha: 1,
 };
 
-/** Big round eyes, turned away from the badge. */
+/**
+ * Big eyes, turned away from the badge. bloub's are round; a seeded capsule
+ * posed by transform cannot be made round without squaring its caps, so the
+ * read is carried by a uniform 1.3 scale, the roll lifting the near eye, the
+ * turn narrowing the far one, and the glance.
+ */
 const NOTIFY_EYES: Eyes = {
-  pose: pose({ esx: 1.9, esy: 0.8, edx: 1.5, ...roll(-12.2) }),
-  track: look(-21.94, -5.82),
+  pose: head({ esx: 1.3, esy: 1.3, edx: 1.3 }, -12.2, -21.94),
+  track: nod(-5.82),
   alpha: 1,
 };
 
 /** bloub's 0.18 × 0.34 eyes for `play` and `orbit`, a little under rest. */
 const SMALL = { esx: 0.97, esy: 0.83 };
-const PLAY_EYES: Eyes = { pose: pose({ ...SMALL, ...roll(-6) }), track: look(12, -8), alpha: 1 };
+const PLAY_EYES: Eyes = { pose: head(SMALL, -6, 12), track: nod(-8), alpha: 1 };
 const ORBIT_JOSTLE_YAW = 16;
 const ORBIT_JOSTLE_PITCH = 10;
 const ORBIT_JOSTLE_ROLL = 6;
@@ -361,8 +402,8 @@ export const CHOREO: Record<StateId, Choreo> = {
     eyes: (t) => {
       const rot = -TAU * 1.25 * t;
       return {
-        pose: pose({ ...SMALL, ...roll(Math.sin(rot * 2) * ORBIT_JOSTLE_ROLL) }),
-        track: look(Math.sin(rot) * ORBIT_JOSTLE_YAW, Math.cos(rot) * ORBIT_JOSTLE_PITCH),
+        pose: head(SMALL, Math.sin(rot * 2) * ORBIT_JOSTLE_ROLL, Math.sin(rot) * ORBIT_JOSTLE_YAW),
+        track: nod(Math.cos(rot) * ORBIT_JOSTLE_PITCH),
         alpha: 1,
       };
     },

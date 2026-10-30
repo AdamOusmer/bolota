@@ -50,8 +50,10 @@
     var(--mo-gz-t1, 0) + (var(--mo-gz-t2, 0) - var(--mo-gz-t1, 0)) * var(--mo-sel)
   );
 
-  translate: calc((var(--mo-edx) * var(--mo-wrap, 1) + var(--mo-gz-dx)) * 1px)
-    calc((var(--mo-edy) + var(--mo-gz-dy)) * 1px);
+  translate: calc(
+      (var(--mo-edx) * var(--mo-wrap, 1) + var(--mo-epx) + var(--mo-gz-dx)) * 1px
+    )
+    calc((var(--mo-edy) + var(--mo-edy2) * var(--mo-sel) + var(--mo-gz-dy)) * 1px);
 
   rotate: calc(
     (
