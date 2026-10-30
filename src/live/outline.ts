@@ -116,6 +116,19 @@ function table(l: OutlineLayout): Float64Array {
   return t;
 }
 
+const floors = new WeakMap<object, number>();
+
+/** The shortest radius of the outline: any point nearer the centre than this is inside it. */
+export function floor(l: OutlineLayout): number {
+  let f = floors.get(l);
+  if (f !== undefined) return f;
+  const t = table(l);
+  f = Infinity;
+  for (let i = 0; i < RAYS; i++) if (t[i]! < f) f = t[i]!;
+  floors.set(l, f);
+  return f;
+}
+
 const balls = new WeakMap<object, { table: Float64Array; mean: number }>();
 
 /**

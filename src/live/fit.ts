@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
-import { depth, type OutlineLayout } from "./outline";
+import { depth, floor, type OutlineLayout } from "./outline";
 
 /**
  * The one constraint on a live face: every point of both eyes stays `MARGIN`
@@ -125,6 +125,14 @@ function clear(l: FitLayout, x: number, y: number, tc: number, ts: number): bool
   return depth(l, l.body.cx + px * tc - py * ts, l.body.cy + px * ts + py * tc) >= MARGIN;
 }
 
+/** Whether the eye clears the outline, settled without a single query when its bounding circle sits inside the shortest radius `inner`. */
+function holdsEye(l: FitLayout, inner: number, cx: number, cy: number, rx: number, ry: number, rot: number, turn: number): boolean {
+  const dx = cx - l.body.cx;
+  const dy = cy - l.body.cy;
+  if (Math.sqrt(dx * dx + dy * dy) + (rx > ry ? rx : ry) + MARGIN + 1e-6 <= inner) return true;
+  return holds(l, cx, cy, rx, ry, rot, turn);
+}
+
 function fits(l: FitLayout, e: EyeBox[], pull: number, shrink: number, turn: number): boolean {
   const a = e[0]!;
   const b = e[1]!;
@@ -137,9 +145,10 @@ function fits(l: FitLayout, e: EyeBox[], pull: number, shrink: number, turn: num
   PA.cx = ax; PA.cy = ay; PA.rx = a.rx; PA.ry = a.ry; PA.rot = a.rot;
   PB.cx = bx; PB.cy = by; PB.rx = b.rx; PB.ry = b.ry; PB.rot = b.rot;
   if (capsuleGap(PA, PB, shrink) <= CLEARANCE) return false;
+  const inner = floor(l);
   return (
-    holds(l, ax, ay, a.rx * shrink, a.ry * shrink, a.rot, turn) &&
-    holds(l, bx, by, b.rx * shrink, b.ry * shrink, b.rot, turn)
+    holdsEye(l, inner, ax, ay, a.rx * shrink, a.ry * shrink, a.rot, turn) &&
+    holdsEye(l, inner, bx, by, b.rx * shrink, b.ry * shrink, b.rot, turn)
   );
 }
 
