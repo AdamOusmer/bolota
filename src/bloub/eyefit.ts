@@ -47,7 +47,7 @@
  * directions and cover the worst case of the gaze drift, which a per-frame
  * version couldn't afford.
  *
- * The table is a module-level constant, built at import time from pure
+ * The table is a module-level cache, filled on first lookup from pure
  * data: same nature as `face.ts`'s blink schedule, deterministic and
  * stateless, so it has no effect on the purity of `engine.sample(t)`.
  */
@@ -55,8 +55,7 @@
 import { EXPRESSIONS, type BotExpression } from './expressions'
 import { eyePoses, MAX_PITCH_DRIFT, MAX_YAW_DRIFT } from './face'
 import { radiusAtAngle, toPoints, type Point } from './shape'
-import { SHAPES } from './skins'
-import { STATE_BY_ID, STATES, type Pose, type StateDef, type StateId } from './states'
+import { STATE_BY_ID, type Pose, type StateDef, type StateId } from './states'
 
 /** Solver's reference radius. The rendered offset is in units of this radius. */
 const R = 100
@@ -431,70 +430,56 @@ const NONE = { x: 0, y: 0 } as const
 const key = (state: StateId, expr: string | null) => `${state}|${expr ?? ''}`
 
 /**
- * Offset table, built at import: one entry per (shape, base-body state,
+ * Offset table, filled on first lookup: one entry per (shape, base-body state,
  * expression). Only `idle` and `swirl` carry the resting face, so only they
  * get broken out by expression — the other three base-body states have a
  * face lifted straight off the video and a single entry.
  *
  * Keyed by REFERENCE on the radii array, which is already the engine's own
  * convention: its `radii === this.shape` and `expression === this.expr`
- * guards rest on that same stability. An unknown profile, or `null`,
- * corrects nothing — the API accepts any array and the engine shouldn't
- * have to depend on its callers' caution.
+ * guards rest on that same stability. `null` corrects nothing, and a
+ * non-base-body state has no entry to solve.
  */
-function build(): Map<number[], Map<string, { x: number; y: number }>> {
-  return new Map(
-  SHAPES.map((shape) => {
-    const byKey = new Map<string, { x: number; y: number }>()
-    for (const def of STATES) {
-      if (!def.baseBody) continue
-      const expressions = def.baseFace ? [null, ...EXPRESSIONS] : [null]
-      for (const expr of expressions) {
-        byKey.set(key(def.id, expr?.id ?? null), offsetFor(def, shape.radii, expr))
-      }
-    }
-    return [shape.radii, byKey]
-  })
-  )
-}
-
-const OFFSETS = build()
+const OFFSETS = new Map<number[], Map<string, { x: number; y: number }>>()
 
 /**
- * bolota divergence from the bloub port: `build()` above only ever walks `SHAPES`,
- * bloub's own fixed 8-entry personalizer catalog. bolota seeds an arbitrary
- * superellipse per avatar (`engine.ts`'s `seededSilhouette`) — a `number[]` that is
- * never `===` any entry `build()` built, so `OFFSETS.get(radii)` always missed for a
- * real avatar and `eyeOffset` fell through to `NONE` unconditionally. The
- * correction this whole module exists for (see file header) was therefore dead code
- * for every seeded avatar: eyes rendered at the raw, uncorrected `radiusAtAngle` fit,
- * which is exactly the "stuck at the top/side" report — the fit that `eyefit.ts` was
- * built to patch, silently never running.
+ * bolota divergence from the bloub port: bloub built this table eagerly at import
+ * for its fixed 8-entry personalizer catalog (`SHAPES`), which cost the whole
+ * first-import time of the engine and never matched a real avatar. bolota seeds an
+ * arbitrary superellipse per avatar (`engine.ts`'s `seededSilhouette`) — a `number[]`
+ * never `===` a catalog entry — so the correction this whole module exists for (see
+ * file header) has to be solved per (radii, state, expr) key on first lookup.
  *
- * Fix: solve the SAME way, just lazily and per (radii, state, expr) key instead of
- * eagerly for the whole catalog. Cost stays "solved once, not per frame" — the
- * invariant the rest of this file is built around (see the module doc comment) — it is
- * just once per *seed* the first time each state/expression combination is actually
- * sampled, instead of once at import for a fixed 8-shape catalog. A seed's `radii`
- * array is a stable reference for the engine's lifetime (only `setShape` replaces it,
- * with a fresh array), so the cache below hits on every frame after the first.
+ * Cost stays "solved once, not per frame" — the invariant the rest of this file is
+ * built around: once per *seed* the first time each state/expression combination is
+ * sampled. A seed's `radii` array is a stable reference for the engine's lifetime
+ * (only `setShape` replaces it, with a fresh array), so the cache hits on every
+ * frame after the first. A catalog shape is solved by the same call, so it gets the
+ * values the eager table held.
  */
-function solveForKey(radii: number[], state: StateId, expr: string | null) {
+function solveForKey(
+  byKey: Map<string, { x: number; y: number }>,
+  radii: number[],
+  state: StateId,
+  expr: string | null
+) {
   const def = STATE_BY_ID.get(state)
   if (!def || !def.baseBody) return NONE
   const exprDef = def.baseFace ? (EXPRESSIONS.find((e) => e.id === expr) ?? null) : null
-  return offsetFor(def, radii, exprDef)
+  // A state with no resting face, or an unknown expression, shares the
+  // `null` entry: solved once, never shadowing a real expression's entry.
+  const canonical = key(state, exprDef?.id ?? null)
+  return byKey.get(canonical) ?? offsetFor(def, radii, exprDef)
 }
 
 /**
  * Offset to apply to both eyes for this shape on this state, in units of
  * ball radius — the engine rescales it.
  *
- * Zero as soon as the shape isn't in the catalog AND hasn't been solved
- * yet, which covers `null` and the circle: on the circle both profiles are
- * the same, so the margin is already the required one and the search exits
- * on its first round. The shape lifted off the video therefore doesn't
- * move, with no special case.
+ * Zero for `null` and the circle: on the circle both profiles are the
+ * same, so the margin is already the required one and the search exits on
+ * its first round. The shape lifted off the video therefore doesn't move,
+ * with no special case.
  */
 export function eyeOffset(
   radii: number[] | null,
@@ -503,20 +488,14 @@ export function eyeOffset(
 ): { x: number; y: number } {
   if (!radii) return NONE
   let byKey = OFFSETS.get(radii)
-  // a state with no resting face has only one entry, whatever the expression
-  const hit = byKey?.get(key(state, expr)) ?? byKey?.get(key(state, null))
+  const hit = byKey?.get(key(state, expr))
   if (hit) return hit
-  // Cache miss: not a catalog shape (or a catalog key not yet in this seed's lazily
-  // built map — same map, filled on demand). Solve once for exactly this key.
-  const value = solveForKey(radii, state, expr)
+  // Cache miss: solve once for exactly this key.
   if (!byKey) {
     byKey = new Map()
     OFFSETS.set(radii, byKey)
   }
+  const value = solveForKey(byKey, radii, state, expr)
   byKey.set(key(state, expr), value)
   return value
 }
-
-/** For tests: enough to check the table without redoing the geometry. */
-/** For tests: enough to time the table's construction. */
-export const FOR_TESTS = { build }
