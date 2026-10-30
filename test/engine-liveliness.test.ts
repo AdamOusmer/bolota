@@ -29,7 +29,7 @@ describe("engine liveliness", () => {
 
   test("every state moves the figure away from the resting face", () => {
     for (const state of Object.keys(CHOREO).filter((s) => s !== "idle")) {
-      const { doc, svg, handle } = mounted();
+      const { doc, svg, handle } = mounted("facade-seed", { animate: "always" });
       const rest = svg.outerHTML;
       handle.play(state, { loop: true });
       advance(doc, 0, 1.5);
