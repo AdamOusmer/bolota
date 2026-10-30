@@ -4,7 +4,9 @@ import { describe, expect, test } from "bun:test";
 import { _layout } from "../src/bolota";
 import * as roster from "../src/expression";
 import { CHOREO, expressed } from "../src/live/choreo";
-import { CLEARANCE, MARGIN, fitEyes, type EyeBox } from "../src/live/fit";
+import { CLEARANCE, MARGIN, eyeBox, settleEyes, type EyeBox } from "../src/live/fit";
+import { FOLLOW_MAX_YAW, FOLLOW_PITCH_DOWN, FOLLOW_PITCH_UP } from "../src/live/follow";
+import { MAX_PITCH_DRIFT, MAX_YAW_DRIFT } from "../src/live/head";
 import { edge } from "../src/live/outline";
 import { faceEyes } from "../src/live/rig";
 import type { Pose } from "../src/morph";
@@ -106,8 +108,10 @@ describe("analytic outline", () => {
 });
 
 const ROSTER: Pose[] = Object.values(roster).flatMap((e) => (typeof e === "object" && "p" in e ? [e.p] : []));
-/** Gaze extremes, for the states that follow; a followed face takes the gaze in place of its own turn. */
-const GAZE = [[0, 0], [4, 0], [-4, 0], [0, 4], [0, -4]] as const;
+/** Follow extremes in degrees, yaw and pitch, for the states that follow; a followed face takes them in place of its own turn. */
+const FOLLOW = [[FOLLOW_MAX_YAW, FOLLOW_PITCH_UP], [-FOLLOW_MAX_YAW, FOLLOW_PITCH_DOWN], [0, FOLLOW_PITCH_DOWN], [FOLLOW_MAX_YAW, 0]] as const;
+/** The drift's corners, added to every state that does not own its liveliness. */
+const DRIFT = [[MAX_YAW_DRIFT, MAX_PITCH_DRIFT], [-MAX_YAW_DRIFT, -MAX_PITCH_DRIFT]] as const;
 const RAYS = 2048;
 /**
  * The sweep's seeds: the ones a 1000-seed sweep found corrected most often,
@@ -126,29 +130,28 @@ const SWEEP = (() => {
   return out;
 })();
 
-/** Every point the rig draws for this eye, on a fine grid of its outline. */
+/** Every point the rig draws for this eye, on a fine grid of its outline: the capsule under its own turn, then the head's frame. */
 function rimPoints(e: EyeBox, out: number[]) {
   out.length = 0;
   const r = Math.min(e.rx, e.ry), hx = e.rx - r, hy = e.ry - r;
   const t = (e.rot * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t);
+  const put = (lx: number, ly: number) => {
+    const x = lx * c - ly * s, y = lx * s + ly * c;
+    out.push(e.cx + e.a * x + e.c * y, e.cy + e.b * x + e.d * y);
+  };
   for (let i = 0; i < 40; i++) {
     const a = (i / 40) * Math.PI * 2;
-    const lx = Math.sign(Math.cos(a)) * hx + r * Math.cos(a);
-    const ly = Math.sign(Math.sin(a)) * hy + r * Math.sin(a);
-    out.push(e.cx + lx * c - ly * s, e.cy + lx * s + ly * c);
+    put(Math.sign(Math.cos(a)) * hx + r * Math.cos(a), Math.sign(Math.sin(a)) * hy + r * Math.sin(a));
   }
   for (let j = -4; j <= 4; j++)
-    for (const side of [-1, 1]) {
-      const lx = hx >= hy ? (j / 4) * hx : side * r;
-      const ly = hx >= hy ? side * r : (j / 4) * hy;
-      out.push(e.cx + lx * c - ly * s, e.cy + lx * s + ly * c);
-    }
+    for (const side of [-1, 1]) put(hx >= hy ? (j / 4) * hx : side * r, hx >= hy ? side * r : (j / 4) * hy);
 }
 
 describe("eye constraint", () => {
-  test("every state, expression, frame and gaze extreme stays inside the drawn outline and apart", () => {
-    const corrected = { frames: 0, pulled: 0, shrunk: 0, pulls: [] as number[], shrinks: [] as number[] };
-    const out = { pull: 0, shrink: 1 };
+  test("every state, expression, frame, drift and follow extreme stays inside the drawn outline and apart", () => {
+    const corrected = { frames: 0, eased: 0, shrunk: 0, kept: [] as number[], shrinks: [] as number[] };
+    const out = { gaze: 1, shrink: 1 };
+    const boxes = [eyeBox(), eyeBox()];
     const pts: number[] = [];
     let worstDepth = Infinity, worstGap = Infinity;
     const shapes = new Set<string>();
@@ -175,13 +178,17 @@ describe("eye constraint", () => {
           const turn = act.rot * act.upright;
           const tr = (-turn * Math.PI) / 180, tc = Math.cos(tr), ts = Math.sin(tr);
           const faces = c.baseFace || c.acceptsExpression ? [own, ...ROSTER.map((p) => expressed(c, own, p))] : [own];
-          for (const f of faces)
-            for (const [gx, gy] of c.baseFace ? GAZE : GAZE.slice(0, 1)) {
-              const followed = gx || gy ? { ...f, head: { ...f.head, yaw: 0 } } : f;
-              const eyes = faceEyes(l, followed, turn).map((e) => ({ ...e, cx: e.cx + gx, cy: e.cy + gy }));
-              fitEyes(l, eyes, turn, out);
+          for (const f of faces) {
+            const asks: [number, number, number][] = [];
+            for (const [dy, dp] of c.ownsLiveliness ? [[0, 0] as const] : [[0, 0] as const, ...DRIFT])
+              asks.push([f.head.yaw + dy, f.head.pitch + dp, f.head.roll]);
+            if (c.baseFace) for (const [y, p] of FOLLOW) asks.push([y, p, f.head.roll]);
+            for (const [yaw, pitch, roll] of asks) {
+              const rest = faceEyes(l, f, turn);
+              settleEyes(l, rest, { yaw, pitch, roll }, turn, boxes, out);
+              const eyes = boxes;
               corrected.frames++;
-              if (out.pull > 0) { corrected.pulled++; corrected.pulls.push(out.pull); }
+              if (out.gaze < 1) { corrected.eased++; corrected.kept.push(out.gaze); }
               if (out.shrink < 1) { corrected.shrunk++; corrected.shrinks.push(out.shrink); }
               const rims = eyes.map((e) => {
                 rimPoints(e, pts);
@@ -198,14 +205,15 @@ describe("eye constraint", () => {
                   gap = Math.min(gap, Math.hypot(rims[0]![i]! - rims[1]![j]!, rims[0]![i + 1]! - rims[1]![j + 1]!));
               if (gap < worstGap) worstGap = gap;
             }
+          }
         }
       }
     }
     expect([...shapes].sort()).toEqual(["boxy", "capsule", "cloud", "droplet", "hexagon", "nub", "organic", "round", "sun", "triangle"]);
     const q = (a: number[], p: number) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(p * (a.length - 1))]! : NaN);
     console.log(
-      `fit: ${corrected.frames} frames; pulled ${((100 * corrected.pulled) / corrected.frames).toFixed(2)}% ` +
-        `(median ${q(corrected.pulls, 0.5).toFixed(3)}, max ${q(corrected.pulls, 1).toFixed(3)}); ` +
+      `fit: ${corrected.frames} frames; turn eased ${((100 * corrected.eased) / corrected.frames).toFixed(2)}% ` +
+        `(median kept ${q(corrected.kept, 0.5).toFixed(3)}, min ${q(corrected.kept, 0).toFixed(3)}); ` +
         `shrunk ${((100 * corrected.shrunk) / corrected.frames).toFixed(2)}% (median ${q(corrected.shrinks, 0.5).toFixed(3)}, min ${q(corrected.shrinks, 0).toFixed(3)}); ` +
         `worst depth ${worstDepth.toFixed(3)}, worst gap ${worstGap.toFixed(3)}`,
     );

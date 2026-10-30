@@ -220,12 +220,11 @@ nodes; an empty `<svg>` is filled with it. The eyes become `rect` rigs, the
 viewBox stays `0 0 100 100` with `overflow: visible`, and decor (rings, trails,
 particles) is drawn in the seed's palette and may extend past the box.
 
-It needs stylesheets: `@luzir/bolota/motion.css` for the idle life and poses,
-and `@luzir/bolota/gaze.css` if you call `follow()`.
+It needs one stylesheet, `@luzir/bolota/motion.css`, for the poses and for
+the breath and blink a resting bolota keeps while the engine is idle.
 
 ```ts
 import "@luzir/bolota/motion.css";
-import "@luzir/bolota/gaze.css";
 import { mountEngine } from "@luzir/bolota/engine";
 
 const bot = mountEngine(svgElement, user.id);
@@ -285,12 +284,22 @@ mounting. Unknown names are ignored. An expression shows on the resting
 states (`idle`, `wander`, `swirl`) and on `play`, `burst` and `comet`; every
 other state owns its eyes.
 
+The motion is bloub's: the eyes sit on a sphere the size of the head and a
+head turn carries them round it, foreshortened at the side. Idle life glides
+(slow, never-repeating drift on `wander` and the gestures, bloub's blink
+schedule and a soft breath everywhere), every change eases, and the eyes
+always stay inside the body: when a turn asks for more room than a seed has,
+the turn eases off and a large eye shrinks a little rather than freezing.
+
 Every bolota on a window shares one animation frame, and the frame loop parks
-when nothing moves. Pointer-follow measures geometry on mount, scroll and
-resize only, never per move, and ignores touch pointers. Pointer travel is the
-CSS custom property `--mo-track-travel` (viewBox units, about 1.5 to 4,
-default 3). Under `prefers-reduced-motion` the engine renders one static pose
-and never starts the loop.
+when nothing moves; a resting bolota hands its breath and blink to the
+stylesheet. Pointer-follow turns the head up to 35° sideways, 26° up and 45°
+down across the viewport, reaches each new pointer position in 80 ms on an
+eased curve, and glides back to the state's own gaze when the pointer leaves.
+It measures geometry on mount, scroll and resize only, never per move, and
+ignores touch pointers. `--mo-track-travel` (default 3) scales its reach, so
+1.5 looks half as far. Under `prefers-reduced-motion` the engine
+renders one static pose and never starts the loop.
 
 ***
 
@@ -305,7 +314,7 @@ and never starts the loop.
 | `@luzir/bolota/engine`       | `mountEngine()`, `engineStates()`, `engineExpressions()`, the live engine |
 | `@luzir/bolota/sequences`    | `runSequence()`, friendly names for four engine states         |
 | `@luzir/bolota/motion.css`   | the stylesheet the static renderer's `animate` mode and the engine need |
-| `@luzir/bolota/gaze.css`     | the stylesheet pointer-follow needs                             |
+| `@luzir/bolota/gaze.css`     | kept for existing imports; the engine no longer needs it       |
 
 Every render takes the same options:
 

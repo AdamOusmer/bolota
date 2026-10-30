@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { FakeDocument, drain, eyeAttrs, mountOn, mounted } from "./engine-dom";
 
 const ROSTER = [
-  "happy", "sad", "mad", "surprised", "wink", "sleepy", "smug", "unsure", "scared", "love", "shy", "sick",
+  "happy", "sad", "mad", "surprised", "wink", "sleepy", "smug", "unimpressed", "unsure", "scared", "love", "shy", "sick",
   "attentive", "excited", "laughing", "curious", "proud",
 ];
 

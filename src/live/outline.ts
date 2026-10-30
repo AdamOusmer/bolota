@@ -104,25 +104,32 @@ function exitAlong(l: OutlineLayout, traces: Trace[], theta: number, hits: numbe
 }
 
 const tables = new WeakMap<object, Float64Array>();
+const faces = new WeakMap<object, Float64Array>();
 
-function table(l: OutlineLayout): Float64Array {
-  let t = tables.get(l);
+/**
+ * The exit table of the whole drawn outline, or with `face` of the part a face
+ * may sit on: the core and its petals, without the `extra` ornaments (a
+ * droplet's taper, a nub's bumps) that stand off it.
+ */
+function table(l: OutlineLayout, face = false): Float64Array {
+  const memo = face ? faces : tables;
+  let t = memo.get(l);
   if (t) return t;
-  const traces = [core(l), ...l.extra.map(trace)];
+  const traces = face ? [core(l)] : [core(l), ...l.extra.map(trace)];
   const hits: number[] = [];
   t = new Float64Array(RAYS);
   for (let i = 0; i < RAYS; i++) t[i] = exitAlong(l, traces, (i / RAYS) * Math.PI * 2, hits);
-  tables.set(l, t);
+  memo.set(l, t);
   return t;
 }
 
 const floors = new WeakMap<object, number>();
 
-/** The shortest radius of the outline: any point nearer the centre than this is inside it. */
+/** The shortest radius of the face's outline: any point nearer the centre than this is inside it. */
 export function floor(l: OutlineLayout): number {
   let f = floors.get(l);
   if (f !== undefined) return f;
-  const t = table(l);
+  const t = table(l, true);
   f = Infinity;
   for (let i = 0; i < RAYS; i++) if (t[i]! < f) f = t[i]!;
   floors.set(l, f);
@@ -172,8 +179,8 @@ export function ballEdge(l: OutlineLayout, theta: number): number {
  * (radians, screen axes). The nearer of the two rays either side, so a petal
  * seam or a gap between ray samples never reads as more room than there is.
  */
-export function edge(l: OutlineLayout, theta: number): number {
-  const t = table(l);
+export function edge(l: OutlineLayout, theta: number, face = false): number {
+  const t = table(l, face);
   let u = (theta / (Math.PI * 2)) % 1;
   if (u < 0) u += 1;
   const i = Math.floor(u * RAYS) % RAYS;
@@ -182,11 +189,14 @@ export function edge(l: OutlineLayout, theta: number): number {
   return a < b ? a : b;
 }
 
-/** How far inside the outline `(x, y)` sits along its ray from the body centre; negative outside. */
-export function depth(l: OutlineLayout, x: number, y: number): number {
+/**
+ * How far inside the outline `(x, y)` sits along its ray from the body centre;
+ * negative outside. With `face`, inside the part a face may sit on.
+ */
+export function depth(l: OutlineLayout, x: number, y: number, face = false): number {
   const dx = x - l.body.cx;
   const dy = y - l.body.cy;
-  return edge(l, Math.atan2(dy, dx)) - Math.hypot(dx, dy);
+  return edge(l, Math.atan2(dy, dx), face) - Math.hypot(dx, dy);
 }
 
 /** Whether the outline holds `(x, y)`. */

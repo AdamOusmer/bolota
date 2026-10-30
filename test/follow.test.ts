@@ -1,13 +1,13 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
 import { describe, expect, test } from "bun:test";
-import { drain, eyeAttrs, frame, mounted, rectsOf, type FakeDocument } from "./engine-dom";
+import { drain, eyeAttrs, eyeCentre, frame, mounted, rectsOf, type FakeDocument } from "./engine-dom";
 
 const move = (doc: FakeDocument, clientX: number, clientY: number, pointerType = "mouse") =>
   doc.defaultView.fire("pointermove", { clientX, clientY, pointerType });
 
-const eyeX = (svg: ReturnType<typeof mounted>["svg"]) => Number(rectsOf(svg)[0]!.getAttribute("x"));
-const eyeY = (svg: ReturnType<typeof mounted>["svg"]) => Number(rectsOf(svg)[0]!.getAttribute("y"));
+const eyeX = (svg: ReturnType<typeof mounted>["svg"]) => eyeCentre(rectsOf(svg)[0]!)[0];
+const eyeY = (svg: ReturnType<typeof mounted>["svg"]) => eyeCentre(rectsOf(svg)[0]!)[1];
 const listeners = (doc: FakeDocument) => doc.defaultView.count() + doc.count();
 
 /** Mounts, follows the window, points at `(x, y)` and settles. */

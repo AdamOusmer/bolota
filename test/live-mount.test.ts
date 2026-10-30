@@ -163,27 +163,40 @@ describe("mountLive clock", () => {
     expect(doc.defaultView.queue.length).toBe(0);
   });
 
-  test("orbit holds the ambient idle; the resting face does not", () => {
-    const { doc, svg, handle } = mounted();
-    expect(svg.getAttribute("data-mo-still")).toBeNull();
-    handle.loop("orbit");
-    frame(doc, 16);
-    frame(doc, 32);
-    expect(svg.getAttribute("data-mo-still")).toBe("");
+  test("wander drifts the head and floats the body without end; the resting face holds still", () => {
+    const doc = new FakeDocument();
+    const svg = makeSvg(doc);
+    const handle = mountLive(asSvg(svg), NAME);
+    const act = () => svg.querySelector(".mo-act")!.getAttribute("transform");
     handle.loop("wander");
-    run(doc, 32, 3);
+    let ms = run(doc, 0, 1);
+    const seen = new Set<string>();
+    for (let i = 0; i < 30; i++) {
+      frame(doc, (ms += 16));
+      seen.add(`${act()}|${attrs(svg).join()}`);
+    }
+    expect(seen.size).toBe(30);
+    expect(doc.defaultView.queue.length).toBe(1);
+    handle.loop("idle");
+    ms = run(doc, ms, 2);
+    const still = `${act()}|${attrs(svg).join()}`;
+    for (let i = 0; i < 30; i++) frame(doc, (ms += 16));
+    expect(`${act()}|${attrs(svg).join()}`).toBe(still);
     expect(svg.getAttribute("data-mo-still")).toBeNull();
+    handle.destroy();
   });
 
   test("a blinkIn entrance closes the eyes once, down to 6%, in 200 ms", () => {
     const { doc, svg, handle } = mounted();
     handle.play("thinking");
-    const depths: number[] = [];
+    const heights: number[] = [];
     for (let ms = 16; ms <= 900; ms += 16) {
       frame(doc, ms);
-      const hit = /scale\(1 (\d\.?\d*)\)/.exec(rectsOf(svg)[0]!.getAttribute("transform") ?? "");
-      depths.push(hit ? Number(hit[1]) : 1);
+      const hit = /matrix\(([^)]+)\)/.exec(rectsOf(svg)[0]!.getAttribute("transform") ?? "");
+      heights.push(hit ? Number(hit[1]!.split(" ")[3]) : 1);
     }
+    const open = Math.max(...heights);
+    const depths = heights.map((h) => h / open);
     expect(Math.min(...depths)).toBeLessThan(0.15);
     const closed = depths.map((d, i) => (d < 1 ? i : -1)).filter((i) => i >= 0);
     expect(closed.length).toBeGreaterThan(8);
@@ -267,14 +280,15 @@ describe("mountLive gaze", () => {
     const { doc, svg, handle } = mounted();
     const win = doc.defaultView;
     const rest = attrs(svg);
+    const centre = (r: FakeElement) => Number(/matrix\(([^)]+)\)/.exec(r.getAttribute("transform")!)![1]!.split(" ")[4]);
+    const restX = centre(rectsOf(svg)[0]!);
     handle.follow();
     frame(doc, 16);
     win.fire("pointermove", { clientX: 900, clientY: 50, pointerType: "mouse" });
     run(doc, 16, 1);
     const looked = attrs(svg);
     expect(looked).not.toEqual(rest);
-    expect(Number(rectsOf(svg)[0]!.getAttribute("x"))).toBeGreaterThan(Number(rest[0]!.split(",")[0]));
-    expect(svg.style.getPropertyValue("--mo-track-hold")).toBe("1.000");
+    expect(centre(rectsOf(svg)[0]!)).toBeGreaterThan(restX);
     run(doc, 2000, 4);
     expect(doc.defaultView.queue.length).toBe(0);
 
@@ -284,7 +298,6 @@ describe("mountLive gaze", () => {
     doc.fire("pointerleave");
     run(doc, 6000, 3);
     expect(attrs(svg)).toEqual(rest);
-    expect(svg.style.getPropertyValue("--mo-track-hold")).toBe("");
   });
 
   test("follow(false) releases every listener", () => {

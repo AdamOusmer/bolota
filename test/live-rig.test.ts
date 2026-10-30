@@ -78,7 +78,7 @@ const statePoses = STATES.flatMap((id) => {
 
 describe("eye rig", () => {
   test("covers the static baked capsule for every roster pose and state frame", () => {
-    expect(ROSTER.length).toBe(18);
+    expect(ROSTER.length).toBe(19);
     const poses: Pose[] = [...ROSTER, ...statePoses];
     let worst = 0;
     for (let s = 0; s < 200; s++) {

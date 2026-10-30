@@ -206,7 +206,13 @@ const ENTRIES: {
     // `data-mo-js` stands down instead of matching `.mo-root *`, which made
     // every decor path a style-recalc target (UpdateLayoutTree 71 -> 46 ms/s in
     // orbit at 23). Measured 1567 B; budget is that plus ~3%.
-    budget: 1620,
+    // Raised from 1620 to 1770 for the live engine's own rest loops: bloub's
+    // breath and its blink schedule as `mo-live-breathe`/`mo-live-blink`, and
+    // the `data-mo-live` rule that stands the saccade and bob down under the
+    // engine, which is what lets a resting engine leave the frame loop while
+    // keeping bloub's idle life. The dead `.mo-eye rect` lean rule came out.
+    // Measured 1713 B; budget is that plus ~3%.
+    budget: 1770,
     external: [],
     ext: "css",
     source: `@import "../../src/motion.css";`,

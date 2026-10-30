@@ -10,6 +10,51 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## Unreleased
+
+No face changes. The live engine moves the way the 0.1 engine did again.
+The 0.2 engine kept bloub's states but not its motion: the stylesheet's
+saccades jumped the eyes several units in one frame, pointer-follow barely
+moved them, large eyes froze, and the eyes could flick up and down when a
+state or an expression changed. The motion model of 0.1.7 is now part of the
+native engine, on 0.2's markup, timeline and frame loop.
+
+### Changed
+
+- **The eyes turn on a sphere again.** A head turn (a state's own, the idle
+  wander and the pointer, as one yaw, pitch and roll) carries the seeded or
+  posed eyes round a sphere the size of the head, foreshortens them at the
+  side, and draws them back onto the real outline. This is bloub's
+  `eyePoses`, applied to the seeded face.
+- **Idle life is bloub's.** `wander` and the gestures get a slow head drift
+  that never repeats, and the body floats a hair. Every state breathes and
+  blinks on bloub's schedule, double blinks included. `idle` and `orbit` own
+  their liveliness and hold still between blinks, as in 0.1.7. The
+  stylesheet's saccade and bob no longer run under the engine. A resting
+  engine still leaves the frame loop: `motion.css` carries its breath and
+  blink (`mo-live-breathe`, `mo-live-blink`) until it next moves.
+- **Pointer-follow is the 0.1.7 follow.** 35° sideways, 26° up and 45° down
+  across the viewport. Each new pointer position is reached in 80 ms on CSS
+  `ease`, and the gaze glides back over 240 ms when the pointer leaves or
+  the state takes the face. `--mo-track-travel` now scales that reach, and 3
+  (the default) is the full reach.
+- **The eyes keep moving when they are large.** Containment no longer pulls
+  the eyes back to their seeded rest places. When a turn asks for more room
+  than the body has, the turn eases off, then a large eye shrinks a little so
+  it keeps some of its movement. The correction moves smoothly with what was
+  asked, so it never jumps between frames.
+- **A state change never cuts the drift.** How much the face wanders is
+  weighed across a state change on the curve the change itself takes.
+- **Eyes stay on the head, not its ornaments.** The constraint uses the core
+  outline and petals; a droplet's taper and a nub's bumps no longer count as
+  room for an eye.
+- The eye `rect` is drawn centred on the origin with one `matrix()`
+  transform (head frame, lean and position). The blink is on the group above
+  it, so it closes the eye along the screen's vertical, as bloub did.
+- `@luzir/bolota/gaze.css` is no longer needed by the engine. It still
+  ships, so existing imports keep resolving.
+- `motion.css` grows by about 100 B gzip; the engine shrinks slightly.
+
 ## 0.2.2
 
 No face changes. Less main-thread work per animated frame.

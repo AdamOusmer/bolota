@@ -1,146 +1,74 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
-// Derived from blobatar (c) 2026 Alain, MIT. See LICENSE.
+// Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
-import type { MotionSeeds } from "../animate";
-import { EASE_IN, EASE_IN_OUT, EASE_OUT } from "../ease";
+import { blinkScale, breath, float, lid, wander, type Gaze } from "./head";
 
 /**
- * The idle loops of `motion.css` as pure functions of time, for a driver that
- * already owns a frame clock. Every table and constant is transcribed from the
- * stylesheet (`test/live-idle.test.ts` samples the real keyframes against it),
- * with the seed's timing from `motionSeeds`.
+ * The idle life of a mounted bolota, as bloub's engine lived it
+ * (`liveliness` in `bloub/face.ts`): the head wanders on slow incommensurate
+ * sines, the body floats a hair about its place, the height breathes and the
+ * lids blink on bloub's schedule. Pure functions of time, for a driver that
+ * owns a frame clock. A state that owns its liveliness gets no wander and no
+ * float; nothing stops the breath or the blink.
  */
 
 export interface IdleFrame {
-  breatheX: number;
-  breatheY: number;
-  bob: number;
-  sacX: number;
-  sacY: number;
+  /** Body height factor. */
+  breathe: number;
+  /** Eye height factor: 1 open, 0.06 shut. */
   blink: number;
-  wrapMx: number;
-  wrapSide: number;
-  wrapSy: number;
-  wrapRot: number;
+  /** The head's wander, in degrees. */
+  gaze: Gaze;
+  /** The body's float, in body radii. */
+  x: number;
+  y: number;
   shakeX: number;
   shakeY: number;
 }
 
 export const idleFrame = (): IdleFrame => ({
-  breatheX: 1,
-  breatheY: 1,
-  bob: 0,
-  sacX: 0,
-  sacY: 0,
+  breathe: 1,
   blink: 1,
-  wrapMx: 0,
-  wrapSide: 0,
-  wrapSy: 0,
-  wrapRot: 0,
+  gaze: { yaw: 0, pitch: 0, roll: 0 },
+  x: 0,
+  y: 0,
   shakeX: 0,
   shakeY: 0,
 });
 
-const BREATHE_MS = 2800;
-const BOB_MS = 3400;
-const SHAKE_MS = 112;
-
-const cycle = (t: number, phase: number, period: number) => {
-  const u = (t + phase) / period;
-  return u - Math.floor(u);
-};
-
-const alternate = (t: number, phase: number, period: number) => {
-  const u = (t + phase) / period;
-  const n = Math.floor(u);
-  const f = u - n;
-  return n % 2 ? 1 - f : f;
-};
-
-/** Rows of `[position, ...values]`, flat; linear between rows. */
-function stops(u: number, table: readonly number[], stride: number, col: number): number {
-  for (let i = table.length - stride; i >= 0; i -= stride) {
-    if (u < table[i]!) continue;
-    const j = i + stride;
-    if (j >= table.length) return table[i + col]!;
-    const span = table[j]! - table[i]!;
-    return span <= 0 ? table[i + col]! : table[i + col]! + (table[j + col]! - table[i + col]!) * ((u - table[i]!) / span);
-  }
-  return table[col]!;
+/**
+ * The breath at `bodyMs` and the blink at `eyeMs`, at amplitude `amp`. These
+ * two are what the stylesheet carries when the engine is at rest.
+ */
+export function idleLoops(bodyMs: number, eyeMs: number, amp: number, f: IdleFrame): void {
+  f.breathe = breath(bodyMs, amp);
+  f.blink = 1 - (1 - blinkScale(lid(eyeMs))) * amp;
 }
 
-/** `@keyframes mo-saccade`: position, x, y in px at unit look. */
-const SACCADE = [
-  0, 0, 0,
-  0.15, 0, 0,
-  0.165, -1.3, -1.45,
-  0.31, -1.3, -1.45,
-  0.325, 1.6, 0.15,
-  0.47, 1.6, 0.15,
-  0.485, -0.25, 1.35,
-  0.63, -0.25, 1.35,
-  0.645, 1.2, -1.3,
-  0.79, 1.2, -1.3,
-  0.805, -1.6, -0.25,
-  0.985, -1.6, -0.25,
-  1, 0, 0,
-];
+/**
+ * The wander at strength `look` and the float at strength `drift`, at `ms`.
+ * Each is 0 on a state that owns its liveliness; `look` also fades while a
+ * pointer holds the gaze.
+ */
+export function idleDrift(ms: number, look: number, drift: number, f: IdleFrame): void {
+  const t = ms / 1000;
+  wander(t, look, f.gaze);
+  float(t, drift, f);
+}
 
-/** `@keyframes mo-wrap`: position, magnitude x, signed x, y, rotation in degrees. */
-const WRAP = [
-  0, 0, 0, 0, 0,
-  0.15, 0, 0, 0, 0,
-  0.165, -0.0176, 0.008, -0.027, 0.648,
-  0.31, -0.0176, 0.008, -0.027, 0.648,
-  0.325, -0.022, -0.01, -0.003, 0.09,
-  0.47, -0.022, -0.01, -0.003, 0.09,
-  0.485, -0.0033, 0.0015, -0.0255, -0.115,
-  0.63, -0.0033, 0.0015, -0.0255, -0.115,
-  0.645, -0.0165, -0.0075, -0.024, -0.54,
-  0.79, -0.0165, -0.0075, -0.024, -0.54,
-  0.805, -0.022, 0.01, -0.0045, 0.135,
-  0.985, -0.022, 0.01, -0.0045, 0.135,
-  1, 0, 0, 0, 0,
-];
+const SHAKE_MS = 112;
 
 /** `@keyframes mo-shake`: position, x, y in px at unit shake. */
 const SHAKE = [0, 0.62, -0.34, 0.25, -0.7, 0.22, 0.5, 0.38, 0.66, 0.75, -0.44, -0.6, 1, 0.62, -0.34];
 
-/**
- * Breathe, bob and the saccade, the loops `data-mo-still` pauses. `hold` is the
- * gaze driver's grip, which fades the seeded look the way `gaze.css` does.
- */
-export function idleBody(s: MotionSeeds, t: number, amp: number, hold: number, f: IdleFrame): void {
-  const breathe = EASE_IN_OUT(alternate(t, s.phase, BREATHE_MS));
-  f.breatheX = 1 + 0.032 * amp * breathe;
-  f.breatheY = 1 - 0.026 * amp * breathe;
-  f.bob = -1.6 * amp * EASE_IN_OUT(alternate(t, s.bobPhase, BOB_MS));
-  const sac = cycle(t, s.saccadePhase, s.saccade);
-  const k = amp * (1 - hold);
-  f.sacX = stops(sac, SACCADE, 3, 1) * s.lookX * k;
-  f.sacY = stops(sac, SACCADE, 3, 2) * s.lookY * k;
-}
-
-/** Blink and wrap, which keep running when the body is held still. */
-export function idleEyes(s: MotionSeeds, t: number, amp: number, hold: number, f: IdleFrame): void {
-  const b = cycle(t, s.blinkPhase, s.blink);
-  f.blink =
-    b < 0.972
-      ? 1
-      : b < 0.986
-        ? 1 - 0.92 * amp * EASE_IN((b - 0.972) / 0.014)
-        : 1 - 0.92 * amp * (1 - EASE_OUT((b - 0.986) / 0.014));
-  const sac = cycle(t, s.saccadePhase, s.saccade);
-  const k = amp * (1 - hold);
-  f.wrapMx = stops(sac, WRAP, 5, 1) * s.lookMX * k;
-  f.wrapSide = stops(sac, WRAP, 5, 2) * s.lookX * k;
-  f.wrapSy = stops(sac, WRAP, 5, 3) * s.lookMY * k;
-  f.wrapRot = stops(sac, WRAP, 5, 4) * s.lookX * s.lookY * k * (1 - hold);
-}
-
-/** The tremor at amplitude `shake`. */
+/** The tremor at amplitude `shake`, linear between the keyframe's stops. */
 export function idleShake(t: number, shake: number, f: IdleFrame): void {
-  const u = cycle(t, 0, SHAKE_MS);
-  f.shakeX = stops(u, SHAKE, 3, 1) * shake;
-  f.shakeY = stops(u, SHAKE, 3, 2) * shake;
+  const u = (t % SHAKE_MS) / SHAKE_MS;
+  for (let i = SHAKE.length - 6; i >= 0; i -= 3) {
+    if (u < SHAKE[i]!) continue;
+    const k = (u - SHAKE[i]!) / (SHAKE[i + 3]! - SHAKE[i]!);
+    f.shakeX = (SHAKE[i + 1]! + (SHAKE[i + 4]! - SHAKE[i + 1]!) * k) * shake;
+    f.shakeY = (SHAKE[i + 2]! + (SHAKE[i + 5]! - SHAKE[i + 2]!) * k) * shake;
+    return;
+  }
 }

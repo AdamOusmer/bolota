@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { _layout } from "../src/bolota";
-import { fitEyes } from "../src/live/fit";
+import { eyeBox, settleEyes } from "../src/live/fit";
 import { edge } from "../src/live/outline";
 
 const ROOT = `${import.meta.dir}/..`;
@@ -35,7 +35,7 @@ describe("live caches", () => {
     const make = (i: number) => {
       const l = _layout(`cache-gc-${i}`);
       edge(l, 1);
-      fitEyes(l, l.eyes.map((e) => ({ ...e })));
+      settleEyes(l, l.eyes.map((e) => ({ ...e })), { yaw: 30, pitch: -40, roll: 0 }, 0, [eyeBox(), eyeBox()]);
       refs.push(new WeakRef(l));
     };
     for (let i = 0; i < 64; i++) make(i);

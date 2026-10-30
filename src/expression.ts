@@ -402,6 +402,34 @@ export const smug: Expression = {
 };
 
 /**
+ * Level, mid-lidded and sitting low: a flat stare with no cock to it.
+ *
+ * `smug` cocks the pair and `sleepy` flattens it to a bar. This keeps both eyes
+ * level and at a middling lid, and lets them drop, which reads as bored rather
+ * than amused.
+ */
+export const unimpressed: Expression = {
+  p: {
+    esx: 1.12,
+    esy: 0.7,
+    tilt: 0,
+    edy: 0.9,
+    edx: 0.4,
+    esx2: 0,
+    esy2: 0,
+    tilt2: 0,
+    edy2: 0,
+    epx: 0,
+    lock: 1,
+    heat: 0,
+    shake: 0,
+    bdy: -0.5,
+  },
+  vars: poseVars,
+  bake: bakePose,
+};
+
+/**
  * One eye narrowed, the other open — the second differential-first pose, and the
  * quieter one.
  *

@@ -3,8 +3,9 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { motionSeeds, motionVars } from "../src/animate";
-import { EASE_IN, EASE_IN_OUT, EASE_OUT } from "../src/ease";
-import { idleBody, idleEyes, idleFrame, idleShake } from "../src/live/idle";
+import { EASE_IN_OUT } from "../src/ease";
+import { BLINKS, BLINK_CYCLE, BLINK_DUR, BLINK_SHUT, BREATH, BREATH_MS, MAX_PITCH_DRIFT, MAX_YAW_DRIFT, headFrame, loopNoise, turnHead, wander } from "../src/live/head";
+import { idleDrift, idleFrame, idleLoops, idleShake } from "../src/live/idle";
 import { mountLive } from "../src/live/mount";
 import { traits } from "../src/traits";
 import { FakeDocument, FakeElement, makeSvg, run } from "./live-dom";
@@ -108,57 +109,48 @@ describe("seeds", () => {
   });
 });
 
-describe("idle matches motion.css", () => {
-  const saccade = stopsOf("mo-saccade", ["translate"]);
-  const wrap = stopsOf("mo-wrap", ["rotate", "scale"]);
-  const shake = stopsOf("mo-shake", ["translate"]);
+describe("the engine's rest loops match motion.css", () => {
   const f = idleFrame();
+  const shake = stopsOf("mo-shake", ["translate"]);
 
-  test("saccade", () => {
-    for (const s of SEEDS) {
-      const seeds = motionSeeds(traits(s, true));
-      const v: Vars = { "mo-look-x": seeds.lookX, "mo-look-y": seeds.lookY, "mo-amp": 1 };
-      for (let t = 0; t < 2 * seeds.saccade; t += 37) {
-        idleBody(seeds, t, 1, 0, f);
-        const u = (((t + seeds.saccadePhase) / seeds.saccade) % 1 + 1) % 1;
-        const [x, y] = sample(saccade, u, v);
-        expect(f.sacX).toBeCloseTo(x!, 9);
-        expect(f.sacY).toBeCloseTo(y!, 9);
-      }
+  test("breath: bloub's height, half a percent each way over 3.4s, eased as the stylesheet eases it", () => {
+    const kf = block("mo-live-breathe");
+    expect(/from\s*\{\s*transform: scale\(1, calc\(1 - 0\.005 \* var\(--mo-amp\)\)\)/.test(kf)).toBe(true);
+    expect(/to\s*\{\s*transform: scale\(1, calc\(1 \+ 0\.005 \* var\(--mo-amp\)\)\)/.test(kf)).toBe(true);
+    expect(/svg\[data-mo-live\] \.mo-breathe \{[^}]*animation-duration: calc\(1700ms[^}]*alternate[^}]*ease-in-out/.test(css)).toBe(true);
+    expect(BREATH_MS).toBe(3400);
+    expect(BREATH).toBe(0.005);
+    for (let t = 0; t < 8000; t += 37) {
+      idleLoops(t, 0, 1, f);
+      const u = t / 1700;
+      const k = Math.floor(u);
+      const e = EASE_IN_OUT(k % 2 ? 1 - (u - k) : u - k);
+      expect(f.breathe).toBeCloseTo(0.995 + 0.01 * e, 9);
     }
+    idleLoops(1234, 0, 0, f);
+    expect(f.breathe).toBe(1);
   });
 
-  test("wrap, for both eyes", () => {
-    for (const s of SEEDS) {
-      const seeds = motionSeeds(traits(s, true));
-      for (const side of [-1, 1]) {
-        const v: Vars = {
-          "mo-look-x": seeds.lookX,
-          "mo-look-y": seeds.lookY,
-          "mo-look-mx": seeds.lookMX,
-          "mo-look-my": seeds.lookMY,
-          "mo-amp": 1,
-          "mo-wrap": side,
-        };
-        for (let t = 0; t < 2 * seeds.saccade; t += 53) {
-          idleEyes(seeds, t, 1, 0, f);
-          const u = (((t + seeds.saccadePhase) / seeds.saccade) % 1 + 1) % 1;
-          const [rot, sx, sy] = sample(wrap, u, v);
-          expect(f.wrapRot * side).toBeCloseTo(rot!, 9);
-          expect(1 + f.wrapMx + f.wrapSide * side).toBeCloseTo(sx!, 9);
-          expect(1 + f.wrapSy).toBeCloseTo(sy!, 9);
-        }
-      }
+  test("blink: bloub's schedule, one cycle the stylesheet repeats, closing to 6%", () => {
+    const stops = stopsOf("mo-live-blink", ["scale"]);
+    expect(/svg\[data-mo-live\] \.mo-eye > \* \{[^}]*animation-duration: calc\(16000ms[^}]*linear/.test(css)).toBe(true);
+    expect(BLINK_CYCLE).toBe(16);
+    for (let t = 0; t < 2 * BLINK_CYCLE * 1000; t += 3) {
+      idleLoops(0, t, 1, f);
+      const [, y] = sample(stops, ((t / 1000) % BLINK_CYCLE) / BLINK_CYCLE, { "mo-amp": 1 });
+      expect(f.blink).toBeCloseTo(y!, 3);
     }
-  });
-
-  test("a held gaze fades the look the way gaze.css does", () => {
-    const seeds = motionSeeds(traits("user-7", true));
-    const t = 0.2 * seeds.saccade - seeds.saccadePhase;
-    idleBody(seeds, t, 1, 0, f);
-    const full = f.sacX;
-    idleBody(seeds, t, 1, 0.75, f);
-    expect(f.sacX).toBeCloseTo(full * 0.25, 9);
+    const shut = BLINKS.map((b) => {
+      idleLoops(0, (b + BLINK_DUR * BLINK_SHUT) * 1000, 1, f);
+      return f.blink;
+    });
+    for (const v of shut) expect(v).toBeCloseTo(0.06, 6);
+    for (let i = 1; i < BLINKS.length; i++) {
+      const gap = BLINKS[i]! - BLINKS[i - 1]!;
+      expect(Math.abs(gap - 0.24) < 1e-9 || (gap >= 1.9 && gap <= 4.6)).toBe(true);
+    }
+    idleLoops(0, (BLINKS[0]! + 0.08) * 1000, 0, f);
+    expect(f.blink).toBe(1);
   });
 
   test("shake", () => {
@@ -171,52 +163,80 @@ describe("idle matches motion.css", () => {
     }
   });
 
-  test("blink: stops, depth and curves", () => {
-    const stops = [...block("mo-blink").matchAll(/([\d.%,\s]+)\{([^}]*)\}/g)].map((m) => ({
-      at: m[1]!.split(",").map((p) => parseFloat(p) / 100),
-      depth: /scaleY\(calc\(1 - ([\d.]+)/.exec(m[2]!)?.[1],
-      ease: /animation-timing-function: ([\w-]+)/.exec(m[2]!)?.[1],
-    }));
-    expect(stops.map((s) => s.at)).toEqual([[0, 0.972], [0.986], [1]]);
-    expect(stops.map((s) => s.ease)).toEqual(["ease-in", "ease-out", undefined]);
-    const depth = Number(stops[1]!.depth);
-    for (const s of SEEDS) {
-      const seeds = motionSeeds(traits(s, true));
-      for (let t = 0; t < 2 * seeds.blink; t += 7) {
-        idleEyes(seeds, t, 1, 0, f);
-        const b = (((t + seeds.blinkPhase) / seeds.blink) % 1 + 1) % 1;
-        const want =
-          b < 0.972 ? 1 : b < 0.986 ? 1 - depth * EASE_IN((b - 0.972) / 0.014) : 1 - depth * (1 - EASE_OUT((b - 0.986) / 0.014));
-        expect(f.blink).toBeCloseTo(want, 9);
+  test("the stylesheet's own idle stands down under the engine", () => {
+    const rule = /svg\[data-mo-live\] \.mo-bob,[^{]*\{\s*animation: none;\s*\}/.exec(css)![0];
+    for (const sel of [".mo-bob", ".mo-eyes", ".mo-eye > * > *"]) expect(rule).toContain(sel);
+  });
+});
+
+describe("bloub's head", () => {
+  /** `eyePoses` from bloub's `face.ts`, as it was written, for one eye at `side`. */
+  function eyePose(yaw: number, pitch: number, roll: number, split: number, side: number) {
+    type V = [number, number, number];
+    const rad = (d: number) => (d * Math.PI) / 180;
+    const spin = (u: V, v: V, a: number): [V, V] => {
+      const c = Math.cos(a), s = Math.sin(a);
+      return [
+        [u[0] * c + v[0] * s, u[1] * c + v[1] * s, u[2] * c + v[2] * s],
+        [v[0] * c - u[0] * s, v[1] * c - u[1] * s, v[2] * c - u[2] * s],
+      ];
+    };
+    let f: V = [0, 0, 1], right: V = [1, 0, 0], down: V = [0, 1, 0];
+    [f, right] = spin(f, right, rad(yaw));
+    [down, f] = spin(down, f, rad(pitch));
+    [right, down] = spin(right, down, rad(roll));
+    const [ef, er] = spin(f, right, rad(split * side));
+    return { ef, er, down };
+  }
+
+  test("the head frame turns an eye exactly as bloub's eyePoses does", () => {
+    const h = headFrame();
+    for (const [yaw, pitch, roll] of [[0, 0, 0], [28.49, 28.62, -13], [-35, -45, 6], [12, -8, -6], [-21.94, -5.82, -12.2]] as const) {
+      turnHead(yaw, pitch, roll, h);
+      for (const side of [-1, 1]) {
+        const a = (15.46 * side * Math.PI) / 180;
+        const { ef, er, down } = eyePose(yaw, pitch, roll, 15.46, side);
+        const x0 = Math.sin(a), z0 = Math.cos(a);
+        expect(x0 * h.rx + z0 * h.fx).toBeCloseTo(ef[0], 12);
+        expect(x0 * h.ry + z0 * h.fy).toBeCloseTo(ef[1], 12);
+        expect(x0 * h.rz + z0 * h.fz).toBeCloseTo(ef[2], 12);
+        expect(z0 * h.rx - x0 * h.fx).toBeCloseTo(er[0], 12);
+        expect(z0 * h.ry - x0 * h.fy).toBeCloseTo(er[1], 12);
+        expect(h.dx).toBeCloseTo(down[0], 12);
+        expect(h.dy).toBeCloseTo(down[1], 12);
       }
     }
-    idleEyes(motionSeeds(traits("a", true)), 0, 0, 0, f);
-    expect(f.blink).toBe(1);
   });
 
-  test("breathe and bob: periods, travel, ease-in-out, alternate", () => {
-    const breathe = /@keyframes mo-breathe[^]*?scaleX\(calc\(1 \+ ([\d.]+)[^]*?scaleY\(calc\(1 - ([\d.]+)/.exec(css)!;
-    const bobTravel = /@keyframes mo-bob[^]*?translateY\(calc\(-([\d.]+)px/.exec(css)!;
-    expect(/animation-duration: calc\(2800ms/.test(css)).toBe(true);
-    expect(/animation-duration: calc\(3400ms/.test(css)).toBe(true);
-    for (const s of SEEDS) {
-      const seeds = motionSeeds(traits(s, true));
-      for (let t = 0; t < 7000; t += 41) {
-        idleBody(seeds, t, 1, 0, f);
-        const alt = (ph: number, p: number) => {
-          const u = (t + ph) / p;
-          const k = Math.floor(u);
-          return k % 2 ? 1 - (u - k) : u - k;
-        };
-        expect(f.breatheX).toBeCloseTo(1 + Number(breathe[1]) * EASE_IN_OUT(alt(seeds.phase, 2800)), 9);
-        expect(f.breatheY).toBeCloseTo(1 - Number(breathe[2]) * EASE_IN_OUT(alt(seeds.phase, 2800)), 9);
-        expect(f.bob).toBeCloseTo(-Number(bobTravel[1]) * EASE_IN_OUT(alt(seeds.bobPhase, 3400)), 9);
-      }
+  test("the wander is bloub's: smooth, bounded by its amplitude, and silent at strength 0", () => {
+    const g = { yaw: 0, pitch: 0, roll: 0 };
+    let prev = wander(0, 1, { yaw: 0, pitch: 0, roll: 0 });
+    let maxStep = 0;
+    for (let t = 1 / 60; t < 120; t += 1 / 60) {
+      wander(t, 1, g);
+      expect(Math.abs(g.yaw)).toBeLessThanOrEqual(MAX_YAW_DRIFT);
+      expect(Math.abs(g.pitch)).toBeLessThanOrEqual(MAX_PITCH_DRIFT);
+      maxStep = Math.max(maxStep, Math.abs(g.yaw - prev.yaw), Math.abs(g.pitch - prev.pitch));
+      prev = { ...g };
+    }
+    // Under half a degree a frame at 60 Hz: a glide, never a saccade.
+    expect(maxStep).toBeLessThan(0.5);
+    wander(17.3, 0, g);
+    expect([g.yaw, g.pitch, g.roll].every((v) => Math.abs(v) === 0)).toBe(true);
+    expect(loopNoise(2.5, 6, 0.4)).toBeCloseTo(loopNoise(8.5, 6, 0.4), 12);
+  });
+
+  test("the float is a hair: under 1% of the body radius", () => {
+    const o = idleFrame();
+    for (let t = 0; t < 60; t += 0.1) {
+      idleDrift(t * 1000, 0, 1, o);
+      expect(Math.hypot(o.x, o.y)).toBeLessThan(0.01);
+      expect(Math.abs(o.gaze.yaw)).toBe(0);
     }
   });
 });
 
-describe("the engine hands the loops between the compositor and the frame clock", () => {
+describe("the engine hands the breath and blink between the compositor and the frame clock", () => {
   const proto = FakeElement.prototype as unknown as { getAnimations?: () => { currentTime: number }[] };
 
   test("CSS at rest, frame clock while animating, and back at the same phase", () => {
@@ -231,7 +251,8 @@ describe("the engine hands the loops between the compositor and the frame clock"
       handle.play("wide");
       expect(svg.hasAttribute("data-mo-js")).toBe(true);
       run(doc, 0, 0.5);
-      expect(svg.querySelector(".mo-breathe")!.getAttribute("transform")).toMatch(/^scale\(/);
+      expect(svg.hasAttribute("data-mo-live")).toBe(true);
+      expect(svg.querySelector(".mo-breathe")!.getAttribute("transform")).toMatch(/^scale\(1 /);
 
       run(doc, 500, 12);
       expect(doc.defaultView.queue.length).toBe(0);

@@ -8,6 +8,7 @@ import { CHOREO, ENTRANCE_BLINK, type StateId } from "../src/live/choreo";
 import { Timeline } from "../src/live/timeline";
 import { uprightTransform } from "../src/live/upright";
 import { ballEdge, ballRadius } from "../src/live/outline";
+import { eyeBox, settleEyes, type EyeBox } from "../src/live/fit";
 import { faceEyes } from "../src/live/rig";
 import { IDENT } from "../src/morph";
 
@@ -22,7 +23,7 @@ describe("per-state eyes", () => {
       for (const t of times(id)) {
         const e = CHOREO[id].eyes(t);
         expect(Object.keys(e.pose).sort(), id).toEqual(keys);
-        for (const v of [...Object.values(e.pose), e.track.x, e.track.y, e.alpha])
+        for (const v of [...Object.values(e.pose), ...Object.values(e.head), e.alpha])
           expect(Number.isFinite(v), id).toBe(true);
       }
   });
@@ -36,7 +37,7 @@ describe("per-state eyes", () => {
     expect(CHOREO.thinking.eyes(1).alpha).toBe(0);
     expect(CHOREO.snooze.eyes(1).alpha).toBe(0);
     expect(CHOREO.idle.eyes(1).pose).toEqual(IDENT);
-    expect(CHOREO.swirl.eyes(0.5).track).toEqual({ x: 0, y: 0 });
+    expect(CHOREO.swirl.eyes(0.5).head).toEqual({ roll: 0, yaw: 0, pitch: 0, spread: 0 });
   });
 
   test("wink closes one eye only, and opens it again", () => {
@@ -58,9 +59,13 @@ describe("per-state eyes", () => {
 
   test("a head roll lifts one eye over the other, a turn narrows the far eye", () => {
     const l = _layout("seed-7");
+    const boxes = [eyeBox(), eyeBox()];
     const level = (id: StateId) => {
-      const [a, b] = faceEyes(l, CHOREO[id].eyes(1));
-      return { drop: b!.cy - a!.cy, width: b!.rx / a!.rx, slide: (a!.cx + b!.cx) / 2 - l.face.cx };
+      const e = CHOREO[id].eyes(1);
+      settleEyes(l, faceEyes(l, e), e.head, 0, boxes);
+      const [a, b] = boxes;
+      const wide = (x: EyeBox) => x.rx * Math.hypot(x.a, x.b);
+      return { drop: b!.cy - a!.cy, width: wide(b!) / wide(a!), slide: (a!.cx + b!.cx) / 2 - l.face.cx };
     };
     expect(level("wide").drop).toBeGreaterThan(2);
     expect(level("notify").drop).toBeLessThan(-2);
@@ -73,7 +78,7 @@ describe("per-state eyes", () => {
     for (const seed of ["seed-7", "seed-2525", "alain", "seed-31"]) {
       const l = _layout(seed);
       const R = l.body.sides ? ballRadius(l) : l.body.rx;
-      const [a, b] = faceEyes(l, { ...CHOREO.wide.eyes(1), head: { roll: 0, yaw: 0, spread: 0 } });
+      const [a, b] = faceEyes(l, { ...CHOREO.wide.eyes(1), head: { roll: 0, yaw: 0, pitch: 0, spread: 0 } });
       const tilt = Math.cos((15.46 * Math.PI) / 180);
       expect(a!.rx * 2).toBeCloseTo(0.356 * R * tilt, 6);
       expect(a!.ry * 2).toBeCloseTo(0.875 * R, 6);
@@ -102,7 +107,7 @@ describe("timeline eyes", () => {
     expect(tl.eyes(2).pose).toEqual(CHOREO.notify.eyes(1).pose);
     tl.play("play", 3);
     expect(tl.eyes(4).pose).toEqual(mad.p);
-    expect(tl.eyes(4).track).toEqual({ x: 0, y: 0 });
+    expect(tl.eyes(4).head).toEqual({ roll: 0, yaw: 0, pitch: 0, spread: 0 });
   });
 
   test("a blinkIn entrance cues the blink, and the eyes carry no lid of their own", () => {
