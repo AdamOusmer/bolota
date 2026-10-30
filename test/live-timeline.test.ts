@@ -46,3 +46,36 @@ describe("timeline history", () => {
     expect(logOf(reference).length).toBe(10_001);
   });
 });
+
+describe("timeline records", () => {
+  test("answers written into reused records equal fresh ones, mid-fade and across hand-backs", () => {
+    const fresh = new Timeline();
+    const reused = new Timeline();
+    const act = fresh.sample(0);
+    const eyes = fresh.eyes(0);
+    const frames = fresh.decorFrames(0);
+    let now = 0;
+    for (let i = 0; i < 400; i++) {
+      now += 0.37;
+      if (i % 3 === 0) {
+        const id = STATES[i % STATES.length]!;
+        const o = i % 9 === 0 ? { loop: true } : { hold: 0.1 };
+        fresh.play(id, now, o);
+        reused.play(id, now, o);
+      } else if (i % 3 === 1) {
+        const pose = POSES[i % POSES.length]!;
+        fresh.express(pose, now);
+        reused.express(pose, now);
+      }
+      for (let dt = 0; dt < 1.5; dt += 0.05) {
+        const t = now + dt;
+        expect(reused.sample(t, act)).toBe(act);
+        expect(act).toEqual(fresh.sample(t));
+        expect(reused.eyes(t, eyes)).toBe(eyes);
+        expect(eyes).toEqual(fresh.eyes(t));
+        expect(reused.decorFrames(t, frames)).toBe(frames);
+        expect(frames).toEqual(fresh.decorFrames(t));
+      }
+    }
+  });
+});

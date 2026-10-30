@@ -45,11 +45,13 @@ class Cell implements Slot {
  * mount that is torn down and redone on the same element starts clean.
  */
 export function putter(): Put {
-  const cells = new WeakMap<Element, Record<string, Cell>>();
-  const slot = (el: Element, key: string): Slot => {
-    let row = cells.get(el);
-    if (!row) cells.set(el, (row = Object.create(null) as Record<string, Cell>));
-    return (row[key] ??= new Cell(el, key, key.startsWith("--")));
+  const rows = new WeakMap<Element, Record<string, Cell>>();
+  const slot = (el: Element, key: string): Cell => {
+    let row = rows.get(el);
+    if (row === undefined) rows.set(el, (row = Object.create(null) as Record<string, Cell>));
+    let cell = row[key];
+    if (cell === undefined) cell = row[key] = new Cell(el, key, key.startsWith("--"));
+    return cell;
   };
   const put = ((el, key, value) => slot(el, key).set(value)) as Put;
   put.slot = slot;

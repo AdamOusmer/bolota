@@ -26,7 +26,10 @@ export function uprightTransform(act: Act, cx: number, cy: number): string {
   return (
     `translate(${r3(cx)} ${r3(cy)})` +
     ` rotate(${r3(-act.rot * u)})` +
-    ` scale(${r3(1 / act.sx ** u)} ${r3(1 / act.sy ** u)})` +
+    ` scale(${r3(1 / squashed(act.sx, u))} ${r3(1 / squashed(act.sy, u))})` +
     ` translate(${r3(-cx)} ${r3(-cy)})`
   );
 }
+
+/** `s ** u`, without the power at the two ends where it is `s` and 1. */
+const squashed = (s: number, u: number): number => (u === 1 ? s : s === 1 ? 1 : s ** u);

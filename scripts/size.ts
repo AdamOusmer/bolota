@@ -250,8 +250,15 @@ const ENTRIES: {
     // amplitude. Measured 18919 B (+2150 over the 16766 B before those
     // commits); budget is that plus ~3%. Size accepted over 0.1.7's 16770 B in
     // exchange for ~0.7 ms/s idle and animation near the old engine's cost.
+    //
+    // Raised from 19490 to 21690 for the allocation-free frame: reused act,
+    // eye and box records with `out` parameters through the timeline, choreo,
+    // rig and gaze, the number-first rig writer and draw memo in `mount.ts`,
+    // the outline's shortest radius for `fit.ts`, and `putter`'s slots. Measured
+    // 21052 B (+1562 over the previous budget); budget is that plus ~3%. Size
+    // accepted for the script time of a frame, which falls several-fold.
     name: "engine",
-    budget: 19490,
+    budget: 21690,
     external: ["*/decor.js"],
     source: `import { mountEngine, _CHOREO, _r3 } from "../../src/engine";
              globalThis.x = [mountEngine, _CHOREO, _r3];`,
