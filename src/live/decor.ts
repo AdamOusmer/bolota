@@ -1,8 +1,7 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 // Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
-import { ensureContrast, fromHex, mixHex, toHex, type Oklch } from "../color";
-import { blendAct, IDLE_ACT, type Act } from "./act";
+import { contrast, ensureContrast, fromHex, mixHex, toHex, type Oklch } from "../color";
 import { CHOREO, clamp, type StateId } from "./choreo";
 import { edge, type OutlineLayout } from "./outline";
 
@@ -14,10 +13,9 @@ import { edge, type OutlineLayout } from "./outline";
  * paint is the seed's own, a short OKLCh ramp off `palette.head`.
  *
  * Positions are body units about the body centre (R = `body.rx`), written in
- * absolute viewBox units like `actTransform`'s frame. The host groups sit
- * inside the act group, so each is given the inverse of the act: decor stays
- * where bloub drew it while the body shrinks, rolls and travels under it, and
- * only the ambient motion of the group around `mo-act` reaches it.
+ * absolute viewBox units. The host groups, and `head` as the mask target, sit
+ * outside the act transform, so decor stays where bloub drew it while the body
+ * shrinks, rolls and travels.
  */
 
 export interface DecorHost {
@@ -103,10 +101,13 @@ const RING_VS_HEAD = 1.6;
 const RING_VS_BG = 1.3;
 const ACCENT_VS_HEAD = 2;
 const ACCENT_VS_BG = 1.5;
+const ACCENT_CHROMA = 0.19;
+const ACCENT_MIN_CHROMA = 0.12;
+const ACCENT_GAP = 0.1;
+const ACCENT_TURNS = [180, 150, 210, 120, 240, 90, 270];
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
-const matrixOf = (m: number[]) => `matrix(${m.map((v) => Math.round(v * 1e5) / 1e5).join(" ")})`;
 const mod360 = (h: number) => ((h % 360) + 360) % 360;
 
 function createRng(seed: number): () => number {
@@ -217,31 +218,6 @@ function isOutline(l: DecorLayout): l is DecorLayout & OutlineLayout {
   return "petals" in l && "shape" in l;
 }
 
-/**
- * The inverse of `actTransform` as an SVG matrix, written into `m`:
- * `actTransform` maps a point p to c + off + S·Rot(rot)·(p − c), so decor
- * drawn under it lands where it was meant to when drawn under this.
- */
-function inverseAct(m: number[], act: Act, R: number, cx: number, cy: number): void {
-  const sx = Math.max(Math.abs(act.s * act.sx), 1e-3);
-  const sy = Math.max(Math.abs(act.s * act.sy), 1e-3);
-  const t = (act.rot * Math.PI) / 180;
-  const cos = Math.cos(t);
-  const sin = Math.sin(t);
-  const a = cos / sx;
-  const b = -sin / sx;
-  const c = sin / sy;
-  const d = cos / sy;
-  const px = cx + act.x * R;
-  const py = cy + act.y * R;
-  m[0] = a;
-  m[1] = b;
-  m[2] = c;
-  m[3] = d;
-  m[4] = cx - a * px - c * py;
-  m[5] = cy - b * px - d * py;
-}
-
 const cells = new WeakMap<Element, Record<string, string | number>>();
 
 function put(node: Element, key: string, value: string | number): void {
@@ -259,6 +235,31 @@ interface Colors {
   stops(seed: ArcSeed): string[];
 }
 
+/**
+ * A saturated accent off the head's complement: the lightness nearest the
+ * side of the head it can clear (lighter on a dark head, darker on a light
+ * one) that still reads at `ACCENT_CHROMA` once resolved to sRGB. Chroma is
+ * never given up for contrast; a hue that cannot manage both is stepped aside.
+ */
+function accentOf(head: Oklch, bg: Oklch | null): string {
+  const lean = head.l > 0.75 ? -1 : 1;
+  for (const withBg of [true, false]) {
+    for (const turn of ACCENT_TURNS) {
+      for (const dir of [lean, -lean]) {
+        for (let i = 0; i <= 28; i++) {
+          const l = clamp(head.l + dir * (ACCENT_GAP + i * 0.02), 0.2, 0.95);
+          const hex = toHex({ l, c: ACCENT_CHROMA, h: mod360(head.h + turn) });
+          const got = fromHex(hex);
+          if (got.c < ACCENT_MIN_CHROMA || contrast(got, head) < ACCENT_VS_HEAD) continue;
+          if (withBg && bg && contrast(got, bg) < ACCENT_VS_BG) continue;
+          return hex;
+        }
+      }
+    }
+  }
+  return toHex({ l: lean < 0 ? 0.3 : 0.85, c: ACCENT_CHROMA, h: mod360(head.h + 180) });
+}
+
 function colorsOf(palette: DecorPalette): Colors {
   const head = fromHex(palette.head);
   const bg = palette.bg ? fromHex(palette.bg) : null;
@@ -271,7 +272,7 @@ function colorsOf(palette: DecorPalette): Colors {
   const found = new WeakMap<ArcSeed, string[]>();
   return {
     head: palette.head,
-    accent: away({ l: 0.62, c: 0.17, h: mod360(head.h + 180) }, ACCENT_VS_HEAD, ACCENT_VS_BG),
+    accent: accentOf(head, bg),
     haze: bg
       ? Array.from({ length: HAZE_STEPS }, (_, i) => mixHex(palette.bg!, palette.head, i / (HAZE_STEPS - 1)))
       : null,
@@ -348,16 +349,12 @@ export function createDecor(
   const doc = host.back.ownerDocument;
   const { cx, cy, rx: R } = layout.body;
   const outline = isOutline(layout) ? layout : null;
-  const shown = [1, 0, 0, 1, 0, 0];
-  const lastMatrix = [NaN, 0, 0, 0, 0, 0];
-  const matrix = [1, 0, 0, 1, 0, 0];
   const gradId: string[] = [];
   const gradRef: string[] = [];
   const gradStops: Element[][] = [];
   let colors: Colors | null = null;
   let mask: SVGMaskElement | null = null;
   let maskRect: SVGRectElement | null = null;
-  let maskTf: SVGGElement | null = null;
   let maskDisc: SVGCircleElement | null = null;
   let maskWas: string | null = null;
   let notchX = 0;
@@ -566,30 +563,6 @@ export function createDecor(
     }
   }
 
-  function groupAct(frames: readonly DecorFrame[]): Act {
-    let acc: Act | null = null;
-    let sum = 0;
-    for (const f of frames) {
-      if (f.weight <= 0) continue;
-      const a = CHOREO[f.state].act(f.local);
-      sum += f.weight;
-      acc = acc ? blendAct(acc, a, f.weight / sum) : a;
-    }
-    return acc ?? IDLE_ACT;
-  }
-
-  function counterAct(act: Act): void {
-    inverseAct(matrix, act, R, cx, cy);
-    let same = true;
-    for (let i = 0; i < 6; i++) if (!(Math.abs(matrix[i]! - lastMatrix[i]!) <= 1e-6)) same = false;
-    if (same) return;
-    for (let i = 0; i < 6; i++) lastMatrix[i] = shown[i] = matrix[i]!;
-    const tf = matrixOf(shown);
-    put(host.back, "transform", tf);
-    put(host.front, "transform", tf);
-    if (maskTf) put(maskTf, "transform", tf);
-  }
-
   function attachMask(): void {
     if (!mask) {
       mask = doc.createElementNS(SVG_NS, "mask");
@@ -605,12 +578,9 @@ export function createDecor(
       maskRect.setAttribute("width", String(r2(6 * R)));
       maskRect.setAttribute("height", String(r2(6 * R)));
       maskRect.setAttribute("fill", "#fff");
-      maskTf = doc.createElementNS(SVG_NS, "g");
-      maskTf.setAttribute("transform", matrixOf(shown));
       maskDisc = doc.createElementNS(SVG_NS, "circle");
       maskDisc.setAttribute("fill", "#000");
-      maskTf.appendChild(maskDisc);
-      mask.append(maskRect, maskTf);
+      mask.append(maskRect, maskDisc);
       host.defs.appendChild(mask);
       maskWas = host.head.getAttribute("mask");
       host.head.setAttribute("mask", `url(#${uid}-notch)`);
@@ -626,7 +596,7 @@ export function createDecor(
     mask.remove();
     if (maskWas === null) host.head.removeAttribute("mask");
     else host.head.setAttribute("mask", maskWas);
-    mask = maskRect = maskTf = maskDisc = null;
+    mask = maskRect = maskDisc = null;
     maskWas = null;
   }
 
@@ -647,7 +617,6 @@ export function createDecor(
       notchW = 0;
       if (drawn) {
         colors ??= colorsOf(palette);
-        counterAct(groupAct(frames));
         for (const f of frames) if (f.weight > SEEN) frame(f);
       }
       settle();

@@ -4,9 +4,8 @@ import { BotEngine } from "../src/bloub/engine";
 import { RINGS } from "../src/bloub/decor";
 import { STATE_BY_ID } from "../src/bloub/states";
 import { _layout } from "../src/bolota";
-import { contrast, fromHex } from "../src/color";
+import { contrast, fromHex, toHex } from "../src/color";
 import { _seededSilhouette } from "../src/engine";
-import { IDLE_ACT, type Act } from "../src/live/act";
 import { CHOREO, easeOutQuint, type StateId } from "../src/live/choreo";
 import { createDecor, type DecorFrame, type DecorHost } from "../src/live/decor";
 import { Timeline } from "../src/live/timeline";
@@ -278,65 +277,25 @@ describe("live decor: geometry against the old engine", () => {
   });
 });
 
-function actPoint(act: Act, R: number, cx: number, cy: number, x: number, y: number): [number, number] {
-  const t = (act.rot * Math.PI) / 180;
-  const dx = x - cx;
-  const dy = y - cy;
-  const rx = dx * Math.cos(t) - dy * Math.sin(t);
-  const ry = dx * Math.sin(t) + dy * Math.cos(t);
-  return [cx + act.x * R + rx * act.s * act.sx, cy + act.y * R + ry * act.s * act.sy];
-}
-
-function applyMatrix(tf: string, x: number, y: number): [number, number] {
-  const [a, b, c, d, e, f] = /matrix\(([^)]*)\)/.exec(tf)![1]!.split(" ").map(Number) as [number, number, number, number, number, number];
-  return [a * x + c * y + e, b * x + d * y + f];
-}
-
-describe("live decor: the act is cancelled", () => {
-  const cases: [StateId, number][] = [
-    ["thinking", 1.1],
-    ["orbit", 1.7],
-    ["alert", 0.75],
-    ["comet", 1.15],
-    ["burst", 0.45],
-    ["play", 0.9],
-  ];
-  for (const [state, t] of cases) {
-    test(`${state}: act after counter-act is the identity`, () => {
-      const r = rig("decor-a");
-      const { cx, cy, rx } = r.layout.body;
-      r.decor.update(one(state, t));
-      const tf = r.els.back.getAttribute("transform")!;
-      expect(r.els.front.getAttribute("transform")).toBe(tf);
-      const act = CHOREO[state].act(t);
-      for (const [px, py] of [[cx + 10, cy - 7], [cx - 3, cy + 20]] as const) {
-        const [qx, qy] = applyMatrix(tf, px, py);
-        const [sx, sy] = actPoint(act, rx, cx, cy, qx, qy);
-        expect(Math.abs(sx - px)).toBeLessThan(2e-2);
-        expect(Math.abs(sy - py)).toBeLessThan(2e-2);
-      }
-    });
-  }
-
-  test("a cross-fade cancels the blended act", () => {
+describe("live decor: the host sits outside the act", () => {
+  test("decor writes no transform on back, front, the mask or its contents", () => {
     const r = rig("decor-a");
-    const { cx, cy, rx } = r.layout.body;
-    const frames: DecorFrame[] = [
-      { state: "orbit", local: 1.7, weight: 0.4 },
-      { state: "thinking", local: 0.5, weight: 0.6 },
+    const frames: DecorFrame[][] = [
+      one("thinking", 1.1),
+      one("orbit", 1.7),
+      one("alert", 0.75),
+      one("notify", 0.9),
+      [
+        { state: "orbit", local: 1.7, weight: 0.4 },
+        { state: "notify", local: 0.5, weight: 0.6 },
+      ],
     ];
-    r.decor.update(frames);
-    const a = CHOREO.orbit.act(1.7);
-    const b = CHOREO.thinking.act(0.5);
-    const blended = { ...IDLE_ACT } as Act;
-    for (const k of ["x", "y", "s", "sx", "sy", "eyeAlpha", "upright"] as const) blended[k] = a[k] * 0.4 + b[k] * 0.6;
-    let d = b.rot - a.rot;
-    d -= 360 * Math.round(d / 360);
-    blended.rot = a.rot + d * 0.6;
-    const [qx, qy] = applyMatrix(r.els.back.getAttribute("transform")!, cx + 9, cy + 4);
-    const [sx, sy] = actPoint(blended, rx, cx, cy, qx, qy);
-    expect(Math.abs(sx - cx - 9)).toBeLessThan(2e-2);
-    expect(Math.abs(sy - cy - 4)).toBeLessThan(2e-2);
+    for (const f of frames) r.decor.update(f);
+    for (const host of [r.els.back, r.els.front, r.els.head]) expect(host.getAttribute("transform")).toBeNull();
+    const mask = tags(r.els.defs, "mask")[0]!;
+    expect(mask.getAttribute("transform")).toBeNull();
+    for (const n of deep(mask)) expect(n.getAttribute("transform")).toBeNull();
+    expect(tags(r.els.back, "g").concat(tags(r.els.front, "g")).every((g) => g.getAttribute("transform") === null)).toBe(true);
   });
 });
 
@@ -548,8 +507,36 @@ describe("live decor: colours", () => {
       const accent = fromHex(shown(tags(els.front, "circle"))[0]!.getAttribute("fill")!);
       expect(contrast(accent, head)).toBeGreaterThanOrEqual(1.9);
       expect(contrast(accent, bg)).toBeGreaterThanOrEqual(1.4);
-      expect(Math.abs(((accent.h - head.h + 540) % 360) - 180)).toBeGreaterThan(90);
+      expect(Math.abs(((accent.h - head.h + 540) % 360) - 180)).toBeGreaterThanOrEqual(60);
     }
+  });
+
+  test("the notify accent stays saturated and clear of the head on every hue and lightness", () => {
+    let worstChroma = 1;
+    let worstContrast = 99;
+    let stepped = 0;
+    for (let h = 0; h < 360; h += 10) {
+      for (const l of [0.35, 0.65, 0.88]) {
+        const headHex = toHex({ l, c: 0.1, h });
+        const doc = new FakeDocument();
+        const els = {
+          back: doc.createElementNS("", "g"),
+          front: doc.createElementNS("", "g"),
+          defs: doc.createElementNS("", "defs"),
+          head: doc.createElementNS("", "g"),
+        };
+        const d = createDecor(els as unknown as DecorHost, _layout("decor-a"), { head: headHex, eye: "#111" }, "a");
+        d.update(one("notify", 0.9));
+        const accent = fromHex(shown(tags(els.front, "circle"))[0]!.getAttribute("fill")!);
+        const head = fromHex(headHex);
+        worstChroma = Math.min(worstChroma, accent.c);
+        worstContrast = Math.min(worstContrast, contrast(accent, head));
+        if (Math.abs(Math.abs(((accent.h - head.h + 540) % 360) - 180) - 180) > 3) stepped++;
+        expect({ h, l, c: accent.c >= 0.12 }).toEqual({ h, l, c: true });
+        expect({ h, l, k: contrast(accent, head) >= 2 }).toEqual({ h, l, k: true });
+      }
+    }
+    console.log(`accent worst chroma ${worstChroma.toFixed(3)}, contrast ${worstContrast.toFixed(2)}, hue stepped ${stepped}/108`);
   });
 
   test("ring hues stay in the head's neighbourhood", () => {
