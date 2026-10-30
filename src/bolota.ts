@@ -18,7 +18,7 @@ export type { BolotaOptions, Animate, Expression };
  * numeric ranges in `styles/compose.ts`, the bands in `styles/blob.ts`, and the
  * tone set are all part of that contract. Changing them requires a new major.
  */
-export const bolota = makeBolota(style);
+export const bolota = /* @__PURE__ */ makeBolota(style);
 
 /**
  * Only constructed when someone actually animates, so it tree-shakes away.
