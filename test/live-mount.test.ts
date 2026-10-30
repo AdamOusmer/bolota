@@ -189,12 +189,14 @@ describe("mountLive clock", () => {
   test("a blinkIn entrance closes the eyes once, down to 6%, in 200 ms", () => {
     const { doc, svg, handle } = mounted();
     handle.play("thinking");
-    const depths: number[] = [];
+    const heights: number[] = [];
     for (let ms = 16; ms <= 900; ms += 16) {
       frame(doc, ms);
-      const hit = /scale\(1 (\d\.?\d*)\)/.exec(rectsOf(svg)[0]!.parentNode!.getAttribute("transform") ?? "");
-      depths.push(hit ? Number(hit[1]) : 1);
+      const hit = /matrix\(([^)]+)\)/.exec(rectsOf(svg)[0]!.getAttribute("transform") ?? "");
+      heights.push(hit ? Number(hit[1]!.split(" ")[3]) : 1);
     }
+    const open = Math.max(...heights);
+    const depths = heights.map((h) => h / open);
     expect(Math.min(...depths)).toBeLessThan(0.15);
     const closed = depths.map((d, i) => (d < 1 ? i : -1)).filter((i) => i >= 0);
     expect(closed.length).toBeGreaterThan(8);

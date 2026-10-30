@@ -158,7 +158,6 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let sAlpha!: Slot;
   let sHost!: Slot;
   let sBreathe!: Slot;
-  let sWraps: Slot[] = [];
   let sRects: Slot[] = [];
   let wraps: Element[] = [];
   let hybrid = false;
@@ -180,7 +179,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let sigBreathe = NaN;
   let sigShakeX = NaN;
   let sigShakeY = NaN;
-  const sigBlink = [NaN, NaN];
+  let eyeBlink = 1000;
   let ticking = false;
   let awake = false;
 
@@ -248,9 +247,10 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     const ct = Math.cos(t);
     const st = Math.sin(t);
     const m0 = q(b.a * ct + b.c * st, 10000);
-    const m1 = q(b.b * ct + b.d * st, 10000);
+    const blink = eyeBlink / 1000;
+    const m1 = q((b.b * ct + b.d * st) * blink, 10000);
     const m2 = q(-b.a * st + b.c * ct, 10000);
-    const m3 = q(-b.b * st + b.d * ct, 10000);
+    const m3 = q((-b.b * st + b.d * ct) * blink, 10000);
     const e = q(b.cx, 1000);
     const f = q(b.cy, 1000);
     if (
@@ -311,10 +311,9 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       }
     }
     const k = q(Math.min(idle.blink, entrance()), 1000);
-    for (let i = 0; i < sWraps.length; i++) {
-      if (sigBlink[i] === k) continue;
-      sigBlink[i] = k;
-      sWraps[i]!.set(k === 1000 ? null : `scale(1 ${k / 1000})`);
+    if (k !== eyeBlink) {
+      eyeBlink = k;
+      rects.forEach((rect, i) => writeRig(rect, i, boxes[i]!));
     }
   }
 
@@ -431,7 +430,6 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     sAlpha = put.slot(eyesG, "opacity");
     sHost = put.slot(host, "transform");
     sBreathe = put.slot(breathe, "transform");
-    sWraps = wraps.map((w) => put.slot(w, "transform"));
   }
 
   function drawDecor(frames: DecorFrame[]): boolean {
@@ -619,7 +617,6 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     eyeMs = baseEye + elapsed(wraps[0]!);
     jsPhase = true;
     sigBreathe = NaN;
-    sigBlink.fill(NaN);
     svg.setAttribute("data-mo-js", "");
     idleEval();
   }
@@ -631,8 +628,9 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     baseEye = eyeMs;
     svg.style.setProperty("--mo-lag", `${-Math.round(bodyMs)}ms`);
     svg.style.setProperty("--mo-elag", `${-Math.round(eyeMs)}ms`);
-    for (const slot of [sHost, sBreathe, ...sWraps]) slot.set(null);
-    sigBlink.fill(NaN);
+    for (const slot of [sHost, sBreathe]) slot.set(null);
+    eyeBlink = 1000;
+    rects.forEach((rect, i) => writeRig(rect, i, boxes[i]!));
     sigShakeX = sigShakeY = NaN;
     svg.removeAttribute("data-mo-js");
     jsPhase = false;
