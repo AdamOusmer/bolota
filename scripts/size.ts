@@ -217,11 +217,18 @@ const ENTRIES: {
     // CI's linux/x64 runners lands above macOS/arm64 for identical input bytes.
     //
     // Decor became a lazy chunk (`import("./decor.js")` in `live/mount.ts`), so
-    // this row is the first-load cost: 19693 B with decor inline, 16494 B now,
-    // under the old engine's 16770. The dynamic import is external here, as it
-    // is in `dist`. Budget is 16494 plus ~5%.
+    // this row is the first-load cost: 19693 B with decor inline, 16494 B with
+    // it split out, under the old engine's 16770. The dynamic import is
+    // external here, as it is in `dist`.
+    // Raised to 16747 (+253 B) for the automatic pool: the per-window registry
+    // under a global symbol (shared rAF across copies, version guard) and the
+    // shared IntersectionObserver + visibilitychange watcher that park an
+    // off-screen or hidden instance. Paid back inside the budget of the old
+    // engine by dropping `Timeline.loop` (unused here), the decor warm-up and
+    // palette plumbing and the duplicated unknown-state throw. Budget is 16747
+    // plus ~5%.
     name: "engine",
-    budget: 17300,
+    budget: 17580,
     external: ["*/decor.js"],
     source: `import { mountEngine } from "../../src/engine";
              globalThis.x = mountEngine;`,

@@ -363,7 +363,7 @@ describe("live timeline matches the old engine", () => {
 describe("corrected from the old engine", () => {
   test("an outgoing state keeps its own looping through the fade", () => {
     const tl = new Timeline();
-    tl.loop("orbit", 0);
+    tl.play("orbit", 0, { loop: true });
     tl.play("burst", 5);
     const period = CHOREO.orbit.period!;
     expect(tl.sample(5).rot).toBeCloseTo(CHOREO.orbit.act(5 % period).rot, 9);
@@ -372,7 +372,7 @@ describe("corrected from the old engine", () => {
 
   test("a hand-back to a looped rest keeps it looping", () => {
     const tl = new Timeline();
-    tl.loop("thinking", 0);
+    tl.play("thinking", 0, { loop: true });
     tl.play("exclaim", 1, { hold: 0 });
     const back = 1 + CHOREO.exclaim.duration;
     expect(tl.state(back + 0.01)).toBe("thinking");

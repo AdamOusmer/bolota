@@ -123,7 +123,7 @@ describe("scripted eye events match bloub", () => {
 
   test("a looped restart is not an entrance", () => {
     const tl = new Timeline("idle");
-    tl.loop("swirl", 0.5);
+    tl.play("swirl", 0.5, { loop: true });
     expect(tl.blinkCue(0.4, 0.5)).toBe(0.5);
     const restart = 0.5 + CHOREO.swirl.duration + CHOREO.swirl.morph;
     expect(tl.blinkCue(restart - 0.01, restart + 0.01)).toBeNull();

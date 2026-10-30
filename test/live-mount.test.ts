@@ -284,7 +284,7 @@ describe("mountLive gaze", () => {
     handle.follow();
     expect(doc.defaultView.count() + doc.count()).toBeGreaterThan(0);
     handle.follow(false);
-    expect(doc.defaultView.count() + doc.count()).toBe(0);
+    expect(doc.defaultView.count() + doc.count()).toBe(1);
     handle.follow();
     handle.destroy();
     expect(doc.defaultView.count() + doc.count()).toBe(0);

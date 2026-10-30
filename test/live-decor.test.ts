@@ -358,7 +358,7 @@ describe("live decor: cross-fade", () => {
 
   test("Timeline.decorFrames wraps a looped period on each side of a fade", () => {
     const tl = new Timeline();
-    tl.loop("orbit", 0);
+    tl.play("orbit", 0, { loop: true });
     tl.play("comet", 10);
     const f = tl.decorFrames(10.2);
     expect(f[0]!.state).toBe("orbit");

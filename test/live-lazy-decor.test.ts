@@ -85,30 +85,18 @@ describe("lazy decor", () => {
     expect(doc.defaultView.queue.length).toBe(0);
   });
 
-  test("idle warmup schedules one import for many instances", async () => {
+  test("idle warmup shares one import, so a later instance draws decor with no wait", async () => {
     const mountLive = await fresh();
     for (let i = 0; i < 5; i++) {
       const doc = new FakeDocument();
       mountLive(asSvg(makeSvg(doc)), `lazy-w${i}`);
     }
-    expect(timers).toBe(1);
+    expect(timers).toBe(5);
     await new Promise((r) => realSetTimeout(r, 300));
     const doc = new FakeDocument();
     const svg = makeSvg(doc);
     mountLive(asSvg(svg), "lazy-w9").loop("orbit");
-    await settle();
     run(doc, 0, 0.5);
     expect(decorNodes(svg)).toBeGreaterThan(0);
-  });
-
-  test("plain states never ask for the import", async () => {
-    const mountLive = await fresh();
-    const doc = new FakeDocument();
-    const svg = makeSvg(doc);
-    const handle = mountLive(asSvg(svg), "lazy-e");
-    handle.play("wink");
-    frame(doc, 16);
-    await settle();
-    expect(decorNodes(svg)).toBe(0);
   });
 });

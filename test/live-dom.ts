@@ -206,6 +206,7 @@ export class FakeWindow extends Listenable {
 
 export class FakeDocument extends Listenable {
   defaultView = new FakeWindow();
+  hidden = false;
   rects = 0;
   log: Log | null = null;
   createElementNS(_ns: string, tag: string) {

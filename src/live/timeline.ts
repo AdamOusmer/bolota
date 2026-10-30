@@ -329,10 +329,6 @@ export class Timeline {
     });
   }
 
-  loop(id: StateId, now: number): void {
-    this.play(id, now, { loop: true });
-  }
-
   /** The state the player is on at `now`, hand-backs included. */
   state(now: number): StateId {
     return this.at(now).current;

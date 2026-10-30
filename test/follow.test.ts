@@ -21,9 +21,9 @@ function pointed(x: number, y: number) {
 }
 
 describe("follow attach and detach", () => {
-  test("off by default: mounting adds no listeners", () => {
+  test("off by default: mounting adds only the document's visibilitychange listener", () => {
     const { doc } = mounted();
-    expect(listeners(doc)).toBe(0);
+    expect(listeners(doc)).toBe(1);
   });
 
   test("follow() listens, follow(false) removes every listener", () => {
@@ -31,7 +31,7 @@ describe("follow attach and detach", () => {
     handle.follow();
     expect(listeners(doc)).toBeGreaterThan(0);
     handle.follow(false);
-    expect(listeners(doc)).toBe(0);
+    expect(listeners(doc)).toBe(1);
   });
 
   test("destroy detaches too", () => {
