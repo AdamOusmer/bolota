@@ -1,82 +1,16 @@
+// Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+
 import { describe, expect, test } from "bun:test";
-
-import { mountEngine } from "../src/engine";
-
-class FakeElement {
-  tagName: string;
-  attrs = new Map<string, string>();
-  children: FakeElement[] = [];
-  ownerDocument: FakeDocument;
-  attributeWrites = 0;
-  childListWrites = 0;
-  constructor(tag: string, doc: FakeDocument) {
-    this.tagName = tag;
-    this.ownerDocument = doc;
-  }
-  setAttribute(k: string, v: unknown) {
-    this.attributeWrites++;
-    this.attrs.set(k, String(v));
-  }
-  getAttribute(k: string) {
-    return this.attrs.get(k) ?? null;
-  }
-  appendChild(c: FakeElement) {
-    this.children.push(c);
-    return c;
-  }
-  append(...cs: FakeElement[]) {
-    this.children.push(...cs);
-  }
-  replaceChildren(...cs: FakeElement[]) {
-    this.childListWrites++;
-    this.children = cs;
-  }
-  remove() {}
-}
-
-class FakeWindow {
-  queue: Array<(ms: number) => void> = [];
-  matchMedia(_q: string) {
-    return { matches: false } as MediaQueryList;
-  }
-  requestAnimationFrame(cb: (ms: number) => void) {
-    this.queue.push(cb);
-    return this.queue.length;
-  }
-  cancelAnimationFrame(_id: number) {
-    this.queue.length = 0;
-  }
-}
-
-class FakeDocument {
-  defaultView = new FakeWindow();
-  createElementNS(_ns: string, tag: string) {
-    return new FakeElement(tag, this);
-  }
-}
-
-function mountOn(doc: FakeDocument, name: string) {
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-  const handle = mountEngine(svg as unknown as SVGSVGElement, name);
-  return { svg, handle };
-}
-
-function step(doc: FakeDocument, now: number) {
-  const due = doc.defaultView.queue;
-  doc.defaultView.queue = [];
-  for (const cb of due) cb(now);
-}
-
-const eyesOf = (svg: FakeElement) => svg.children[0]!.children[3]!;
+import { FakeDocument, actOf, frame, mountOn, nodes } from "./engine-dom";
 
 describe("mountEngine frame loop", () => {
   test("bolotas on one window share a single animation frame", () => {
     const doc = new FakeDocument();
     const bots = ["a-seed", "b-seed", "c-seed"].map((name) => mountOn(doc, name));
-    bots.forEach(({ handle }) => handle.loop("idle"));
+    bots.forEach(({ handle }) => handle.loop("orbit"));
     expect(doc.defaultView.queue.length).toBe(1);
 
-    step(doc, 16);
+    frame(doc, 16);
     expect(doc.defaultView.queue.length).toBe(1);
 
     bots.forEach(({ handle }) => handle.stop());
@@ -87,31 +21,44 @@ describe("mountEngine frame loop", () => {
     const doc = new FakeDocument();
     const still = mountOn(doc, "still-seed");
     const live = mountOn(doc, "live-seed");
-    still.handle.loop("idle");
-    live.handle.loop("idle");
+    still.handle.loop("orbit");
+    live.handle.loop("orbit");
+    frame(doc, 16);
     still.handle.stop();
 
-    const bodyOf = (svg: FakeElement) => svg.children[0]!.children[2]!.getAttribute("d");
-    const stillBefore = bodyOf(still.svg);
-    const liveBefore = bodyOf(live.svg);
-    for (let t = 16; t <= 800; t += 16) step(doc, t);
+    const stillBefore = actOf(still.svg);
+    const liveBefore = actOf(live.svg);
+    for (let t = 32; t <= 800; t += 16) frame(doc, t);
 
-    expect(bodyOf(still.svg)).toBe(stillBefore);
-    expect(bodyOf(live.svg)).not.toBe(liveBefore);
+    expect(actOf(still.svg)).toBe(stillBefore);
+    expect(actOf(live.svg)).not.toBe(liveBefore);
+    expect(doc.defaultView.queue.length).toBe(1);
   });
 
-  test("frames update the eyes in place instead of rebuilding them", () => {
+  test("frames update the figure in place instead of rebuilding it", () => {
     const doc = new FakeDocument();
     const { svg, handle } = mountOn(doc, "steady-seed");
-    handle.loop("idle");
-    step(doc, 16);
-    const eyes = eyesOf(svg);
-    const nodes = [...eyes.children];
-    const rebuilds = eyes.childListWrites;
+    handle.loop("orbit");
+    frame(doc, 16);
+    const before = nodes(svg);
 
-    for (let t = 32; t <= 800; t += 16) step(doc, t);
+    for (let t = 32; t <= 1600; t += 16) frame(doc, t);
 
-    expect(eyes.children).toEqual(nodes);
-    expect(eyes.childListWrites).toBe(rebuilds);
+    const after = new Set(nodes(svg));
+    const lost = before.filter((n) => !after.has(n) || n.parentNode === null);
+    expect(lost).toEqual([]);
+  });
+
+  test("stopping every bolota empties the queue and playing one again refills it", () => {
+    const doc = new FakeDocument();
+    const a = mountOn(doc, "a-seed");
+    const b = mountOn(doc, "b-seed");
+    a.handle.loop("orbit");
+    b.handle.loop("orbit");
+    a.handle.stop();
+    b.handle.stop();
+    expect(doc.defaultView.queue.length).toBe(0);
+    a.handle.play("orbit", { loop: true });
+    expect(doc.defaultView.queue.length).toBe(1);
   });
 });

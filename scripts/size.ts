@@ -201,28 +201,22 @@ const ENTRIES: {
     source: `@import "../../src/motion.css";`,
   },
   {
-    // The bloub engine: 14 states' worth of pose math, decor geometry and
-    // eye-fit tables (`src/bloub/`), plus `_layout` for the seed-to-silhouette
-    // bridge. Heavier by design — it is an opt-in animation engine, not part
-    // of the static-render path `blob only`/`barrel` above measure — but
-    // still gated so it cannot grow silently.
-    // Raised from 15200 by ~600 B for velocity-scaled motion blur: three
-    // `feGaussianBlur` filters (body/rings/particles), the damped speed
-    // tracking that drives them, and the tightened rAF delta clamp.
-    // Raised from 15850 to 17400 (2026-08-19): loop-phase timeline, wink
-    // gesture timeline, and follow-vs-idle arbitration — deliberate feature
-    // growth (measured 16640), not creep. The headroom on top also absorbs
-    // cross-platform gzip variance: `Bun.gzipSync` on CI's linux/x64 runners
-    // lands ~100 B above the same bundle gzipped on macOS/arm64 for identical
-    // input bytes, which once failed this row on CI with no source change.
-    // Raised from 17400 (2026-08-20) for the per-seed gaze solve: the window
-    // fillers, and `_safeGaze` walking a real silhouette with the eye's own
-    // extent at mount. Measured 17618, so this keeps the usual ~3% of room.
-    // Raised from 18200 (2026-10-29) for the shared per-window frame loop and
-    // the node pools that let a frame update the SVG in place instead of
-    // rebuilding it. Measured 18220 on CI's linux runner, so ~3% of room again.
+    // The native live engine (`src/live/`): timeline and choreography for 14
+    // states, the exact outline and eye-containment solve, the decor layer,
+    // the gaze pursuit and the in-place renderer behind `mountEngine`.
+    // Heavier by design: an opt-in animation engine, not part of the
+    // static-render path `blob only`/`barrel` above measure, but still gated so
+    // it cannot grow silently.
+    // Replaced the bloub-port row (budget 18800, last measured 18220 on CI's
+    // linux runner) when `mountEngine` became a facade over `mountLive`
+    // (0.2.0). Measured 20138 B on macOS/arm64 against the engine at the start
+    // of that change, 20179 with the follow-up timeline/decor fixes, so +1.9 KB
+    // over the old engine: the exact outline, the per-state fit solve and the
+    // roster of 18 poses are what the old DOM renderer did not carry. Budget is
+    // 20179 plus ~5%, which also absorbs the ~100 B by which `Bun.gzipSync` on
+    // CI's linux/x64 runners lands above macOS/arm64 for identical input bytes.
     name: "engine",
-    budget: 18800,
+    budget: 21200,
     external: [],
     source: `import { mountEngine } from "../../src/engine";
              globalThis.x = mountEngine;`,
@@ -230,8 +224,8 @@ const ENTRIES: {
   {
     // `runSequence`'s only import from `./engine` is the `EngineHandle`
     // *type*, erased under `verbatimModuleSyntax` — this must stay near-free
-    // and must NOT pull in `engine.ts`'s runtime (bloub, `_layout`) for a
-    // consumer who only wants the four friendly names.
+    // and must NOT pull in the engine runtime for a consumer who only wants
+    // the four friendly names.
     name: "sequences",
     budget: 260,
     external: [],
