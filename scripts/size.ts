@@ -244,8 +244,14 @@ const ENTRIES: {
     // so those stay in the decor chunk. The budget is held under the old
     // engine's 16770 on purpose: first-load size is the priority, so there is
     // no 5% room here. Engine plus decor: 24132 -> 23176 B.
+    //
+    // Raised from 16769 to 19490 for the 0.2.0 engine with the JS/CSS hybrid
+    // idle (`live/idle.ts`, `motionSeeds`), the compositor hand-off and hover
+    // amplitude. Measured 18919 B (+2150 over the 16766 B before those
+    // commits); budget is that plus ~3%. Size accepted over 0.1.7's 16770 B in
+    // exchange for ~0.7 ms/s idle and animation near the old engine's cost.
     name: "engine",
-    budget: 16769,
+    budget: 19490,
     external: ["*/decor.js"],
     source: `import { mountEngine, _CHOREO, _r3 } from "../../src/engine";
              globalThis.x = [mountEngine, _CHOREO, _r3];`,
