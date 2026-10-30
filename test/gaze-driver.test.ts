@@ -8,8 +8,10 @@ type Listener = (e: unknown) => void;
 class FakeStyle {
   props = new Map<string, string>();
   writes: string[] = [];
+  log: string[] | null = null;
   setProperty(k: string, v: string) {
     this.writes.push(k);
+    this.log?.push(k);
     this.props.set(k, v);
   }
   removeProperty(k: string) {
@@ -21,6 +23,7 @@ class FakeWindow {
   queue: Array<(ms: number) => void> = [];
   listeners = new Map<string, Set<Listener>>();
   rects = 0;
+  log: string[] | null = null;
   observers: FakeObserver[] = [];
   ResizeObserver: unknown;
   constructor() {
@@ -83,6 +86,7 @@ class FakeEl {
   ) {}
   getBoundingClientRect() {
     this.ownerDocument.defaultView.rects++;
+    this.ownerDocument.defaultView.log?.push("read");
     return { left: this.left, top: 0, width: 100, height: 100 };
   }
   querySelector(sel: string) {
@@ -123,6 +127,8 @@ describe("gaze driver: layout reads", () => {
     for (const type of ["scroll", "resize"]) {
       const at = win.rects;
       win.dispatch(type);
+      expect(win.rects - at, type).toBe(0);
+      win.frame((ms += 16));
       expect(win.rects - at, type).toBe(N);
       win.frame((ms += 16));
       expect(win.rects - at, type).toBe(N);
@@ -132,6 +138,28 @@ describe("gaze driver: layout reads", () => {
       expect(eyes.style.props.get("--mo-track-x")).toBeDefined();
       for (const k of [...eyes.style.writes, ...el.style.writes]) expect(k.startsWith("--")).toBe(true);
     }
+  });
+
+  test("under continuous scroll, one read per driver per frame, all before any write", () => {
+    const { win, els } = mount(N);
+    const log: string[] = [];
+    win.log = log;
+    for (const { el, eyes } of els) el.style.log = eyes.style.log = log;
+    let ms = 1000;
+    win.frame((ms += 16));
+    for (let f = 0; f < 30; f++) {
+      for (let e = 0; e < 8; e++) {
+        win.dispatch("scroll");
+        win.dispatch("pointermove", { clientX: 300 + f * 9, clientY: 200 + e });
+      }
+      log.length = 0;
+      win.frame((ms += 16));
+      expect(log.filter((k) => k === "read").length, `frame ${f}`).toBe(N);
+      const lastRead = log.lastIndexOf("read");
+      const firstWrite = log.findIndex((k) => k !== "read");
+      if (firstWrite >= 0) expect(lastRead, `frame ${f}`).toBeLessThan(firstWrite);
+    }
+    for (const { eyes } of els) expect(eyes.style.props.get("--mo-track-x")).toBeDefined();
   });
 
   test("one shared frame loop, which parks when the pointer is still", () => {

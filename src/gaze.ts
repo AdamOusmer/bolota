@@ -14,7 +14,7 @@
  * Inert until something sets `--mo-track-travel` on or above `.mo-eyes`.
  */
 
-import { startFrames, stopFrames } from "./live/frames";
+import { cancelRead, readNextFrame, startFrames, stopFrames } from "./live/frames";
 
 /** Pursuit time constant in ms: ~63% of the way to a new target. */
 export const SETTLE = 110;
@@ -395,7 +395,8 @@ export function gaze(el: SVGSVGElement, opts: GazeOptions = {}): Gaze {
     wake();
   };
   const onGeom = () => {
-    measure();
+    if (!on) return;
+    readNextFrame(view, measure);
     wake();
   };
 
@@ -423,6 +424,7 @@ export function gaze(el: SVGSVGElement, opts: GazeOptions = {}): Gaze {
     view.removeEventListener("pointerleave", onLeave);
     view.removeEventListener("scroll", onGeom, { capture: true });
     view.removeEventListener("resize", onGeom);
+    cancelRead(view, measure);
     park();
     x = y = wx = wy = h = wh = 0;
     target.style.removeProperty("--mo-track-x");
