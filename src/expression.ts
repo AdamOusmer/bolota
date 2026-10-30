@@ -636,7 +636,7 @@ export const sick: Expression = {
  */
 export const attentive: Expression = {
   p: {
-    esx: 1.1,
+    esx: 1.14,
     esy: 1.12,
     tilt: 4,
     edy: -0.34,
@@ -664,12 +664,12 @@ export const attentive: Expression = {
  */
 export const excited: Expression = {
   p: {
-    esx: 1.7,
+    esx: 1.79,
     esy: 1,
     tilt: 10,
     edy: 1.2,
     edx: 1.55,
-    esx2: -0.18,
+    esx2: -0.19,
     esy2: 0,
     tilt2: 0,
     edy2: 0,
@@ -695,12 +695,12 @@ export const excited: Expression = {
  */
 export const laughing: Expression = {
   p: {
-    esx: 1.8,
+    esx: 1.86,
     esy: 0.24,
     tilt: -14,
     edy: -2.4,
     edx: 1.38,
-    esx2: -0.13,
+    esx2: -0.14,
     esy2: 0,
     tilt2: 0,
     edy2: 0,
@@ -726,12 +726,12 @@ export const laughing: Expression = {
  */
 export const curious: Expression = {
   p: {
-    esx: 1,
+    esx: 1.11,
     esy: 0.9,
     tilt: 18,
     edy: 3.54,
     edx: 0.03,
-    esx2: -0.27,
+    esx2: -0.3,
     esy2: -0.2,
     tilt2: -36,
     edy2: -5.87,
@@ -754,7 +754,7 @@ export const curious: Expression = {
  */
 export const proud: Expression = {
   p: {
-    esx: 1.5,
+    esx: 1.56,
     esy: 0.32,
     tilt: -12,
     edy: -2.6,

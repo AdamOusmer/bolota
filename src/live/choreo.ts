@@ -108,17 +108,14 @@ const rad = (deg: number) => (deg * Math.PI) / 180;
  * top doubles it on half the seeds and cancels it on the rest.
  *
  * Yaw turns the eye sphere: the pair slides toward the turn, closes up a
- * little, and the far eye narrows against the near one. The near eye keeps its
- * width: eyes are drawn once and posed by transform, so widening a portrait
- * capsule would flatten its round caps toward a square.
+ * little, and the far eye narrows as the near one widens.
  */
 function head(p: Partial<Pose>, roll: number, yaw = 0): Pose {
   const b = pose(p);
   const lift = HALF_GAP * Math.sin(rad(roll));
   const y = rad(yaw);
-  const near = Math.max(Math.cos(y - SPREAD), Math.cos(y + SPREAD));
-  const left = Math.cos(y - SPREAD) / near;
-  const right = Math.cos(y + SPREAD) / near;
+  const left = Math.cos(y - SPREAD) / Math.cos(SPREAD);
+  const right = Math.cos(y + SPREAD) / Math.cos(SPREAD);
   return {
     ...b,
     tilt: -roll,
@@ -143,10 +140,16 @@ const WANDER_EYES: Eyes = { pose: head({ edx: 0.6 }, -13, 28.49), track: nod(28.
 
 /**
  * bloub's open 0.236 × 0.464 eye and its 0.447 × 0.089 slit, as factors on the
- * seeded capsule, which is already taller than bloub's.
+ * seeded capsule, which is already taller than bloub's. The slit is bloub's
+ * ratio to rest on both axes (2.4 × 0.22), a true dash on the live rig.
  */
 const WINK_OPEN_POSE = head({ esx: 1.15, esy: 1.05, edx: 0.4 }, 6.7, -5.37);
-const WINK_SHUT_POSE: Pose = { ...WINK_OPEN_POSE, esx2: WINK_OPEN_POSE.esx2 + 0.7, esy2: -0.85 };
+const WINK_SHUT_POSE: Pose = {
+  ...WINK_OPEN_POSE,
+  edx: WINK_OPEN_POSE.edx + 0.8,
+  esx2: WINK_OPEN_POSE.esx2 + 2.4 - 1.15,
+  esy2: 0.22 - 1.05,
+};
 const WINK_LOOK = nod(4.55);
 
 function winkShut(t: number): number {
@@ -168,13 +171,12 @@ const WIDE_EYES: Eyes = {
 };
 
 /**
- * Big eyes, turned away from the badge. bloub's are round; a seeded capsule
- * posed by transform cannot be made round without squaring its caps, so the
- * read is carried by a uniform 1.3 scale, the roll lifting the near eye, the
- * turn narrowing the far one, and the glance.
+ * bloub's big round 0.505 × 0.498 eyes, turned away from the badge. The
+ * seeded capsule is 1.9 to 3.2 times taller than wide, so 1.9 × 0.8 makes the
+ * median seed's eye round; the live rig draws it with true round caps.
  */
 const NOTIFY_EYES: Eyes = {
-  pose: head({ esx: 1.3, esy: 1.3, edx: 1.3 }, -12.2, -21.94),
+  pose: head({ esx: 1.9, esy: 0.8, edx: 2.2 }, -12.2, -21.94),
   track: nod(-5.82),
   alpha: 1,
 };

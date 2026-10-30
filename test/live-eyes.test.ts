@@ -103,15 +103,6 @@ describe("per-state eyes", () => {
   });
 });
 
-describe("notify's eyes", () => {
-  test("keep the capsule's own aspect or narrow it, never widen it toward square", () => {
-    for (const t of times("notify")) {
-      const p = CHOREO.notify.eyes(t).pose;
-      expect(p.esx, `@${t}`).toBeLessThanOrEqual(p.esy + 1e-12);
-      expect(p.esx + p.esx2, `@${t}`).toBeLessThanOrEqual(p.esy + p.esy2 + 1e-12);
-    }
-  });
-});
 
 describe("timeline eyes", () => {
   test("an expression shows through the resting face, after its glide", () => {
