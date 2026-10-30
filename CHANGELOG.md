@@ -10,6 +10,12 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.2.1
+
+First published release of the 0.2 engine. The repository inherited a
+`v0.2.0` tag from upstream blobatar's history, so the notes below ship
+under this version; 0.2.0 was never published to npm.
+
 ## 0.2.0
 
 Static faces are unchanged: the seed-to-look mapping did not move and the
