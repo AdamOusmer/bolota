@@ -616,7 +616,7 @@ export const sick: Expression = {
  * `tilt`), then were tuned against bloub frames of the same seeds.
  *
  * Head roll and yaw go through the same composition as the live states'
- * `head` in `live/choreo.ts`, on a 20-unit eye sphere with the pair 9.5 units
+ * `head` in `live/choreo.ts`, on bloub's 26-unit eye sphere with the pair 9.5 units
  * either side: a roll `r` lifts the left eye `9.5·sin r` over the right
  * (`edy`, `edy2`), and a yaw slides the pair toward the turn (`epx`), closes
  * it a little (`edx`) and narrows the far eye (`esx`, `esx2`).
@@ -636,16 +636,16 @@ export const sick: Expression = {
  */
 export const attentive: Expression = {
   p: {
-    esx: 1.14,
+    esx: 1.13,
     esy: 1.12,
     tilt: 4,
     edy: -0.34,
     edx: 0.28,
-    esx2: -0.08,
+    esx2: -0.06,
     esy2: 0,
     tilt2: -8,
     edy2: -1.33,
-    epx: 1.23,
+    epx: 1.69,
     lock: 1,
     heat: 0,
     shake: 0,
@@ -664,16 +664,16 @@ export const attentive: Expression = {
  */
 export const excited: Expression = {
   p: {
-    esx: 1.79,
+    esx: 1.76,
     esy: 1,
     tilt: 10,
     edy: 1.2,
     edx: 1.55,
-    esx2: -0.19,
+    esx2: -0.14,
     esy2: 0,
     tilt2: 0,
     edy2: 0,
-    epx: 1.84,
+    epx: 2.53,
     lock: 1,
     heat: 0,
     shake: 0.15,
@@ -695,16 +695,16 @@ export const excited: Expression = {
  */
 export const laughing: Expression = {
   p: {
-    esx: 1.86,
+    esx: 1.84,
     esy: 0.24,
     tilt: -14,
     edy: -2.4,
     edx: 1.38,
-    esx2: -0.14,
+    esx2: -0.1,
     esy2: 0,
     tilt2: 0,
     edy2: 0,
-    epx: 1.23,
+    epx: 1.69,
     lock: 1,
     heat: 0,
     shake: 0.3,
@@ -726,16 +726,16 @@ export const laughing: Expression = {
  */
 export const curious: Expression = {
   p: {
-    esx: 1.11,
+    esx: 1.07,
     esy: 0.9,
     tilt: 18,
     edy: 3.54,
     edx: 0.03,
-    esx2: -0.3,
+    esx2: -0.22,
     esy2: -0.2,
     tilt2: -36,
     edy2: -5.87,
-    epx: 4.85,
+    epx: 6.67,
     lock: 1,
     heat: 0,
     shake: 0,
@@ -754,16 +754,16 @@ export const curious: Expression = {
  */
 export const proud: Expression = {
   p: {
-    esx: 1.56,
+    esx: 1.55,
     esy: 0.32,
     tilt: -12,
     edy: -2.6,
     edx: 0.96,
-    esx2: -0.14,
+    esx2: -0.1,
     esy2: 0,
     tilt2: 0,
     edy2: 0,
-    epx: 1.53,
+    epx: 2.11,
     lock: 1,
     heat: 0,
     shake: 0,

@@ -88,15 +88,28 @@ const nod = (pitch: number): Track => ({ x: 0, y: -pitch / TRACK_TURN });
 const pose = (p: Partial<Pose>): Pose => ({ ...IDENT, ...p });
 
 /**
- * The eye sphere a turn swings the pair on, and the median half spacing of the
- * pair. bloub's own sphere would be 26 on a median seed (0.8 × `body.rx`);
- * at 20, `wander`'s 28° glance and `notify`'s 22° keep every seed's eyes
- * inside its outline.
+ * bloub's eye sphere on a median seed (0.8 × `body.rx` 32.6) and the median
+ * half spacing of the pair on it. Whatever this asks of a small or narrow
+ * seed, `fitEyes` settles per frame.
  */
-const FACE_R = 20;
+const FACE_R = 26;
 const HALF_GAP = 9.5;
 const SPREAD = Math.asin(HALF_GAP / FACE_R);
 const rad = (deg: number) => (deg * Math.PI) / 180;
+
+/** bloub's resting eye, `EYE_W` × `EYE_H`, and its `EYE_SPLIT` in degrees, from `bloub/face.ts`. */
+const EYE_W = 0.186;
+const EYE_H = 0.412;
+const EYE_SPLIT = 15.46;
+/** A median seed's `body.rx`, the length bloub's unit split angles are measured on. */
+const SPLIT_R = 33;
+
+/** A bloub eye of `w` × `h` with a pair split of `split` degrees, as factors and spread on the seeded eyes. */
+const bloubEye = (w: number, h: number, split = EYE_SPLIT): Partial<Pose> => ({
+  esx: w / EYE_W,
+  esy: h / EYE_H,
+  edx: (Math.sin(rad(split)) - Math.sin(rad(EYE_SPLIT))) * SPLIT_R,
+});
 
 /**
  * `p` with bloub's head roll and yaw composed on, in degrees, clockwise and
@@ -136,19 +149,14 @@ const rest = (): Eyes => REST;
 const eyeless = (): Eyes => EYELESS;
 
 /** bloub's `REST_GAZE`: the sideways, upward glance `wander` holds. */
-const WANDER_EYES: Eyes = { pose: head({ edx: 0.6 }, -13, 28.49), track: nod(28.62), alpha: 1 };
+const WANDER_EYES: Eyes = { pose: head({}, -13, 28.49), track: nod(28.62), alpha: 1 };
 
-/**
- * bloub's open 0.236 × 0.464 eye and its 0.447 × 0.089 slit, as factors on the
- * seeded capsule, which is already taller than bloub's. The slit is bloub's
- * ratio to rest on both axes (2.4 × 0.22), a true dash on the live rig.
- */
-const WINK_OPEN_POSE = head({ esx: 1.15, esy: 1.05, edx: 0.4 }, 6.7, -5.37);
+/** bloub's open 0.236 × 0.464 eye, and its 0.447 × 0.089 slit on the right. */
+const WINK_OPEN_POSE = head(bloubEye(0.236, 0.464, 16.25), 6.7, -5.37);
 const WINK_SHUT_POSE: Pose = {
   ...WINK_OPEN_POSE,
-  edx: WINK_OPEN_POSE.edx + 0.8,
-  esx2: WINK_OPEN_POSE.esx2 + 2.4 - 1.15,
-  esy2: 0.22 - 1.05,
+  esx2: WINK_OPEN_POSE.esx2 + (0.447 - 0.236) / EYE_W,
+  esy2: (0.089 - 0.464) / EYE_H,
 };
 const WINK_LOOK = nod(4.55);
 
@@ -159,31 +167,26 @@ function winkShut(t: number): number {
 }
 
 /**
- * bloub's 0.356 × 0.875 stare, held to what a seeded face contains. Its pitch
- * of −22° is not carried over: bloub's eye anchor re-centres a stare that
- * large, and on screen the eyes sit level, so a faithful track reads as
- * downcast instead of startled.
+ * bloub's 0.356 × 0.875 stare. Its pitch of −22° is not carried over: bloub's
+ * eye anchor re-centres a stare that large, and on screen the eyes sit level,
+ * so a faithful track reads as downcast instead of startled.
  */
 const WIDE_EYES: Eyes = {
-  pose: head({ esx: 1.6, esy: 1.4, edx: 2.2 }, 11.6, 6.92),
+  pose: head(bloubEye(0.356, 0.875, 18.43), 11.6, 6.92),
   track: CENTRE,
   alpha: 1,
 };
 
-/**
- * bloub's big round 0.505 × 0.498 eyes, turned away from the badge. The
- * seeded capsule is 1.9 to 3.2 times taller than wide, so 1.9 × 0.8 makes the
- * median seed's eye round; the live rig draws it with true round caps.
- */
+/** bloub's big round 0.505 × 0.498 eyes, turned away from the badge. */
 const NOTIFY_EYES: Eyes = {
-  pose: head({ esx: 1.9, esy: 0.8, edx: 2.2 }, -12.2, -21.94),
+  pose: head(bloubEye(0.505, 0.498, 18.89), -12.2, -21.94),
   track: nod(-5.82),
   alpha: 1,
 };
 
 /** bloub's 0.18 × 0.34 eyes for `play` and `orbit`, a little under rest. */
-const SMALL = { esx: 0.97, esy: 0.83 };
-const PLAY_EYES: Eyes = { pose: head(SMALL, -6, 12), track: nod(-8), alpha: 1 };
+const SMALL = bloubEye(0.18, 0.34);
+const PLAY_EYES: Eyes = { pose: head(bloubEye(0.18, 0.34, 15), -6, 12), track: nod(-8), alpha: 1 };
 const ORBIT_JOSTLE_YAW = 16;
 const ORBIT_JOSTLE_PITCH = 10;
 const ORBIT_JOSTLE_ROLL = 6;

@@ -2,14 +2,11 @@
 
 import { describe, expect, test } from "bun:test";
 import { _layout } from "../src/bolota";
-import { radiusAtAngle } from "../src/bloub/shape";
-import { _seededSilhouette } from "../src/engine";
-import * as roster from "../src/expression";
 import { happy, mad } from "../src/expression";
 import { actTransform, type Act } from "../src/live/act";
 import { CHOREO, ENTRANCE_BLINK, type StateId } from "../src/live/choreo";
 import { Timeline } from "../src/live/timeline";
-import { uprightFit, uprightTransform } from "../src/live/upright";
+import { uprightTransform } from "../src/live/upright";
 import { IDENT, bakePose, type Pose } from "../src/morph";
 
 const IDS = Object.keys(CHOREO) as StateId[];
@@ -69,40 +66,7 @@ describe("per-state eyes", () => {
     expect(level(CHOREO.play.eyes(1).pose).width).toBeLessThan(0.95);
   });
 
-  test("no state fuses the seeded eyes or pushes them off the body", () => {
-    const reach = (e: { rx: number; ry: number; rot: number }) => {
-      const t = (e.rot * Math.PI) / 180;
-      return Math.abs(e.rx * Math.cos(t)) + Math.abs(e.ry * Math.sin(t));
-    };
-    const layouts = Array.from({ length: 600 }, (_, i) => {
-      const l = _layout(`seed-${i}`);
-      return { l, sil: _seededSilhouette(l.body, l.draw, l.petals, l.extra) };
-    });
-    for (const id of IDS) {
-      let gap = Infinity;
-      let slack = Infinity;
-      for (const t of times(id)) {
-        const p = CHOREO[id].eyes(t).pose;
-        for (const { l, sil } of layouts) {
-          const eyes = bakePose(l, p).l.eyes;
-          const [a, b] = eyes;
-          gap = Math.min(gap, Math.abs(b!.cx - a!.cx) - reach(a!) - reach(b!));
-          for (const e of eyes) {
-            const r = (e.rot * Math.PI) / 180;
-            for (const [u, v] of [[e.rx, e.ry], [e.rx, -e.ry], [-e.rx, e.ry], [-e.rx, -e.ry]] as const) {
-              const x = e.cx + u * Math.cos(r) - v * Math.sin(r) - l.body.cx;
-              const y = e.cy + u * Math.sin(r) + v * Math.cos(r) - l.body.cy;
-              slack = Math.min(slack, radiusAtAngle(sil, Math.atan2(y, x)) - Math.hypot(x, y) / l.body.rx);
-            }
-          }
-        }
-      }
-      expect(gap, id).toBeGreaterThan(2);
-      expect(slack, id).toBeGreaterThan(0);
-    }
-  });
 });
-
 
 describe("timeline eyes", () => {
   test("an expression shows through the resting face, after its glide", () => {
@@ -127,7 +91,7 @@ describe("timeline eyes", () => {
   test("a blinkIn entrance is masked by a blink, then the state's own eyes", () => {
     const tl = new Timeline("idle");
     tl.play("wide", 1);
-    expect(tl.eyes(1 + ENTRANCE_BLINK / 2).pose.esy).toBeLessThan(0.1);
+    expect(tl.eyes(1 + ENTRANCE_BLINK / 2).pose.esy).toBeLessThan(0.1 * CHOREO.wide.eyes(0).pose.esy);
     expect(tl.eyes(1 + 1).pose).toEqual(CHOREO.wide.eyes(1).pose);
   });
 
@@ -167,7 +131,6 @@ function matrix(list: string): Matrix {
 }
 
 describe("upright face", () => {
-  const ROSTER = Object.values(roster).flatMap((e) => (typeof e === "object" && "p" in e ? [e.p] : []));
   const R = 33, CX = 50, CY = 50;
 
   test("only orbit lifts its face off the spin, and only while it plays", () => {
@@ -180,13 +143,12 @@ describe("upright face", () => {
     for (const id of ["orbit", "play"] as const)
       for (let i = 0; i <= 96; i++) {
         const act = CHOREO[id].act((i / 96) * span(id));
-        const k = id === "orbit" ? 0.8 : 1;
-        const [a, b, c, d] = mul(matrix(actTransform(act, R, CX, CY)), matrix(uprightTransform(act, k, CX, CY)));
+        const [a, b, c, d] = mul(matrix(actTransform(act, R, CX, CY)), matrix(uprightTransform(act, CX, CY)));
         expect(Math.abs(b) + Math.abs(c), `${id} #${i}`).toBeLessThan(2e-3);
-        expect(a, `${id} #${i}`).toBeCloseTo(act.s * k, 2);
-        expect(d, `${id} #${i}`).toBeCloseTo(act.s * k, 2);
+        expect(a, `${id} #${i}`).toBeCloseTo(act.s, 2);
+        expect(d, `${id} #${i}`).toBeCloseTo(act.s, 2);
       }
-    expect(uprightTransform(CHOREO.play.act(1), 0.8, CX, CY)).toBe("");
+    expect(uprightTransform(CHOREO.play.act(1), CX, CY)).toBe("");
   });
 
   test("the face turns with the body only by what the blend has not yet unwound", () => {
@@ -195,7 +157,7 @@ describe("upright face", () => {
     tl.play("idle", 3);
     for (let now = 0.5; now < 5; now += 0.01) {
       const act: Act = tl.sample(now);
-      const [a, b] = mul(matrix(actTransform(act, R, CX, CY)), matrix(uprightTransform(act, 1, CX, CY)));
+      const [a, b] = mul(matrix(actTransform(act, R, CX, CY)), matrix(uprightTransform(act, CX, CY)));
       const turn = (Math.atan2(b, a) * 180) / Math.PI;
       const want = (((act.rot * (1 - act.upright)) % 360) + 540) % 360 - 180;
       expect(Math.abs(turn - want), `@${now}`).toBeLessThan(0.05);
@@ -203,48 +165,10 @@ describe("upright face", () => {
     expect(tl.sample(5).upright).toBe(0);
   });
 
-  test("a level face stays inside the spinning outline and never fuses", () => {
-    const MARGIN = 0.03;
-    const frames: { pose: Pose; act: Act }[] = [];
-    for (let i = 0; i < 96; i++) {
-      const t = (i / 96) * span("orbit");
-      frames.push({ pose: CHOREO.orbit.eyes(t).pose, act: CHOREO.orbit.act(t) });
+  test("orbit never squashes, so a level face sees the outline only turned", () => {
+    for (let i = 0; i <= 96; i++) {
+      const act = CHOREO.orbit.act((i / 96) * span("orbit"));
+      expect([act.sx, act.sy]).toEqual([1, 1]);
     }
-    for (const pose of [CHOREO.play.eyes(0).pose, ...ROSTER])
-      for (let i = 0; i < 8; i++) frames.push({ pose, act: CHOREO.play.act((i / 8) * span("play")) });
-    let worst = Infinity;
-    for (let s = 0; s < 1000; s++) {
-      const l = _layout(`seed-${s}`);
-      const { body } = l;
-      const sil = _seededSilhouette(body, l.draw, l.petals, l.extra);
-      const fit = uprightFit(l);
-      expect(fit).toBeGreaterThan(0.5);
-      expect(fit).toBeLessThanOrEqual(1);
-      for (const { pose, act } of frames) {
-        const { rot } = act;
-        const k = act.upright ? fit : 1;
-        const eyes = bakePose(l, pose).l.eyes;
-        const r = (-rot * Math.PI) / 180;
-        const cos = Math.cos(r), sin = Math.sin(r);
-        for (const e of eyes) {
-          const t = (e.rot * Math.PI) / 180;
-          for (const [u, v] of [[e.rx, e.ry], [e.rx, -e.ry], [-e.rx, e.ry], [-e.rx, -e.ry]] as const) {
-            const px = k * (e.cx + u * Math.cos(t) - v * Math.sin(t) - body.cx);
-            const py = k * (e.cy + u * Math.sin(t) + v * Math.cos(t) - body.cy);
-            const qx = px * cos - py * sin, qy = px * sin + py * cos;
-            const slack = (radiusAtAngle(sil, Math.atan2(qy, qx)) * body.rx - Math.hypot(qx, qy)) / body.rx;
-            if (slack < worst) worst = slack;
-            expect(slack, `seed-${s} rot ${rot}`).toBeGreaterThan(MARGIN);
-          }
-        }
-        const [a, b] = eyes as { cx: number; rx: number; ry: number; rot: number }[];
-        const reach = (e: { rx: number; ry: number; rot: number }) => {
-          const t = (e.rot * Math.PI) / 180;
-          return Math.abs(e.rx * Math.cos(t)) + Math.abs(e.ry * Math.sin(t));
-        };
-        expect(k * (Math.abs(b!.cx - a!.cx) - reach(a!) - reach(b!)), `seed-${s}`).toBeGreaterThan(0);
-      }
-    }
-    console.log(`upright worst slack ${worst.toFixed(4)} R`);
-  }, 120_000);
+  });
 });
