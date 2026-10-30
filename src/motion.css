@@ -1025,6 +1025,14 @@
 }
 
 /**
+ * A live state that drives the whole body (`data-mo-still`, set by the engine
+ * on the root) leaves no room for breath, bob or glance; the blink stays.
+ */
+[data-mo-still] g:not(.mo-eye > *) {
+  animation-play-state: paused;
+}
+
+/**
  * Slow motion, for reviewing timing. Put it on any ancestor — it is read
  * through `var(--mo-rate, 1)`, never declared on `.mo-root`, so a bolota's own
  * rules cannot shadow it.
