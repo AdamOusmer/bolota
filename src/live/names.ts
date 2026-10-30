@@ -13,6 +13,7 @@ export type RosterName =
   | "wink"
   | "sleepy"
   | "smug"
+  | "unimpressed"
   | "unsure"
   | "scared"
   | "love"
@@ -44,7 +45,7 @@ export const ALIASES = {
   curious: "curious",
   proud: "proud",
   shy: "shy",
-  unimpressed: "smug",
+  unimpressed: "unimpressed",
   sleepy: "sleepy",
   love: "love",
 } as const satisfies Record<string, RosterName | null>;
@@ -58,6 +59,7 @@ const POSES: Record<RosterName, Expression> = {
   wink: roster.wink,
   sleepy: roster.sleepy,
   smug: roster.smug,
+  unimpressed: roster.unimpressed,
   unsure: roster.unsure,
   scared: roster.scared,
   love: roster.love,

@@ -20,7 +20,7 @@ describe("bloub expression names", () => {
     expect(resolveExpression("angry")).toBe(roster.mad);
     expect(resolveExpression("confused")).toBe(roster.unsure);
     expect(resolveExpression("suspicious")).toBe(roster.smug);
-    expect(resolveExpression("unimpressed")).toBe(roster.smug);
+    expect(resolveExpression("unimpressed")).toBe(roster.unimpressed);
     expect(resolveExpression("wander")).toBeNull();
   });
 
