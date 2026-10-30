@@ -282,9 +282,20 @@ export class Timeline {
     ];
   }
 
+  /**
+   * Forgets the commands no sample at `now` or later can reach: every entry
+   * before the last one at or before `now`, which already holds their whole
+   * effect. Samples earlier than `now` are undefined afterwards.
+   */
+  release(now: number): void {
+    let i = this.log.length - 1;
+    while (i > 0 && this.log[i]!.at > now) i--;
+    if (i > 0) this.log.splice(0, i);
+  }
+
   private at(now: number): Regs {
     let i = this.log.length - 1;
-    while (this.log[i]!.at > now) i--;
+    while (i > 0 && this.log[i]!.at > now) i--;
     const r = { ...this.log[i]!.regs };
     advance(r, now);
     return r;

@@ -39,7 +39,8 @@ export interface DecorFrame {
 }
 
 export interface Decor {
-  update(frames: readonly DecorFrame[]): void;
+  /** Draws the frames; whether any decoration is on show, so a renderer knows to keep going. */
+  update(frames: readonly DecorFrame[]): boolean;
   clear(): void;
   destroy(): void;
 }
@@ -375,9 +376,12 @@ export function createDecor(
       return stop;
     });
   });
-  const arcAttrs = { fill: "none", "stroke-linecap": "round" };
-  const arcBack = new Lane<SVGPathElement>(doc, host.back, "path", arcAttrs);
-  const arcFront = new Lane<SVGPathElement>(doc, host.front, "path", arcAttrs);
+  const stroked = (node: SVGPathElement) => {
+    node.setAttribute("fill", "none");
+    node.setAttribute("stroke-linecap", "round");
+  };
+  const arcBack = new Lane<SVGPathElement>(doc, host.back, "path", {}, stroked);
+  const arcFront = new Lane<SVGPathElement>(doc, host.front, "path", {}, stroked);
   const dotBack = new Lane<SVGCircleElement>(doc, host.back, "circle", {});
   const dotFront = new Lane<SVGCircleElement>(doc, host.front, "circle", {});
   const bars = new Lane<SVGPathElement>(doc, host.front, "path", {});
@@ -610,7 +614,7 @@ export function createDecor(
     update(frames) {
       let drawn = false;
       for (const f of frames) if (f.weight > SEEN && bears(f.state)) drawn = true;
-      if (!drawn && !dirty) return;
+      if (!drawn && !dirty) return false;
       dirty = drawn;
       grads.begin();
       for (const lane of lanes) lane.begin();
@@ -620,6 +624,7 @@ export function createDecor(
         for (const f of frames) if (f.weight > SEEN) frame(f);
       }
       settle();
+      return drawn;
     },
     clear() {
       for (const lane of lanes) {

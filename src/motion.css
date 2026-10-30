@@ -308,22 +308,22 @@
  * that forgot `import "bolota/motion.css"` renders, and it is what the static
  * path — which has no stylesheet at all — has always used.
  *
- * The body is selected structurally rather than through a class of its own,
+ * The body is selected by what it is rather than through a class of its own,
  * which is the one place in this file that is worth justifying. A `mo-body`
  * class costs bytes twice — in the markup of every animated bolota, and in the
  * renderer that has to decide whether to emit it, which is core code every
- * static consumer pays for as well. `.mo-bob` is emitted by exactly one style
- * and has exactly two children, so "the group that is not the eyes" is not a
- * guess about the DOM; it is the whole of it.
+ * static consumer pays for as well. Under `.mo-bob` the only `<g>` carrying a
+ * `fill` that is not the eyes is the body, at any depth, so it is still found
+ * when the live renderer wraps it in `mo-act`. The live decor paints its own
+ * fills on the shapes, never on a group, to keep that true.
  */
-.mo-bob > g:not(.mo-eyes) {
+.mo-bob g[fill] {
   fill: var(--mo-head);
   transition: fill var(--mo-morph) var(--mo-morph-ease);
 }
 
-.mo-eyes {
+.mo-bob g.mo-eyes {
   fill: var(--mo-eye);
-  transition: fill var(--mo-morph) var(--mo-morph-ease);
 }
 
 /**
@@ -1062,8 +1062,7 @@
  * `--mo-shake` needs no line for the same reason: it is a tremor, it lives in a
  * keyframe, and the reset deletes it outright. Colour is the opposite — it is
  * part of the message, so the two fill rules above keep their `fill` and only
- * need the *transition* on it killed, which `.mo-eyes` gets from the list below
- * and the body group gets from its own line.
+ * need the *transition* on it killed, which the list below does for both groups.
  */
 @media (prefers-reduced-motion: reduce) {
   .mo-root,
@@ -1072,12 +1071,9 @@
   .mo-eyes,
   .mo-eye,
   .mo-eye > *,
-  .mo-eye rect {
+  .mo-eye rect,
+  .mo-bob g[fill] {
     animation: none;
-    transition: none;
-  }
-
-  .mo-bob > g:not(.mo-eyes) {
     transition: none;
   }
 }

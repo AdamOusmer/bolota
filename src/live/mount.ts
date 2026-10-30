@@ -84,7 +84,6 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let eyeEls: Element[] = [];
   let rects: Rect[] = [];
   let decor!: ReturnType<typeof createDecor>;
-  let decorOn = false;
 
   let clock = 0;
   let last = 0;
@@ -286,12 +285,11 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     cuedTo = now;
     if (cue !== null) cueBlink(svg);
 
-    const frames = tl.decorFrames(now);
-    if (frames.length || decorOn) decor.update(frames);
-    decorOn = frames.length > 0;
+    const drawn = decor.update(tl.decorFrames(now));
 
-    const animating = !isStatic(id) && (tl.next(now) < Infinity || restLoop);
-    return changed || busy || decorOn || animating;
+    const moving = !isStatic(id);
+    const animating = tl.next(now) < Infinity ? moving || id !== rest : moving && restLoop;
+    return changed || busy || drawn || animating;
   }
 
   function tick(ms: number): void {
@@ -392,6 +390,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       tl.express(exprPose, -1);
       frame(0, 0);
     } else {
+      tl.release(clock);
       tl.express(exprPose, clock);
       wake();
     }
@@ -422,6 +421,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       restLoop = looped ? true : next === rest && restLoop;
       rest = next;
       cuedTo = clock - 1e-6;
+      tl.release(clock);
       tl.play(id, clock, o as PlayOptions);
       wake();
     },
