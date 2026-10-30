@@ -178,7 +178,7 @@ describe("eye constraint", () => {
           for (const f of faces)
             for (const [gx, gy] of c.baseFace ? GAZE : GAZE.slice(0, 1)) {
               const followed = gx || gy ? { ...f, head: { ...f.head, yaw: 0 } } : f;
-              const eyes = faceEyes(l, followed).map((e) => ({ ...e, cx: e.cx + gx, cy: e.cy + gy }));
+              const eyes = faceEyes(l, followed, turn).map((e) => ({ ...e, cx: e.cx + gx, cy: e.cy + gy }));
               fitEyes(l, eyes, turn, out);
               corrected.frames++;
               if (out.pull > 0) { corrected.pulled++; corrected.pulls.push(out.pull); }

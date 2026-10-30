@@ -477,19 +477,8 @@ export function blendEyes(a: Eyes, b: Eyes, t: number): Eyes {
   };
 }
 
-/** bloub's `blinkScale`: a closed lid still shows 6% of the eye. */
-export const blinkScale = (lid: number) => 0.06 + 0.94 * clamp(lid);
-
-/** The blink masking a `blinkIn` entrance: shut at 0.1 s, open again at 0.2 s. */
+/**
+ * The blink masking a `blinkIn` entrance, in seconds: shut at half, open at
+ * the end. `motion.css`'s `mo-blink-in` plays it; the timeline only says when.
+ */
 export const ENTRANCE_BLINK = 0.2;
-
-/** How open an entrance blink `since` seconds in leaves the lids, 0–1. */
-export const entranceLid = (since: number) =>
-  since >= ENTRANCE_BLINK || since < 0 ? 1 : Math.abs((since / ENTRANCE_BLINK) * 2 - 1);
-
-/** `e` with its lids `lid` open, as a squash across each eye. */
-export function blinked(e: Eyes, lid: number): Eyes {
-  if (lid >= 1) return e;
-  const k = blinkScale(lid);
-  return { ...e, pose: { ...e.pose, esy: e.pose.esy * k, esy2: e.pose.esy2 * k } };
-}

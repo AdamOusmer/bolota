@@ -176,7 +176,7 @@ function crossings(tr: Trace, ox: number, oy: number, dx: number, dy: number, hi
 }
 
 /** How far the ray from the body centre at `theta` stays inside the union before it first leaves it. */
-function exitAlong(l: OutlineLayout, traces: Trace[], theta: number, hits: number[]): number {
+function exitAlong(l: OutlineLayout, traces: Trace[], theta: number, hits: number[], petals = l.petals): number {
   const { cx, cy } = l.body;
   const dx = Math.cos(theta);
   const dy = Math.sin(theta);
@@ -187,7 +187,7 @@ function exitAlong(l: OutlineLayout, traces: Trace[], theta: number, hits: numbe
     if (hits.length % 2) spans.push([0, hits[i++]!]);
     for (; i + 1 < hits.length; i += 2) spans.push([hits[i]!, hits[i + 1]!]);
   }
-  for (const p of l.petals) {
+  for (const p of petals) {
     const fx = cx - p.cx;
     const fy = cy - p.cy;
     const b = fx * dx + fy * dy;
@@ -219,6 +219,44 @@ function table(l: OutlineLayout): Float64Array {
   for (let i = 0; i < RAYS; i++) t[i] = exitAlong(l, traces, (i / RAYS) * Math.PI * 2, hits);
   tables.set(l, t);
   return t;
+}
+
+const balls = new WeakMap<object, { table: Float64Array; mean: number }>();
+
+/**
+ * The head without its ornaments: the ball bloub's face sits on. Its radii,
+ * and their mean, are what bloub's own engine read off a seed's profile to
+ * size and place its eyes. A capsule's caps are the head itself and stay; a
+ * sun's rays, a cloud's lobes, a nub's bumps and a droplet's taper stand off
+ * it and are left out.
+ */
+function ball(l: OutlineLayout) {
+  let b = balls.get(l);
+  if (b) return b;
+  const traces = [core(l)];
+  const petals = l.shape === "capsule" ? l.petals : [];
+  const hits: number[] = [];
+  const t = new Float64Array(RAYS);
+  let sum = 0;
+  for (let i = 0; i < RAYS; i++) sum += t[i] = exitAlong(l, traces, (i / RAYS) * Math.PI * 2, hits, petals);
+  balls.set(l, (b = { table: t, mean: sum / RAYS }));
+  return b;
+}
+
+/** The core body's mean radius about the body centre: the ball of the same size. */
+export function ballRadius(l: OutlineLayout): number {
+  return ball(l).mean;
+}
+
+/** The core body's radius in direction `theta`, between the two nearest rays. */
+export function ballEdge(l: OutlineLayout, theta: number): number {
+  const t = ball(l).table;
+  let u = (theta / (Math.PI * 2)) % 1;
+  if (u < 0) u += 1;
+  const f = u * RAYS;
+  const i = Math.floor(f) % RAYS;
+  const w = f - Math.floor(f);
+  return t[i]! * (1 - w) + t[(i + 1) % RAYS]! * w;
 }
 
 /**

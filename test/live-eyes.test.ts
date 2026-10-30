@@ -7,6 +7,7 @@ import { actTransform, type Act } from "../src/live/act";
 import { CHOREO, ENTRANCE_BLINK, type StateId } from "../src/live/choreo";
 import { Timeline } from "../src/live/timeline";
 import { uprightTransform } from "../src/live/upright";
+import { ballEdge, ballRadius } from "../src/live/outline";
 import { faceEyes } from "../src/live/rig";
 import { IDENT } from "../src/morph";
 
@@ -68,12 +69,18 @@ describe("per-state eyes", () => {
     expect(level("play").width).toBeLessThan(0.95);
   });
 
-  test("a state's own face is bloub's size on the seed's face, the resting face the seed's", () => {
-    const l = _layout("seed-7");
-    const [a] = faceEyes(l, { ...CHOREO.wide.eyes(1), head: { roll: 0, yaw: 0, spread: 0 } });
-    expect(a!.rx * 2).toBeCloseTo(0.356 * l.face.rx, 6);
-    expect(a!.ry * 2).toBeCloseTo(0.875 * l.face.ry, 6);
-    expect(faceEyes(l, CHOREO.idle.eyes(1))).toEqual(l.eyes.map(({ cx, cy, rx, ry, rot }) => ({ cx, cy, rx, ry, rot })));
+  test("a state's own face is bloub's eye on the seed's head, the resting face the seed's", () => {
+    for (const seed of ["seed-7", "seed-2525", "alain", "seed-31"]) {
+      const l = _layout(seed);
+      const R = l.body.sides ? ballRadius(l) : l.body.rx;
+      const [a, b] = faceEyes(l, { ...CHOREO.wide.eyes(1), head: { roll: 0, yaw: 0, spread: 0 } });
+      const tilt = Math.cos((15.46 * Math.PI) / 180);
+      expect(a!.rx * 2).toBeCloseTo(0.356 * R * tilt, 6);
+      expect(a!.ry * 2).toBeCloseTo(0.875 * R, 6);
+      const half = Math.sin((15.46 * Math.PI) / 180) * R;
+      expect(b!.cx - l.body.cx).toBeCloseTo(half * (ballEdge(l, 0) / R), 6);
+      expect(faceEyes(l, CHOREO.idle.eyes(1))).toEqual(l.eyes.map(({ cx, cy, rx, ry, rot }) => ({ cx, cy, rx, ry, rot })));
+    }
   });
 
 });
@@ -98,11 +105,14 @@ describe("timeline eyes", () => {
     expect(tl.eyes(4).track).toEqual({ x: 0, y: 0 });
   });
 
-  test("a blinkIn entrance is masked by a blink, then the state's own eyes", () => {
+  test("a blinkIn entrance cues the blink, and the eyes carry no lid of their own", () => {
     const tl = new Timeline("idle");
     tl.play("wide", 1);
-    expect(tl.eyes(1 + ENTRANCE_BLINK / 2).pose.esy).toBeLessThan(0.1 * CHOREO.wide.eyes(0).pose.esy);
+    expect(tl.blinkCue(0.99, 1)).toBe(1);
+    expect(tl.blinkCue(1, 1 + ENTRANCE_BLINK)).toBeNull();
     expect(tl.eyes(1 + 1).pose).toEqual(CHOREO.wide.eyes(1).pose);
+    tl.play("alert", 3);
+    expect(tl.blinkCue(2.99, 3)).toBeNull();
   });
 
   test("an interrupted fade starts the next from what was on screen", () => {

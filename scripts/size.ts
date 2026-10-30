@@ -187,7 +187,15 @@ const ENTRIES: {
     // registered custom properties, which recalculate on the main thread
     // rather than compositing. A grid that reads as a crowd is the case this
     // library invites, so that is the case worth being cheap in.
-    budget: 1450,
+    //
+    // Raised from 1450 to 1500 for the live engine's entrance blink, measured
+    // at 1486 (+58 B over 1428). The engine computes no lids, so the one blink
+    // a state change fires has to live here: a 200 ms keyframe on the live
+    // eye's rect, stated twice so each flip of `data-mo-blink` restarts it in
+    // the same frame (one name measured 1466 but needs a frame's delay to
+    // restart), plus the rect in the reduced-motion reset. The pose-channel
+    // additions that came first (edy2, epx) cost 21 B and fit the old budget.
+    budget: 1500,
     external: [],
     ext: "css",
     source: `@import "../../src/motion.css";`,

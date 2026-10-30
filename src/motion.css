@@ -744,6 +744,33 @@
 }
 
 /**
+ * The entrance blink on a live eye: one 200 ms close and open, linear, down
+ * to 6%, as bloub masks a change of state. The engine fires it by flipping
+ * `data-mo-blink` between "0" and "1" on the root; the two names are what
+ * make each flip restart it. It rides the rect's own `scale`, which composes
+ * with the turn the engine writes in its `transform` attribute and with the
+ * idle blink on the group above.
+ */
+@keyframes mo-blink-in {
+  50% {
+    scale: 1 0.06;
+  }
+}
+@keyframes mo-blink-in2 {
+  50% {
+    scale: 1 0.06;
+  }
+}
+[data-mo-blink] .mo-eye rect {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mo-blink-in 0.2s linear;
+}
+[data-mo-blink="1"] .mo-eye rect {
+  animation-name: mo-blink-in2;
+}
+
+/**
  * Saccades — the eyes looking around.
  *
  * Real eyes do not drift. They snap between fixations in well under a tenth of
@@ -1036,7 +1063,8 @@
   .mo-bob,
   .mo-eyes,
   .mo-eye,
-  .mo-eye > * {
+  .mo-eye > *,
+  .mo-eye rect {
     animation: none;
     transition: none;
   }

@@ -3,13 +3,10 @@
 
 import type { Pose } from "../morph";
 import { blendAct, type Act } from "./act";
-import { ambientLid } from "./blink";
 import {
   CHOREO,
   EXPRESSION_MORPH,
   blendEyes,
-  blinked,
-  entranceLid,
   clamp,
   easeInOutCubic,
   easeOutQuint,
@@ -45,6 +42,11 @@ import {
  *   frame.
  * - Replaying the current state restarts it, fading from what is on screen,
  *   like any other change. The old player only updated its looping.
+ *
+ * The eyes carry no lids. Blinks are `motion.css`'s, one system: the seeded
+ * `mo-blink` is the idle blink, on the bolota's own rhythm rather than the old
+ * engine's fixed schedule, and a `blinkIn` entrance fires the one-shot
+ * `mo-blink-in` at the moment `blinkCue` reports.
  */
 
 /** `STATE_HOLD` in `../engine.ts`: how long a one-shot dwells before handing back. */
@@ -130,12 +132,7 @@ function posedEyes(r: Regs, id: StateId, since: number, now: number, looping: bo
   return blendEyes(expressed(c, own, r.exprFrom), to, easeInOutCubic(k));
 }
 
-/**
- * The eyes on screen: the same cross-fade as `composed`, then the entrance
- * blink and bloub's ambient blink, the nearer to shut of the two, as bloub's
- * engine takes them. A renderer driving these lids leaves `motion.css`'s own
- * blink off, or the face blinks on two schedules.
- */
+/** The eyes on screen: the same cross-fade as `composed`. */
 function composedEyes(r: Regs, now: number): Eyes {
   const since = now - r.tCur;
   const eyes = posedEyes(r, r.cur, since, now, r.looping);
@@ -144,9 +141,7 @@ function composedEyes(r: Regs, now: number): Eyes {
     since >= morph
       ? null
       : r.frozenEyes ?? (r.prev ? posedEyes(r, r.prev, now - r.tPrev, now, r.loopingPrev) : null);
-  const shown = origin ? blendEyes(origin, eyes, easeOutQuint(clamp(since / morph))) : eyes;
-  const entrance = r.prev !== null && CHOREO[r.cur].blinkIn ? entranceLid(since) : 1;
-  return blinked(shown, Math.min(ambientLid(now), entrance));
+  return origin ? blendEyes(origin, eyes, easeOutQuint(clamp(since / morph))) : eyes;
 }
 
 /**
@@ -343,5 +338,14 @@ export class Timeline {
   /** The eyes at `now`, blended alongside the act. */
   eyes(now: number): Eyes {
     return composedEyes(this.at(now), now);
+  }
+
+  /**
+   * When a `blinkIn` state was entered in `(from, to]`, or `null`: the moment a
+   * renderer fires the entrance blink. A looped restart is not an entrance.
+   */
+  blinkCue(from: number, to: number): number | null {
+    const r = this.at(to);
+    return r.prev !== null && CHOREO[r.cur].blinkIn && r.tCur > from && r.tCur <= to ? r.tCur : null;
   }
 }
