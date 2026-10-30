@@ -40,7 +40,7 @@ describe("markup", () => {
     // one is silent in Chrome and breaks the morph in Firefox.
     const { inner } = parts("alain", { animate: "hover" });
     expect(
-      inner.match(/<g class="mo-eye" style="[^"]+"><path d="[^"]+"\/><\/g>/g),
+      inner.match(/<g class="mo-eye" style="[^"]+"><g><path d="[^"]+"\/><\/g><\/g>/g),
     ).toHaveLength(2);
   });
 

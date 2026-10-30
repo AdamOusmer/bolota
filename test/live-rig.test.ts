@@ -34,7 +34,9 @@ function flatten(d: string, steps = 12): Pt[] {
 /** The rig's outline as drawn: a rect with half-short-side corners, turned about its centre. */
 function stadium(a: ReturnType<typeof eyeRig>) {
   const [w, h, r] = [a.width, a.height, a.rx].map(Number) as number[];
-  const [rot, cx, cy] = (a.transform.match(/-?\d+\.?\d*/g) ?? []).map(Number) as number[];
+  const rot = Number(a.rot);
+  const cx = Number(a.x) + w! / 2;
+  const cy = Number(a.y) + h! / 2;
   const t = (rot! * Math.PI) / 180;
   const hx = w! / 2 - r!, hy = h! / 2 - r!;
   const local = (px: number, py: number): Pt => {
@@ -101,9 +103,9 @@ describe("eye rig", () => {
     expect([a.width, a.height, a.rx, a.ry]).toEqual(["9", "9", "4.5", "4.5"]);
   });
 
-  test("the live markup keeps .mo-eye > * a bare group, so the idle layers animate it", () => {
+  test("the live markup gives each ambient transform its own element under .mo-eye", () => {
     const html = rigMarkup(_layout("seed-7"), IDENT);
-    expect(html.match(/<g class="mo-eye" style="--mo-wrap:-?1;--mo-lean:[\d.-]+;transform-origin:[\d.]+px [\d.]+px"><g><rect [^>]*\/><\/g><\/g>/g)?.length).toBe(2);
+    expect(html.match(/<g class="mo-eye" style="--mo-wrap:-?1;--mo-lean:[\d.-]+;transform-origin:[\d.]+px [\d.]+px"><g><g><rect [^>]*style="--mo-rot:-?[\d.]+"\/><\/g><\/g><\/g>/g)?.length).toBe(2);
     expect(html).not.toContain("<path");
   });
 });

@@ -269,12 +269,13 @@
     var(--mo-morph-ease), var(--mo-morph-ease), var(--mo-morph-ease),
     var(--mo-morph-ease);
 
-  transition-property: --mo-amp, transform, var(--mo-tp);
+  transition-property: --mo-amp, translate, scale, var(--mo-tp);
   transition-duration:
     calc(400ms * var(--mo-rate, 1)), calc(160ms * var(--mo-rate, 1)),
-    var(--mo-md);
+    calc(160ms * var(--mo-rate, 1)), var(--mo-md);
   transition-timing-function:
-    ease-out, cubic-bezier(0.23, 1, 0.32, 1), var(--mo-me);
+    ease-out, cubic-bezier(0.23, 1, 0.32, 1), cubic-bezier(0.23, 1, 0.32, 1),
+    var(--mo-me);
 
   /*
    * The tremor. Runs on every animated bolota and is invisible on almost all of
@@ -282,8 +283,11 @@
    * keyframe below is `0 0`, so the loop oscillates between two identical poses
    * and never has to be started, stopped, or replayed.
    *
-   * `translate` is free here — `transform` is the hover lift's — so this
-   * composes with everything already on the element and needs no new node.
+   * Every ambient loop animates `transform` on an element of its own: Chrome
+   * runs those on the compositor with no main-thread work at rest, but not
+   * `translate`/`rotate`/`scale` on SVG children, and not two animations on
+   * one element. The hover lift therefore takes the individual properties, which
+   * only ever animate for a transition.
    */
   animation: mo-shake calc(112ms * var(--mo-rate, 1)) linear infinite;
 }
@@ -340,16 +344,16 @@
 @keyframes mo-shake {
   0%,
   100% {
-    translate: calc(0.62px * var(--mo-shake)) calc(-0.34px * var(--mo-shake));
+    transform: translate(calc(0.62px * var(--mo-shake)), calc(-0.34px * var(--mo-shake)));
   }
   25% {
-    translate: calc(-0.7px * var(--mo-shake)) calc(0.22px * var(--mo-shake));
+    transform: translate(calc(-0.7px * var(--mo-shake)), calc(0.22px * var(--mo-shake)));
   }
   50% {
-    translate: calc(0.38px * var(--mo-shake)) calc(0.66px * var(--mo-shake));
+    transform: translate(calc(0.38px * var(--mo-shake)), calc(0.66px * var(--mo-shake)));
   }
   75% {
-    translate: calc(-0.44px * var(--mo-shake)) calc(-0.6px * var(--mo-shake));
+    transform: translate(calc(-0.44px * var(--mo-shake)), calc(-0.6px * var(--mo-shake)));
   }
 }
 
@@ -401,10 +405,11 @@
 
 .mo-root:hover {
   --mo-amp: 1;
-  transform: translateY(-1.5px) scale(1.04);
+  translate: 0 -1.5px;
+  scale: 1.04;
   transition-duration:
     calc(400ms * var(--mo-rate, 1)), calc(220ms * var(--mo-rate, 1)),
-    var(--mo-md);
+    calc(220ms * var(--mo-rate, 1)), var(--mo-md);
 }
 
 /**
@@ -668,25 +673,39 @@
  * the body group is: a class costs bytes in the markup of every animated bolota,
  * and `.mo-eye` is emitted by exactly one style and holds exactly one shape.
  *
- * Two animations on one element, and they must not be merged. Blink runs on its
- * own seeded period; wrap has to stay locked to the saccade on `.mo-eyes`, so it
- * reads the same duration and phase variables that group does. They stay
- * frame-exact because they are literally the same expression, not because their
- * periods happen to be close. They claim different properties too — `transform`
- * versus `rotate`/`scale` — so neither overwrites the other.
+ * Two elements, and they must not be merged. Blink runs on its own seeded
+ * period; wrap has to stay locked to the saccade on `.mo-eyes`, so it reads the
+ * same duration and phase variables that group does. They stay frame-exact
+ * because they are literally the same expression, not because their periods
+ * happen to be close. Both animate `transform`, so each needs an element of its
+ * own: wrap on the group under `.mo-eye`, blink on the shape (the live rect,
+ * whose `rotate` carries the lean, so its blink needs no bracket).
  */
-.mo-eye > * {
+.mo-eye > *,
+.mo-eye > * > path,
+.mo-eye rect {
   transform-box: fill-box;
   transform-origin: center;
-  animation-name: mo-blink, mo-wrap;
-  animation-duration:
-    calc(var(--mo-blink, 4800ms) * var(--mo-rate, 1)),
-    calc(var(--mo-saccade, 5600ms) * var(--mo-rate, 1));
-  animation-delay:
-    calc(var(--mo-blink-phase, 0ms) * var(--mo-rate, 1)),
-    calc(var(--mo-saccade-phase, 0ms) * var(--mo-rate, 1));
   animation-iteration-count: infinite;
   animation-timing-function: linear;
+}
+
+.mo-eye > * {
+  animation-name: mo-wrap;
+  animation-duration: calc(var(--mo-saccade, 5600ms) * var(--mo-rate, 1));
+  animation-delay: calc(var(--mo-saccade-phase, 0ms) * var(--mo-rate, 1));
+}
+
+.mo-eye > * > path,
+.mo-eye rect {
+  animation-name: mo-blink;
+  animation-duration: calc(var(--mo-blink, 4800ms) * var(--mo-rate, 1));
+  animation-delay: calc(var(--mo-blink-phase, 0ms) * var(--mo-rate, 1));
+}
+
+.mo-eye rect {
+  --mo-lean: 0;
+  rotate: calc(var(--mo-rot, 0) * 1deg);
 }
 
 /**
@@ -747,26 +766,25 @@
  * The entrance blink on a live eye: one 200 ms close and open, linear, down
  * to 6%, as bloub masks a change of state. The engine fires it by flipping
  * `data-mo-blink` between "0" and "1" on the root; the two names are what
- * make each flip restart it. It rides the rect's own `scale`, which composes
- * with the turn the engine writes in its `transform` attribute and with the
- * idle blink on the group above.
+ * make each flip restart it. It rides a group of its own between the wrap and
+ * the rect, because the idle blink holds the rect's `transform`.
  */
 @keyframes mo-blink-in {
   50% {
-    scale: 1 0.06;
+    transform: scale(1, 0.06);
   }
 }
 @keyframes mo-blink-in2 {
   50% {
-    scale: 1 0.06;
+    transform: scale(1, 0.06);
   }
 }
-[data-mo-blink] .mo-eye rect {
+[data-mo-blink] .mo-eye > * > g {
   transform-box: fill-box;
   transform-origin: center;
   animation: mo-blink-in 0.2s linear;
 }
-[data-mo-blink="1"] .mo-eye rect {
+[data-mo-blink="1"] .mo-eye > * > g {
   animation-name: mo-blink-in2;
 }
 
@@ -779,11 +797,11 @@
  * Easing this like breathe would give floating eyeballs, which is unsettling in
  * a way that is hard to name and easy to feel.
  *
- * Uses the `translate` property rather than `transform`, leaving `transform`
- * free on this element for the pointer-driven gaze layer (§4.5) to claim later
- * without the two fighting over one property.
+ * Animates `transform`, the one property Chrome composites on an SVG group, so
+ * this element owns it: anything else that needs a transform here (the live
+ * engine's upright turn) goes on a group inside it.
  *
- * **If that layer ever puts a scale or a rotation here, it needs an explicit
+ * **If this ever gets a scale or a rotation, it needs an explicit
  * `transform-origin` first.** This group is a `<g>` whose box contains both
  * blinking eyes, so under `transform-box: fill-box` its origin would follow them
  * as they close — the bug `.mo-eye` documents, one level up and twice as wide.
@@ -820,35 +838,45 @@
 @keyframes mo-saccade {
   0%,
   15% {
-    translate: 0 0;
+    transform: translate(0, 0);
   }
   16.5%,
   31% {
-    translate: calc(-1.3px * var(--mo-look-x, 1.4) * var(--mo-amp))
-      calc(-1.45px * var(--mo-look-y, 1.1) * var(--mo-amp));
+    transform: translate(
+      calc(-1.3px * var(--mo-look-x, 1.4) * var(--mo-amp)),
+      calc(-1.45px * var(--mo-look-y, 1.1) * var(--mo-amp))
+    );
   }
   32.5%,
   47% {
-    translate: calc(1.6px * var(--mo-look-x, 1.4) * var(--mo-amp))
-      calc(0.15px * var(--mo-look-y, 1.1) * var(--mo-amp));
+    transform: translate(
+      calc(1.6px * var(--mo-look-x, 1.4) * var(--mo-amp)),
+      calc(0.15px * var(--mo-look-y, 1.1) * var(--mo-amp))
+    );
   }
   48.5%,
   63% {
-    translate: calc(-0.25px * var(--mo-look-x, 1.4) * var(--mo-amp))
-      calc(1.35px * var(--mo-look-y, 1.1) * var(--mo-amp));
+    transform: translate(
+      calc(-0.25px * var(--mo-look-x, 1.4) * var(--mo-amp)),
+      calc(1.35px * var(--mo-look-y, 1.1) * var(--mo-amp))
+    );
   }
   64.5%,
   79% {
-    translate: calc(1.2px * var(--mo-look-x, 1.4) * var(--mo-amp))
-      calc(-1.3px * var(--mo-look-y, 1.1) * var(--mo-amp));
+    transform: translate(
+      calc(1.2px * var(--mo-look-x, 1.4) * var(--mo-amp)),
+      calc(-1.3px * var(--mo-look-y, 1.1) * var(--mo-amp))
+    );
   }
   80.5%,
   98.5% {
-    translate: calc(-1.6px * var(--mo-look-x, 1.4) * var(--mo-amp))
-      calc(-0.25px * var(--mo-look-y, 1.1) * var(--mo-amp));
+    transform: translate(
+      calc(-1.6px * var(--mo-look-x, 1.4) * var(--mo-amp)),
+      calc(-0.25px * var(--mo-look-y, 1.1) * var(--mo-amp))
+    );
   }
   100% {
-    translate: 0 0;
+    transform: translate(0, 0);
   }
 }
 
@@ -902,72 +930,90 @@
 @keyframes mo-wrap {
   0%,
   15% {
-    scale: 1 1;
-    rotate: 0deg;
+    transform: rotate(0deg) scale(1, 1);
   }
   16.5%,
   31% {
-    scale: calc(
-        1 - 0.0176 * var(--mo-look-mx, 1.4) * var(--mo-amp) + 0.008 *
-          var(--mo-look-x, 1.4) * var(--mo-wrap, 1) * var(--mo-amp)
+    transform: rotate(
+        calc(
+          0.648deg * var(--mo-look-x, 1.4) * var(--mo-look-y, 1.1) *
+            var(--mo-wrap, 1) * var(--mo-amp)
+        )
       )
-      calc(1 - 0.027 * var(--mo-look-my, 1.1) * var(--mo-amp));
-    rotate: calc(
-      0.648deg * var(--mo-look-x, 1.4) * var(--mo-look-y, 1.1) *
-        var(--mo-wrap, 1) * var(--mo-amp)
-    );
+      scale(
+        calc(
+          1 - 0.0176 * var(--mo-look-mx, 1.4) * var(--mo-amp) + 0.008 *
+            var(--mo-look-x, 1.4) * var(--mo-wrap, 1) * var(--mo-amp)
+        ),
+        calc(1 - 0.027 * var(--mo-look-my, 1.1) * var(--mo-amp))
+      );
   }
   32.5%,
   47% {
-    scale: calc(
-        1 - 0.022 * var(--mo-look-mx, 1.4) * var(--mo-amp) - 0.01 *
-          var(--mo-look-x, 1.4) * var(--mo-wrap, 1) * var(--mo-amp)
+    transform: rotate(
+        calc(
+          0.09deg * var(--mo-look-x, 1.4) * var(--mo-look-y, 1.1) *
+            var(--mo-wrap, 1) * var(--mo-amp)
+        )
       )
-      calc(1 - 0.003 * var(--mo-look-my, 1.1) * var(--mo-amp));
-    rotate: calc(
-      0.09deg * var(--mo-look-x, 1.4) * var(--mo-look-y, 1.1) *
-        var(--mo-wrap, 1) * var(--mo-amp)
-    );
+      scale(
+        calc(
+          1 - 0.022 * var(--mo-look-mx, 1.4) * var(--mo-amp) - 0.01 *
+            var(--mo-look-x, 1.4) * var(--mo-wrap, 1) * var(--mo-amp)
+        ),
+        calc(1 - 0.003 * var(--mo-look-my, 1.1) * var(--mo-amp))
+      );
   }
   48.5%,
   63% {
-    scale: calc(
-        1 - 0.0033 * var(--mo-look-mx, 1.4) * var(--mo-amp) + 0.0015 *
-          var(--mo-look-x, 1.4) * var(--mo-wrap, 1) * var(--mo-amp)
+    transform: rotate(
+        calc(
+          -0.115deg * var(--mo-look-x, 1.4) * var(--mo-look-y, 1.1) *
+            var(--mo-wrap, 1) * var(--mo-amp)
+        )
       )
-      calc(1 - 0.0255 * var(--mo-look-my, 1.1) * var(--mo-amp));
-    rotate: calc(
-      -0.115deg * var(--mo-look-x, 1.4) * var(--mo-look-y, 1.1) *
-        var(--mo-wrap, 1) * var(--mo-amp)
-    );
+      scale(
+        calc(
+          1 - 0.0033 * var(--mo-look-mx, 1.4) * var(--mo-amp) + 0.0015 *
+            var(--mo-look-x, 1.4) * var(--mo-wrap, 1) * var(--mo-amp)
+        ),
+        calc(1 - 0.0255 * var(--mo-look-my, 1.1) * var(--mo-amp))
+      );
   }
   64.5%,
   79% {
-    scale: calc(
-        1 - 0.0165 * var(--mo-look-mx, 1.4) * var(--mo-amp) - 0.0075 *
-          var(--mo-look-x, 1.4) * var(--mo-wrap, 1) * var(--mo-amp)
+    transform: rotate(
+        calc(
+          -0.54deg * var(--mo-look-x, 1.4) * var(--mo-look-y, 1.1) *
+            var(--mo-wrap, 1) * var(--mo-amp)
+        )
       )
-      calc(1 - 0.024 * var(--mo-look-my, 1.1) * var(--mo-amp));
-    rotate: calc(
-      -0.54deg * var(--mo-look-x, 1.4) * var(--mo-look-y, 1.1) *
-        var(--mo-wrap, 1) * var(--mo-amp)
-    );
+      scale(
+        calc(
+          1 - 0.0165 * var(--mo-look-mx, 1.4) * var(--mo-amp) - 0.0075 *
+            var(--mo-look-x, 1.4) * var(--mo-wrap, 1) * var(--mo-amp)
+        ),
+        calc(1 - 0.024 * var(--mo-look-my, 1.1) * var(--mo-amp))
+      );
   }
   80.5%,
   98.5% {
-    scale: calc(
-        1 - 0.022 * var(--mo-look-mx, 1.4) * var(--mo-amp) + 0.01 *
-          var(--mo-look-x, 1.4) * var(--mo-wrap, 1) * var(--mo-amp)
+    transform: rotate(
+        calc(
+          0.135deg * var(--mo-look-x, 1.4) * var(--mo-look-y, 1.1) *
+            var(--mo-wrap, 1) * var(--mo-amp)
+        )
       )
-      calc(1 - 0.0045 * var(--mo-look-my, 1.1) * var(--mo-amp));
-    rotate: calc(
-      0.135deg * var(--mo-look-x, 1.4) * var(--mo-look-y, 1.1) *
-        var(--mo-wrap, 1) * var(--mo-amp)
-    );
+      scale(
+        calc(
+          1 - 0.022 * var(--mo-look-mx, 1.4) * var(--mo-amp) + 0.01 *
+            var(--mo-look-x, 1.4) * var(--mo-wrap, 1) * var(--mo-amp)
+        ),
+        calc(1 - 0.0045 * var(--mo-look-my, 1.1) * var(--mo-amp))
+      );
   }
   100% {
-    scale: 1 1;
-    rotate: 0deg;
+    transform: rotate(0deg) scale(1, 1);
   }
 }
 
@@ -982,7 +1028,8 @@
     --mo-amp: 0;
     /* The hover reaction latches too, and a tapped bolota left sitting at
        1.04× is more obviously wrong than one left breathing. */
-    transform: none;
+    translate: none;
+    scale: none;
   }
   .mo-root.mo-always {
     --mo-amp: 1;
@@ -1028,7 +1075,7 @@
  * A live state that drives the whole body (`data-mo-still`, set by the engine
  * on the root) leaves no room for breath, bob or glance; the blink stays.
  */
-[data-mo-still] g:not(.mo-eye > *) {
+[data-mo-still] g:not(.mo-eye > *, .mo-eye > * > g) {
   animation-play-state: paused;
 }
 
@@ -1081,7 +1128,7 @@
   .mo-eyes,
   .mo-eye,
   .mo-eye > *,
-  .mo-eye rect,
+  .mo-eye > * > *,
   .mo-bob g[fill] {
     animation: none;
     transition: none;

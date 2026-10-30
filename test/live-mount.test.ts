@@ -9,7 +9,7 @@ import { FakeDocument, FakeElement, frame, makeSvg, run } from "./live-dom";
 const NAME = "mount-seed";
 const inner = parts(NAME, { animate: "always" }).inner;
 const asSvg = (el: FakeElement) => el as unknown as SVGSVGElement;
-const rectsOf = (svg: FakeElement) => svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!.children[0]!);
+const rectsOf = (svg: FakeElement) => svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!.children[0]!.children[0]!);
 const attrs = (svg: FakeElement) => rectsOf(svg).map((r) => [...r.attrs.values()].join(","));
 
 function ssr() {
@@ -33,11 +33,12 @@ describe("mountLive markup", () => {
     expect(figure.children.map((c) => c.tagName)).toEqual(["defs", "g", "g", "g"]);
     expect(figure.children[2]!.hasAttribute("data-mo-head")).toBe(true);
     expect(figure.children[2]!.children.map((c) => c.getAttribute("class"))).toEqual(["mo-act"]);
-    const expected = inner.replace(/(<g class="mo-eye"[^>]*>)<path[^>]*\/>(<\/g>)/g, "$1<g><rect/></g>$2");
+    const expected = inner.replace(/(<g class="mo-eye"[^>]*><g>)<path[^>]*\/>(<\/g><\/g>)/g, "$1<g><rect/></g>$2");
     const actual = svg
       .querySelector(".mo-breathe")!
       .outerHTML.replace(/<g data-mo-figure=""><defs\/><g\/><g data-mo-head=""><g class="mo-act"[^>]*>/, "")
       .replace("</g></g><g/></g>", "")
+      .replace(/(class="mo-eyes"[^>]*>)<g>(.*)<\/g>(<\/g>)/, "$1$2$3")
       .replace(/<rect[^>]*\/>/g, "<rect/>");
     expect(actual).toBe(expected);
     expect(svg.getAttribute("overflow")).toBe("visible");
@@ -49,7 +50,7 @@ describe("mountLive markup", () => {
     const before = svg.outerHTML;
     const nodes: FakeElement[] = [];
     svg.walk((e) => nodes.push(e));
-    const eyePaths = nodes.filter((n) => n.tagName === "path" && n.parentNode?.getAttribute("class") === "mo-eye");
+    const eyePaths = nodes.filter((n) => n.tagName === "path" && n.parentNode?.parentNode?.getAttribute("class") === "mo-eye");
     const handle = mountLive(asSvg(svg), NAME);
     const kept = nodes.filter((n) => !eyePaths.includes(n));
     expect(eyePaths.length).toBe(2);
@@ -70,7 +71,7 @@ describe("mountLive markup", () => {
     const before = svg.outerHTML;
     mountLive(asSvg(svg), NAME).destroy();
     expect(svg.outerHTML).toBe(before);
-    const eyePaths = svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!);
+    const eyePaths = svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!.children[0]!);
     expect(eyePaths.every((p) => paths.includes(p))).toBe(true);
     const again = mountLive(asSvg(svg), NAME);
     expect(svg.querySelectorAll(".mo-act").length).toBe(1);

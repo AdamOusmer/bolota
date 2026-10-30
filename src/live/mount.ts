@@ -31,7 +31,7 @@ const POSE_VARS = [
   "esx", "esy", "tilt", "edy", "edx", "esx2", "esy2", "tilt2", "edy2", "epx", "lock", "shake", "bdy",
 ].map((k) => `--mo-${k}`);
 
-const RIG_KEYS = ["x", "y", "width", "height", "rx", "ry", "transform"] as const;
+const RIG_KEYS = ["x", "y", "width", "height", "rx", "ry"] as const;
 
 const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
@@ -101,6 +101,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let kids: Element[] = [];
   let actG!: SVGGElement;
   let eyesG!: Element;
+  let upG!: SVGGElement;
   let eyeEls: Element[] = [];
   let rects: Rect[] = [];
   let decor: Decor | null = null;
@@ -140,7 +141,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   function setRig(rect: Element, a: EyeRig): boolean {
     let changed = false;
     for (const k of RIG_KEYS) changed = put(rect, k, a[k]) || changed;
-    return changed;
+    return put(rect, "--mo-rot", a.rot) || changed;
   }
 
   function build(): void {
@@ -180,18 +181,22 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     svg.setAttribute("overflow", "visible");
 
     eyesG = breathe.querySelector(".mo-eyes")!;
-    snapshot(eyesG, ["style", "transform", "opacity"]);
+    snapshot(eyesG, ["style", "opacity"]);
+    upG = mk("g");
+    while (eyesG.firstChild) upG.appendChild(eyesG.firstChild);
+    eyesG.appendChild(upG);
     eyeEls = Array.from(breathe.querySelectorAll(".mo-eye"));
     rects = eyeEls.map((eye, i) => {
       snapshot(eye, ["style"]);
-      const first = eye.firstElementChild!;
+      const wrap = eye.firstElementChild!;
+      const first = wrap.firstElementChild!;
       const mine = first.firstElementChild?.tagName === "rect";
       const rect = mine ? (first.firstElementChild as Rect) : mk("rect");
       if (!mine) {
         const g = mk("g");
         g.appendChild(rect);
-        eye.replaceChild(g, first);
-        swaps.push([eye, g, first]);
+        wrap.replaceChild(g, first);
+        swaps.push([wrap, g, first]);
       }
       setRig(rect, eyeRig(L.eyes[i]!));
       return rect;
@@ -237,7 +242,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   function paint(act: Act, e: Eyes, tx: number, ty: number, weight: number): boolean {
     const turn = act.rot * act.upright;
     let changed = put(actG, "transform", actTransform(act, R, bx, by));
-    changed = put(eyesG, "transform", uprightTransform(act, bx, by) || null) || changed;
+    changed = put(upG, "transform", uprightTransform(act, bx, by) || null) || changed;
     changed = put(eyesG, "opacity", e.alpha >= 1 ? null : r3(e.alpha)) || changed;
     const head = weight > 0 ? { ...e.head, yaw: e.head.yaw * (1 - weight) } : e.head;
     const boxes = faceEyes(L, { pose: e.pose, own: e.own, head }, turn);
@@ -258,10 +263,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     fitEyes(L, boxes, turn, out);
     boxes.forEach((b, i) => {
       changed = setRig(rects[i]!, eyeRig(b)) || changed;
-      changed = put(eyeEls[i]!, "--mo-lean", String(Math.round(b.rot * 100) / 100)) || changed;
     });
-    changed = put(eyesG, "--mo-track-x", kx ? kx.toFixed(3) : null) || changed;
-    changed = put(eyesG, "--mo-track-y", ky ? ky.toFixed(3) : null) || changed;
     return changed;
   }
 
@@ -502,6 +504,8 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       decor?.destroy();
       for (const [eye, g, path] of swaps) eye.replaceChild(path, g);
       swaps = [];
+      while (upG.firstChild) eyesG.appendChild(upG.firstChild);
+      upG.remove();
       kids.forEach((k) => bob.appendChild(k));
       figure.remove();
       for (const el of added) el.remove();

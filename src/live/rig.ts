@@ -24,8 +24,9 @@ export function cueBlink(root: Element): void {
  * any aspect, and a circle when its sides are equal, so an engine-driven eye
  * changes shape by writing numbers: no path string is built per frame, and a
  * transform never stretches the round caps. Centred on the eye and turned by
- * its `rot` about that centre, it covers the static `capsulePath` of the same
- * baked eye.
+ * `rot` degrees about that centre, it covers the static `capsulePath` of the
+ * same baked eye. The turn is `--mo-rot`, which `motion.css` maps to the rect's
+ * `rotate` so its blink scales along the eye's own axis.
  */
 export interface EyeRig {
   x: string;
@@ -34,7 +35,7 @@ export interface EyeRig {
   height: string;
   rx: string;
   ry: string;
-  transform: string;
+  rot: string;
 }
 
 export function eyeRig(e: Eye): EyeRig {
@@ -46,7 +47,7 @@ export function eyeRig(e: Eye): EyeRig {
     height: r3(2 * e.ry),
     rx: r,
     ry: r,
-    transform: `rotate(${r3(e.rot)} ${r3(e.cx)} ${r3(e.cy)})`,
+    rot: r3(e.rot),
   };
 }
 
@@ -157,13 +158,10 @@ export function faceEyes(l: FaceLayout, e: Face, turn = 0): Eye[] {
 }
 
 /**
- * The live eye markup. `.mo-eye > *` is the bare `<g>`, so the idle blink and
- * wrap in `motion.css` animate it exactly as they animate the static path,
- * while the rect inside keeps its own `transform` attribute, which a CSS
- * `transform` on the rect would replace; the entrance blink uses the rect's
- * `scale`, which composes with it. `--mo-lean` is the rect's turn, so the idle
- * blink's lean bracket closes the eye across its own axis; the engine writes
- * it with the rect.
+ * The live eye markup: `.mo-eye > g` takes the wrap, the `<g>` under it the
+ * entrance blink, and the rect the idle blink, each as the one `transform`
+ * animation on its element. The rect's turn is its `rotate`, so that blink
+ * closes the eye across its own axis with no lean bracket.
  */
 export function rigMarkup(l: Posable, p: Pose): string {
   const baked = bakePose(l, p).l.eyes;
@@ -172,7 +170,7 @@ export function rigMarkup(l: Posable, p: Pose): string {
       const a = eyeRig(e);
       return (
         `<g class="mo-eye" style="--mo-wrap:${i ? 1 : -1};--mo-lean:${r3(e.rot)};transform-origin:${r3(e.cx)}px ${r3(e.cy)}px">` +
-        `<g><rect x="${a.x}" y="${a.y}" width="${a.width}" height="${a.height}" rx="${a.rx}" ry="${a.ry}" transform="${a.transform}"/></g></g>`
+        `<g><g><rect x="${a.x}" y="${a.y}" width="${a.width}" height="${a.height}" rx="${a.rx}" ry="${a.ry}" style="--mo-rot:${a.rot}"/></g></g></g>`
       );
     })
     .join("");

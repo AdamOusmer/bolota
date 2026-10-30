@@ -18,7 +18,7 @@ export function mounted(name = "facade-seed", opts?: EngineOptions) {
 }
 
 export const rectsOf = (svg: FakeElement) =>
-  svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!.children[0]!);
+  svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!.children[0]!.children[0]!);
 
 export const eyeAttrs = (svg: FakeElement) => rectsOf(svg).map((r) => [...r.attrs.values()].join(","));
 
