@@ -583,3 +583,151 @@ export const sick: Expression = {
   bake: bakePose,
   tint: (pal, p) => tintWith(pal, p, BILE),
 };
+
+/**
+ * The fourth roster: bloub's expressions of the same names, re-expressed on the
+ * seeded eyes. Starting numbers came off a channel-by-channel conversion of
+ * each `BotExpression` (eye `w`/`h` over bloub's resting 0.186/0.412 for the
+ * scales, `split` for `edx`, `pitch` for `edy`, eye tilt plus head roll for
+ * `tilt`), then were tuned against bloub frames of the same seeds. Head `yaw`
+ * has no static channel; a sideways glance is the gaze layer's job.
+ *
+ * Sign reminder: bloub's eye tilt is clockwise-positive on both eyes, so a
+ * mirrored bloub tilt `t` is `tilt: -t` here, and a shared head roll `r` is the
+ * parallel pair `tilt: -r, tilt2: 2r`.
+ */
+
+/**
+ * Upright eyes a little larger and lifted, leaning together a few degrees.
+ *
+ * The quietest pose in the roster, deliberately: bloub's `attentive` is the
+ * resting face sitting up. It separates from `surprised` on size (1.1 against
+ * 1.34), on the parallel lean against a symmetric one, and on a body that
+ * barely lifts.
+ */
+export const attentive: Expression = {
+  p: {
+    esx: 1.1,
+    esy: 1.12,
+    tilt: 4,
+    edy: -1,
+    edx: 0.3,
+    esx2: 0,
+    esy2: 0,
+    tilt2: -8,
+    lock: 1,
+    heat: 0,
+    shake: 0,
+    bdy: -0.6,
+  },
+  vars: poseVars,
+  bake: bakePose,
+};
+
+/**
+ * Wide rounded eyes, tops splayed into `/ \`, over a lifted body that hums.
+ *
+ * `surprised` is the neighbour. This one is rounder rather than taller, sits
+ * lower on the face rather than higher, splays its tops rather than leaning
+ * them in, and trembles, which `surprised` never does.
+ */
+export const excited: Expression = {
+  p: {
+    esx: 1.7,
+    esy: 1,
+    tilt: 10,
+    edy: 1.2,
+    edx: 1.6,
+    esx2: 0,
+    esy2: 0,
+    tilt2: 0,
+    lock: 1,
+    heat: 0,
+    shake: 0.15,
+    bdy: -1.8,
+  },
+  vars: poseVars,
+  bake: bakePose,
+};
+
+/**
+ * `happy` past its ceiling: flatter, wider, higher, crinkled into a shallow
+ * `\ /`, and shaking.
+ *
+ * bloub's `laughing` is `happy` with every channel pushed further and no
+ * tremor, since bloub has no tremor channel. The tremor is added here because
+ * on two capsules the squint alone does not separate it from `happy`; shake,
+ * height and lift make three. The crinkle is a third of `mad`'s angle and runs
+ * cool, which keeps it a squint and not a scowl.
+ */
+export const laughing: Expression = {
+  p: {
+    esx: 1.8,
+    esy: 0.24,
+    tilt: -14,
+    edy: -2.4,
+    edx: 1.4,
+    esx2: 0,
+    esy2: 0,
+    tilt2: 0,
+    lock: 1,
+    heat: 0,
+    shake: 0.3,
+    bdy: -2.6,
+  },
+  vars: poseVars,
+  bake: bakePose,
+};
+
+/**
+ * The head tipped: both eyes leaning hard the same way, the far one smaller.
+ *
+ * bloub carries curiosity in head roll, and roll on two eyes is a parallel
+ * lean, so this is `smug`'s `tilt2 = -2 × tilt` trick at full strength on a
+ * portrait capsule. `unsure` is the other asymmetric pose; it squashes one eye
+ * to a third and barely leans, where this keeps both eyes open and leans 18°.
+ */
+export const curious: Expression = {
+  p: {
+    esx: 1,
+    esy: 0.9,
+    tilt: 18,
+    edy: 0.6,
+    edx: 0.4,
+    esx2: -0.18,
+    esy2: -0.2,
+    tilt2: -36,
+    lock: 1,
+    heat: 0,
+    shake: 0,
+    bdy: 0,
+  },
+  vars: poseVars,
+  bake: bakePose,
+};
+
+/**
+ * Narrow lidded bars held high over a body lifted chin-first.
+ *
+ * Nearest to `happy` and `smug`. Against `happy` the bars are mirrored into a
+ * shallow `\ /` rather than parallel and ride a full unit higher; against
+ * `smug` they are flatter and level with each other rather than cocked.
+ */
+export const proud: Expression = {
+  p: {
+    esx: 1.5,
+    esy: 0.32,
+    tilt: -12,
+    edy: -2.6,
+    edx: 1,
+    esx2: 0,
+    esy2: 0,
+    tilt2: 0,
+    lock: 1,
+    heat: 0,
+    shake: 0,
+    bdy: -2.4,
+  },
+  vars: poseVars,
+  bake: bakePose,
+};

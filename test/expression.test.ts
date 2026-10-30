@@ -3,8 +3,13 @@
 import { describe, expect, test } from "bun:test";
 import { bolota, _layout, parts } from "../src/bolota";
 import {
+  attentive,
   bakePose,
+  curious,
+  excited,
   happy,
+  laughing,
+  proud,
   idle,
   love,
   mad,
@@ -49,6 +54,11 @@ const NAMED: [string, Expression][] = [
   ["love", love],
   ["shy", shy],
   ["sick", sick],
+  ["attentive", attentive],
+  ["excited", excited],
+  ["laughing", laughing],
+  ["curious", curious],
+  ["proud", proud],
 ];
 const ALL: [string, Expression][] = [["idle", idle], ...NAMED];
 

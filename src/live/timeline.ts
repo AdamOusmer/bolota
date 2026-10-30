@@ -1,8 +1,20 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 // Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
+import type { Pose } from "../morph";
 import { blendAct, type Act } from "./act";
-import { CHOREO, clamp, easeOutQuint, type StateId } from "./choreo";
+import {
+  CHOREO,
+  EXPRESSION_MORPH,
+  blendEyes,
+  blinked,
+  clamp,
+  easeInOutCubic,
+  easeOutQuint,
+  expressed,
+  type Eyes,
+  type StateId,
+} from "./choreo";
 
 /**
  * State playback as a pure function of the command log and the time.
@@ -63,6 +75,10 @@ interface Regs {
   cur: StateId;
   prev: StateId | null;
   frozen: Act | null;
+  frozenEyes: Eyes | null;
+  exprFrom: Pose | null;
+  exprTo: Pose | null;
+  exprAt: number;
   tCur: number;
   tPrev: number;
   looping: boolean;
@@ -90,6 +106,27 @@ function composed(r: Regs, now: number): Act {
   return blendAct(origin, act, easeOutQuint(clamp(since / morph)));
 }
 
+/** A state's eyes with the held expression shown through, mid-change included. */
+function posedEyes(r: Regs, id: StateId, since: number, now: number): Eyes {
+  const c = CHOREO[id];
+  const own = c.eyes(local(r, id, Math.max(0, since)));
+  const to = expressed(c, own, r.exprTo);
+  const k = clamp((now - r.exprAt) / EXPRESSION_MORPH);
+  if (r.exprFrom === r.exprTo || k >= 1) return to;
+  return blendEyes(expressed(c, own, r.exprFrom), to, easeInOutCubic(k));
+}
+
+/** The eyes on screen: the same cross-fade as `composed`, then the entrance blink. */
+function composedEyes(r: Regs, now: number): Eyes {
+  const since = now - r.tCur;
+  const eyes = posedEyes(r, r.cur, since, now);
+  const morph = CHOREO[r.cur].morph;
+  const origin =
+    since >= morph ? null : r.frozenEyes ?? (r.prev ? posedEyes(r, r.prev, now - r.tPrev, now) : null);
+  const shown = origin ? blendEyes(origin, eyes, easeOutQuint(clamp(since / morph))) : eyes;
+  return r.prev !== null && CHOREO[r.cur].blinkIn ? blinked(shown, since) : shown;
+}
+
 /**
  * Only an interrupted fade freezes its origin. Freezing on every change would
  * stop the outgoing state dead for the whole fade, when outside a fade it is
@@ -102,6 +139,7 @@ function setState(r: Regs, id: StateId, now: number, loop: boolean): void {
   }
   const midMorph = r.prev !== null && now - r.tCur < CHOREO[r.cur].morph;
   r.frozen = midMorph ? composed(r, now) : null;
+  r.frozenEyes = midMorph ? composedEyes(r, now) : null;
   r.prev = r.cur;
   r.tPrev = r.tCur;
   r.cur = id;
@@ -142,6 +180,7 @@ function advance(r: Regs, now: number): void {
     r.cur = r.current;
     r.prev = null;
     r.frozen = null;
+    r.frozenEyes = null;
     r.tCur = at;
     r.tPrev = at;
     r.looping = false;
@@ -203,6 +242,10 @@ export class Timeline {
           cur: initial,
           prev: null,
           frozen: null,
+          frozenEyes: null,
+          exprFrom: null,
+          exprTo: null,
+          exprAt: 0,
           tCur: 0,
           tPrev: 0,
           looping: false,
@@ -221,13 +264,32 @@ export class Timeline {
     return r;
   }
 
-  play(id: StateId, now: number, o: PlayOptions = {}): void {
+  private command(now: number, apply: (r: Regs) => void): void {
     if (now < this.log[this.log.length - 1]!.at) {
       throw new RangeError(`Timeline: command at ${now} is earlier than the last one`);
     }
     const r = this.at(now);
-    play(r, id, o, now);
+    apply(r);
     this.log.push({ at: now, regs: r });
+  }
+
+  play(id: StateId, now: number, o: PlayOptions = {}): void {
+    this.command(now, (r) => play(r, id, o, now));
+  }
+
+  /**
+   * Holds an expression pose, or clears it with `null`. Seen only on states
+   * that let one through; the change glides over `EXPRESSION_MORPH` and, as in
+   * bloub, a change mid-glide starts from the old target rather than from
+   * where the glide had got to.
+   */
+  express(pose: Pose | null, now: number): void {
+    this.command(now, (r) => {
+      if (pose === r.exprTo) return;
+      r.exprFrom = r.exprTo;
+      r.exprTo = pose;
+      r.exprAt = now;
+    });
   }
 
   loop(id: StateId, now: number): void {
@@ -246,5 +308,10 @@ export class Timeline {
 
   sample(now: number): Act {
     return composed(this.at(now), now);
+  }
+
+  /** The eyes at `now`, blended alongside the act. */
+  eyes(now: number): Eyes {
+    return composedEyes(this.at(now), now);
   }
 }

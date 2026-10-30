@@ -52,6 +52,7 @@ import { clamp, lerp } from "./bloub/math";
 import { PROFILE_SAMPLES } from "./bloub/profiles";
 import { radiusAtAngle } from "./bloub/shape";
 import { POSES, STATE_BY_ID, type StateId } from "./bloub/states";
+import { startFrames, stopFrames } from "./live/frames";
 import { superellipse } from "./shape";
 import type { Body } from "./styles/shapes";
 
@@ -543,47 +544,6 @@ function setChildren(parent: Element, next: Element[]): void {
   if (prev && prev.length === next.length && prev.every((node, i) => node === next[i])) return;
   childLists.set(parent, next);
   parent.replaceChildren(...next);
-}
-
-type FrameTick = (ms: number) => void;
-
-// One requestAnimationFrame per window, however many bolotas it hosts.
-const frameLoops = new WeakMap<Window, { ticks: Set<FrameTick>; id: number }>();
-
-function frameLoop(view: Window) {
-  let loop = frameLoops.get(view);
-  if (!loop) frameLoops.set(view, (loop = { ticks: new Set(), id: 0 }));
-  return loop;
-}
-
-function runFrame(view: Window, ms: number): void {
-  const loop = frameLoop(view);
-  loop.id = 0;
-  if (loop.ticks.size === 0) return;
-  loop.id = view.requestAnimationFrame((next) => runFrame(view, next));
-  for (const tick of [...loop.ticks]) {
-    try {
-      tick(ms);
-    } catch (error) {
-      queueMicrotask(() => {
-        throw error;
-      });
-    }
-  }
-}
-
-function startFrames(view: Window, tick: FrameTick): void {
-  const loop = frameLoop(view);
-  loop.ticks.add(tick);
-  if (!loop.id) loop.id = view.requestAnimationFrame((ms) => runFrame(view, ms));
-}
-
-function stopFrames(view: Window, tick: FrameTick): void {
-  const loop = frameLoop(view);
-  loop.ticks.delete(tick);
-  if (loop.ticks.size > 0 || !loop.id) return;
-  view.cancelAnimationFrame(loop.id);
-  loop.id = 0;
 }
 
 /** Bloub's own catalog, plus `swirl` (an interface-only transition in

@@ -119,6 +119,20 @@ const ENTRIES: {
              globalThis.x = bolota(String(globalThis.seed), { expression: happy });`,
   },
   {
+    // What one pose of the fourth roster costs on top of another already
+    // imported: its data and nothing else. This row measured 4751 B against
+    // `blob + happy`'s 4705, so +46 B. Measured the same way as plain `.ts`
+    // consumers (base 4705): `attentive` +46, `excited` +46, `laughing` +50,
+    // `curious` +52, `proud` +45. Budget is `blob + happy`'s plus the 80 B a
+    // pose is allowed. `curious` is the row because it is the heaviest.
+    name: "blob + happy + curious",
+    budget: 4950,
+    external: [],
+    source: `import { bolota } from "../../src/blob";
+             import { curious, happy } from "../../src/expression";
+             globalThis.x = bolota(String(globalThis.seed), { expression: globalThis.s ? happy : curious });`,
+  },
+  {
     name: "traits only",
     budget: 600,
     external: [],
