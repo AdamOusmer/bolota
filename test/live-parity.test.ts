@@ -4,7 +4,7 @@ import { _layout } from "../src/bolota";
 import { BotEngine } from "../src/bloub/engine";
 import { toPoints } from "../src/bloub/shape";
 import { POSES, STATES, STATE_BY_ID, type Pose } from "../src/bloub/states";
-import { STATE_HOLD, _seededSilhouette, mountEngine } from "../src/engine";
+import { STATE_HOLD, _seededSilhouette, mountEngine } from "./oracle";
 import { actTransform, type Act } from "../src/live/act";
 import { CHOREO, type StateId } from "../src/live/choreo";
 import { HOLD, Timeline, frameDt, type PlayOptions } from "../src/live/timeline";

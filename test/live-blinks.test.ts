@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { _layout } from "../src/bolota";
 import { BotEngine } from "../src/bloub/engine";
-import { _seededSilhouette } from "../src/engine";
+import { _seededSilhouette } from "./oracle";
 import { CHOREO, ENTRANCE_BLINK, type StateId } from "../src/live/choreo";
 import { faceEyes } from "../src/live/rig";
 import { Timeline } from "../src/live/timeline";

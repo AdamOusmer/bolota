@@ -5,7 +5,7 @@ import { RINGS } from "../src/bloub/decor";
 import { STATE_BY_ID } from "../src/bloub/states";
 import { _layout } from "../src/bolota";
 import { contrast, fromHex, toHex } from "../src/color";
-import { _seededSilhouette } from "../src/engine";
+import { _seededSilhouette } from "./oracle";
 import { CHOREO, easeOutQuint, type StateId } from "../src/live/choreo";
 import { createDecor, type DecorFrame, type DecorHost } from "../src/live/decor";
 import { Timeline } from "../src/live/timeline";
