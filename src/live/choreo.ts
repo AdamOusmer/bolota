@@ -25,7 +25,9 @@ import { IDLE_ACT, type Act } from "./act";
  * on a sphere, a bolota keeps its seeded ones, so each state's eye shape, head
  * roll and gaze land on the `Pose` channels and a `Track` that mean the same
  * thing on screen. Eyes ride inside the act's transform, so a state that
- * shrinks or spins the body takes the face with it.
+ * shrinks the body takes the face with it. `orbit` spins the body and keeps the
+ * face level through `Act.upright`, as bloub does; `play` holds its triangle
+ * unturned, so its face is level without it.
  */
 
 const TAU = Math.PI * 2;
@@ -353,6 +355,7 @@ export const CHOREO: Record<StateId, Choreo> = {
         y: TRI_ORBIT * Math.cos(rot),
         rot: (rot * 180) / Math.PI,
         s: TRI_MEAN,
+        upright: 1,
       };
     },
     eyes: (t) => {

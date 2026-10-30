@@ -29,9 +29,16 @@ export interface Act {
   sy: number;
   /** Face opacity, 0–1. */
   eyeAlpha: number;
+  /**
+   * How far the face is exempt from `rot` and the squash, 0–1. At 1 the eyes
+   * keep only the offset and `s`, as bloub's level face on `orbit`'s spinning
+   * body (`uprightTransform` in `./upright`). A channel rather
+   * than a state flag so a hand-back unwinds it on the same curve as `rot`.
+   */
+  upright: number;
 }
 
-export const IDLE_ACT: Act = { x: 0, y: 0, rot: 0, s: 1, sx: 1, sy: 1, eyeAlpha: 1 };
+export const IDLE_ACT: Act = { x: 0, y: 0, rot: 0, s: 1, sx: 1, sy: 1, eyeAlpha: 1, upright: 0 };
 
 /**
  * `a` part-way to `b`, matching `blendPose` channel for channel.
@@ -52,6 +59,7 @@ export function blendAct(a: Act, b: Act, t: number): Act {
     sx: a.sx + (b.sx - a.sx) * t,
     sy: a.sy + (b.sy - a.sy) * t,
     eyeAlpha: a.eyeAlpha + (b.eyeAlpha - a.eyeAlpha) * t,
+    upright: a.upright + (b.upright - a.upright) * t,
   };
 }
 

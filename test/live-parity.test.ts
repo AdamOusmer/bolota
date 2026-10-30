@@ -104,7 +104,9 @@ afterAll(() => {
   BotEngine.prototype.sample = realSample;
 });
 
-function refAct(engine: BotEngine, now: number): Act {
+type Body = Omit<Act, "upright">;
+
+function refAct(engine: BotEngine, now: number): Body {
   const inner = engine as unknown as Internals;
   const pose = inner.composedPose(now);
   const shape = inner.shape;
@@ -124,7 +126,7 @@ function refAct(engine: BotEngine, now: number): Act {
   };
 }
 
-const FIELDS: (keyof Act)[] = ["x", "y", "rot", "s", "sx", "sy", "eyeAlpha"];
+const FIELDS: (keyof Body)[] =["x", "y", "rot", "s", "sx", "sy", "eyeAlpha"];
 let worst = 0;
 let frames = 0;
 
