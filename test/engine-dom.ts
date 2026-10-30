@@ -20,6 +20,14 @@ export function mounted(name = "facade-seed", opts?: EngineOptions) {
 export const rectsOf = (svg: FakeElement) =>
   svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!.children[0]!);
 
+/** Where a live eye's rect is drawn: the translation of its `matrix()`, the rect itself sitting on the origin. */
+export function eyeCentre(rect: FakeElement): [number, number] {
+  const m = /matrix\(([^)]+)\)/.exec(rect.getAttribute("transform") ?? "");
+  if (!m) throw new Error("eye rect without a matrix");
+  const v = m[1]!.trim().split(/[\s,]+/).map(Number);
+  return [v[4]!, v[5]!];
+}
+
 export const eyeAttrs = (svg: FakeElement) => rectsOf(svg).map((r) => [...r.attrs.values()].join(","));
 
 export const actOf = (svg: FakeElement) => svg.querySelector(".mo-act")!.getAttribute("transform");

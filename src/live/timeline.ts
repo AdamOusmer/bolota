@@ -46,10 +46,9 @@ import {
  * - Replaying the current state restarts it, fading from what is on screen,
  *   like any other change. The old player only updated its looping.
  *
- * The eyes carry no lids. Blinks are `motion.css`'s, one system: the seeded
- * `mo-blink` is the idle blink, on the bolota's own rhythm rather than the old
- * engine's fixed schedule, and a `blinkIn` entrance fires the one-shot
- * `mo-blink-in` at the moment `blinkCue` reports.
+ * The eyes carry no lids. Blinks are the renderer's, one system: bloub's
+ * blink schedule is the idle blink, and a `blinkIn` entrance fires one more
+ * at the moment `blinkCue` reports.
  */
 
 /** `STATE_HOLD` in `../engine.ts`: how long a one-shot dwells before handing back. */

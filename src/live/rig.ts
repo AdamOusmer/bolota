@@ -77,41 +77,22 @@ function bake(s: Eye, i: number, p: Pose, o: Eye): void {
   o.rot = s.rot * (1 - p.lock) + (p.tilt + (i ? p.tilt2 : 0)) * (i ? 1 : -1);
 }
 
-/**
- * The seeded face under a head turn: the seeded eyes at their seeded spacing,
- * placed on the face ellipse's sphere. Roll turns the pair about its midpoint,
- * yaw slides it toward the turn, closes it a little and narrows the far eye
- * as the near one widens.
- */
+/** The seeded face, posed, its pair spread apart by the head's `spread`. */
 function seededEyes(l: FaceLayout, { pose: p, head }: Face, out: Eye[]): Eye[] {
-  const R = l.face.rx;
-  const [a, b] = l.eyes as [Eye, Eye];
-  const half = (b.cx - a.cx) / 2 + head.spread * R;
-  const spread = Math.asin(Math.min(0.95, half / R));
-  const lift = half * Math.sin((head.roll * Math.PI) / 180);
-  const y = (head.yaw * Math.PI) / 180;
-  const cs = Math.cos(spread);
-  const left = Math.cos(y - spread) / cs;
-  const right = Math.cos(y + spread) / cs;
   setPose(POSED, p);
-  POSED.edy = p.edy - lift;
-  POSED.edy2 = p.edy2 + 2 * lift;
-  POSED.epx = p.epx + R * Math.sin(y) * cs;
-  POSED.edx = p.edx + half * (Math.cos(y) - 1) + head.spread * R;
-  POSED.esx = p.esx * left;
-  POSED.esx2 = (p.esx + p.esx2) * right - p.esx * left;
-  bake(a, 0, POSED, out[0]!);
-  bake(b, 1, POSED, out[1]!);
+  POSED.edx = p.edx + head.spread * l.face.rx;
+  bake(l.eyes[0]!, 0, POSED, out[0]!);
+  bake(l.eyes[1]!, 1, POSED, out[1]!);
   return out;
 }
 
 /**
- * bloub's own face on this seed, as its engine draws it: eyes `EYE_W` ×
- * `EYE_H` of the body radius, on a sphere of the body radius turned by the
- * head, each centre then drawn in or out by the head's radius in its
- * direction over the body radius (`bloub/engine.ts`'s `bodyRadius` fit, here
- * from the exact outline). `turn` is how far the body is turned under a level
- * face.
+ * bloub's own face on this seed, at a level head, as its engine draws it: eyes
+ * `EYE_W` × `EYE_H` of the body radius, `split` either side of centre on a
+ * sphere of the body radius, each centre drawn in or out by the head's radius
+ * in its direction over the body radius (`bloub/engine.ts`'s `bodyRadius` fit,
+ * here from the exact outline), and narrowed by the sphere's slope there.
+ * `turn` is how far the body is turned under a level face, in degrees.
  *
  * The body radius is `body.rx`, as bloub's engine took it, except on a
  * polygon, whose `rx` is the distance to a corner: a triangle's head is half
@@ -121,41 +102,30 @@ function seededEyes(l: FaceLayout, { pose: p, head }: Face, out: Eye[]): Eye[] {
  */
 function bloubEyes(l: FaceLayout, { pose: p, head }: Face, turn: number, out: Eye[]): Eye[] {
   const R = l.body.sides ? ballRadius(l) : l.body.rx;
-  const y = (head.yaw * Math.PI) / 180;
-  const r = (head.roll * Math.PI) / 180;
-  const split = Math.asin(Math.min(0.95, REST_HALF + head.spread));
-  const cy = Math.cos(y), sy = Math.sin(y), cr = Math.cos(r), sr = Math.sin(r);
-  const ca = Math.cos(split), sa = Math.sin(split);
-  let w0 = 1;
-  let w1 = 1;
+  const sa = Math.min(0.95, REST_HALF + head.spread);
+  const ca = Math.sqrt(1 - sa * sa);
+  const tr = (turn * Math.PI) / 180;
+  setPose(POSED, p);
+  POSED.esx = p.esx * ca;
+  POSED.esx2 = p.esx2 * ca;
   for (let i = 0; i < 2; i++) {
-    const si = i ? sa : -sa;
-    const x = (sy * ca + cy * cr * si) * R;
-    const v = sr * si * R;
-    const width = Math.hypot(cy * cr * ca - sy * si, sr * ca);
-    if (i) w1 = width;
-    else w0 = width;
-    const fit = ballEdge(l, Math.atan2(v, x) - (turn * Math.PI) / 180) / R;
+    const x = (i ? sa : -sa) * R;
     const g = GROUND[i]!;
-    g.cx = l.body.cx + x * fit;
-    g.cy = l.body.cy + v * fit;
+    g.cx = l.body.cx + (x * ballEdge(l, (i ? 0 : Math.PI) - tr)) / R;
+    g.cy = l.body.cy;
     g.rx = (EYE_W / 2) * R;
     g.ry = (EYE_H / 2) * R;
     g.rot = l.eyes[i]!.rot;
+    bake(g, i, POSED, out[i]!);
   }
-  setPose(POSED, p);
-  POSED.esx = p.esx * w0;
-  POSED.esx2 = (p.esx + p.esx2) * w1 - p.esx * w0;
-  bake(GROUND[0]!, 0, POSED, out[0]!);
-  bake(GROUND[1]!, 1, POSED, out[1]!);
   return out;
 }
 
 /**
- * The posed eyes a live frame shows, body frame. `own` blends the seeded face
- * (0) into bloub's own (1), field by field, so a state that draws its own face
- * shows bloub's eyes at bloub's size and place, and the morph in and out of it
- * is continuous.
+ * The posed eyes a live frame shows at a level head, body frame. `own` blends
+ * the seeded face (0) into bloub's own (1), field by field, so a state that
+ * draws its own face shows bloub's eyes at bloub's size and place, and the
+ * morph in and out of it is continuous. The head turn is `settleEyes`'s.
  */
 export function faceEyes(l: FaceLayout, e: Face, turn = 0, out: Eye[] = pair()): Eye[] {
   const u = e.own;

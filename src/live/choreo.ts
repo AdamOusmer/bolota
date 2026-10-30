@@ -21,10 +21,11 @@ import { IDLE_ACT, restAct, type Act } from "./act";
  * `baseBody`. A `baseBody` state keeps the seed at its own size, so its `s` is
  * 1 whatever its profile says.
  *
- * The eyes are re-expressed rather than transcribed: bloub places its own eyes
- * on a sphere, a bolota keeps its seeded ones, so each state's eye shape, head
- * roll and yaw land on the `Pose` channels (`head`) and its pitch on a `Track`,
- * each meaning the same thing on screen. Eyes ride inside the act's transform, so a state that
+ * The eyes keep bloub's vocabulary: each state's eye shape lands on the `Pose`
+ * channels and its head turn (roll, yaw, pitch, split) on `head`, which the
+ * renderer turns on the face's sphere as bloub's engine does. A bolota keeps
+ * its seeded eyes on the resting face; a state that draws its own face draws
+ * bloub's. Eyes ride inside the act's transform, so a state that
  * shrinks the body takes the face with it. `orbit` spins the body and keeps the
  * face level through `Act.upright`, as bloub does; `play` holds its triangle
  * unturned, so its face is level without it.
@@ -60,15 +61,8 @@ const WINK_HOLD = 0.12;
 const WINK_OPEN = 0.18;
 const WINK_PERIOD = WINK_CLOSE + WINK_HOLD + WINK_OPEN + 1.04;
 
-/** A gaze direction in `--mo-track-x/y` units: -1..1, positive = right and down. */
-export interface Track {
-  x: number;
-  y: number;
-}
-
 export interface Eyes {
   pose: Pose;
-  track: Track;
   /** Face opacity, 0–1. The same curve as `Act.eyeAlpha`; a renderer reads one of them. */
   alpha: number;
   /**
@@ -79,60 +73,47 @@ export interface Eyes {
    * like every other channel, so entering or leaving a state morphs the size.
    */
   own: number;
-  /** bloub's head turn on this face; `faceEyes` places the eyes for it per seed. */
+  /** bloub's head turn on this face; the renderer turns the eyes on the face's sphere by it. */
   head: Head;
 }
 
 /**
- * bloub's head: `roll` and `yaw` in degrees, clockwise and rightward positive,
- * and `spread`, how much wider than bloub's resting split the pair sits, as a
- * fraction of the body radius.
+ * bloub's head: `roll`, `yaw` and `pitch` in degrees, clockwise, rightward and
+ * upward positive, and `spread`, how much wider than bloub's resting split the
+ * pair sits, as a fraction of the body radius.
  */
 export interface Head {
   roll: number;
   yaw: number;
+  pitch: number;
   spread: number;
 }
-
-/**
- * The head turn, in degrees, a track of 1 stands for. A renderer that turns
- * the face sphere by `track × TRACK_TURN` reproduces bloub's glance. 35° is
- * bloub's own follow limit.
- */
-export const TRACK_TURN = 35;
-
-export const CENTRE: Track = { x: 0, y: 0 };
 
 const newAct = (): Act => ({ ...IDLE_ACT });
 
 /** Eyes that own every object they hold, for a caller that fills them frame after frame. */
 export const newEyes = (): Eyes => ({
   pose: { ...IDENT },
-  track: { x: 0, y: 0 },
   alpha: 1,
   own: 0,
-  head: { roll: 0, yaw: 0, spread: 0 },
+  head: { roll: 0, yaw: 0, pitch: 0, spread: 0 },
 });
 
 const setHead = (out: Head, from: Head): void => {
   out.roll = from.roll;
   out.yaw = from.yaw;
+  out.pitch = from.pitch;
   out.spread = from.spread;
 };
 
-/** Copies `from` into `out`, which keeps its own pose, track and head. */
+/** Copies `from` into `out`, which keeps its own pose and head. */
 export function setEyes(out: Eyes, from: Eyes): Eyes {
   setPose(out.pose, from.pose);
-  out.track.x = from.track.x;
-  out.track.y = from.track.y;
   out.alpha = from.alpha;
   out.own = from.own;
   setHead(out.head, from.head);
   return out;
 }
-
-/** bloub's head `pitch` in degrees as a track. bloub's pitch is up-positive. */
-const nod = (pitch: number): Track => ({ x: 0, y: -pitch / TRACK_TURN });
 
 const pose = (p: Partial<Pose>): Pose => ({ ...IDENT, ...p });
 
@@ -143,45 +124,44 @@ export const EYE_W = 0.186;
 export const EYE_H = 0.412;
 export const EYE_SPLIT = 15.46;
 
-export const LEVEL: Head = { roll: 0, yaw: 0, spread: 0 };
+export const LEVEL: Head = { roll: 0, yaw: 0, pitch: 0, spread: 0 };
 
 /** A bloub eye of `w` × `h`, as factors on bloub's resting eye. */
 const bloubEye = (w: number, h: number): Partial<Pose> => ({ esx: w / EYE_W, esy: h / EYE_H });
 
 /**
- * bloub's head roll and yaw, in degrees, clockwise and rightward positive, and
- * its pair split, as a `Head`; and the roll's lean on `p`. The lean is locked,
+ * bloub's head roll, yaw and pitch, in degrees, clockwise, rightward and
+ * upward positive, and its pair split, as a `Head`. The seeded lean is locked,
  * because bloub draws every eye at the roll alone; the seeded lean stacked on
- * top doubles it on half the seeds and cancels it on the rest. Where the eyes
- * move for the head is per seed, so it is `faceEyes`'s to work out.
+ * top doubles it on half the seeds and cancels it on the rest. The roll itself
+ * turns the eyes with the head, on the sphere, as bloub's tangent frame does.
  */
-function face(p: Partial<Pose>, roll: number, yaw = 0, split = EYE_SPLIT): { pose: Pose; head: Head } {
+function face(p: Partial<Pose>, roll: number, yaw = 0, pitch = 0, split = EYE_SPLIT): { pose: Pose; head: Head } {
   return {
-    pose: pose({ ...p, tilt: -roll, tilt2: 2 * roll, lock: 1 }),
-    head: { roll, yaw, spread: Math.sin(rad(split)) - Math.sin(rad(EYE_SPLIT)) },
+    pose: pose({ ...p, lock: 1 }),
+    head: { roll, yaw, pitch, spread: Math.sin(rad(split)) - Math.sin(rad(EYE_SPLIT)) },
   };
 }
 
-const REST: Eyes = { pose: IDENT, track: CENTRE, alpha: 1, own: 0, head: LEVEL };
+const REST: Eyes = { pose: IDENT, alpha: 1, own: 0, head: LEVEL };
 /** bloub's own resting face, for a state that draws its face but leaves it at rest. */
-const BLOUB_REST: Eyes = { pose: pose({ lock: 1 }), track: CENTRE, alpha: 1, own: 1, head: LEVEL };
+const BLOUB_REST: Eyes = { pose: pose({ lock: 1 }), alpha: 1, own: 1, head: LEVEL };
 const EYELESS: Eyes = { ...BLOUB_REST, alpha: 0 };
 const rest = (): Eyes => REST;
 const bloubRest = (): Eyes => BLOUB_REST;
 const eyeless = (): Eyes => EYELESS;
 
 /** bloub's `REST_GAZE`: the sideways, upward glance `wander` holds. */
-const WANDER_EYES: Eyes = { ...face({}, -13, 28.49), track: nod(28.62), alpha: 1, own: 0 };
+const WANDER_EYES: Eyes = { ...face({}, -13, 28.49, 28.62), alpha: 1, own: 0 };
 
 /** bloub's open 0.236 × 0.464 eye, and its 0.447 × 0.089 slit on the right. */
-const WINK_FACE = face(bloubEye(0.236, 0.464), 6.7, -5.37, 16.25);
+const WINK_FACE = face(bloubEye(0.236, 0.464), 6.7, -5.37, 4.55, 16.25);
 const WINK_OPEN_POSE = WINK_FACE.pose;
 const WINK_SHUT_POSE: Pose = {
   ...WINK_OPEN_POSE,
   esx2: (0.447 - 0.236) / EYE_W,
   esy2: (0.089 - 0.464) / EYE_H,
 };
-const WINK_LOOK = nod(4.55);
 
 function winkShut(t: number): number {
   if (t < WINK_CLOSE) return easeInOutCubic(clamp(t / WINK_CLOSE));
@@ -192,16 +172,16 @@ function winkShut(t: number): number {
 /**
  * bloub's 0.356 × 0.875 stare. Its pitch of −22° is not carried over: bloub's
  * eye anchor re-centres a stare that large, and on screen the eyes sit level,
- * so a faithful track reads as downcast instead of startled.
+ * so a faithful pitch reads as downcast instead of startled.
  */
-const WIDE_EYES: Eyes = { ...face(bloubEye(0.356, 0.875), 11.6, 6.92, 18.43), track: CENTRE, alpha: 1, own: 1 };
+const WIDE_EYES: Eyes = { ...face(bloubEye(0.356, 0.875), 11.6, 6.92, 0, 18.43), alpha: 1, own: 1 };
 
 /** bloub's big round 0.505 × 0.498 eyes, turned away from the badge. */
-const NOTIFY_EYES: Eyes = { ...face(bloubEye(0.505, 0.498), -12.2, -21.94, 18.89), track: nod(-5.82), alpha: 1, own: 1 };
+const NOTIFY_EYES: Eyes = { ...face(bloubEye(0.505, 0.498), -12.2, -21.94, -5.82, 18.89), alpha: 1, own: 1 };
 
 /** bloub's 0.18 × 0.34 eyes for `play` and `orbit`, a little under rest. */
 const SMALL = bloubEye(0.18, 0.34);
-const PLAY_EYES: Eyes = { ...face(SMALL, -6, 12, 15), track: nod(-8), alpha: 1, own: 1 };
+const PLAY_EYES: Eyes = { ...face(SMALL, -6, 12, -8, 15), alpha: 1, own: 1 };
 const ORBIT_BASE = pose({ ...SMALL, lock: 1 });
 const ORBIT_JOSTLE_YAW = 16;
 const ORBIT_JOSTLE_PITCH = 10;
@@ -349,8 +329,6 @@ export const CHOREO: Record<StateId, Choreo> = {
     act: still,
     eyes: (t, o = newEyes()) => {
       lerpPose(WINK_OPEN_POSE, WINK_SHUT_POSE, winkShut(t), o.pose);
-      o.track.x = WINK_LOOK.x;
-      o.track.y = WINK_LOOK.y;
       o.alpha = 1;
       o.own = 1;
       setHead(o.head, WINK_FACE.head);
@@ -455,15 +433,11 @@ export const CHOREO: Record<StateId, Choreo> = {
     },
     eyes: (t, o = newEyes()) => {
       const w = spin(t);
-      const roll = w.sin2 * ORBIT_JOSTLE_ROLL;
       setPose(o.pose, ORBIT_BASE);
-      o.pose.tilt = -roll;
-      o.pose.tilt2 = 2 * roll;
-      o.head.roll = roll;
+      o.head.roll = w.sin2 * ORBIT_JOSTLE_ROLL;
       o.head.yaw = w.sin * ORBIT_JOSTLE_YAW;
+      o.head.pitch = w.cos * ORBIT_JOSTLE_PITCH;
       o.head.spread = 0;
-      o.track.x = 0;
-      o.track.y = -(w.cos * ORBIT_JOSTLE_PITCH) / TRACK_TURN;
       o.alpha = 1;
       o.own = 1;
       return o;
@@ -527,16 +501,14 @@ export const EXPRESSION_MORPH = 0.55;
 /**
  * The state's eyes with an expression shown through, where the state lets one:
  * a resting face (`baseFace`) or a state that hands its eye pose over
- * (`acceptsExpression`). The expression takes the pose and the gaze, as bloub's
+ * (`acceptsExpression`). The expression takes the pose and the head, as bloub's
  * replaces gaze, split and eye shape; the state keeps the opacity. `null` is no
  * expression, so the state's own eyes.
  */
 export function expressed(c: Choreo, own: Eyes, expression: Pose | null, out?: Eyes): Eyes {
   if (!expression || !(c.baseFace || c.acceptsExpression)) return own;
-  if (!out) return { pose: expression, track: CENTRE, alpha: own.alpha, own: 0, head: LEVEL };
+  if (!out) return { pose: expression, alpha: own.alpha, own: 0, head: LEVEL };
   setPose(out.pose, expression);
-  out.track.x = CENTRE.x;
-  out.track.y = CENTRE.y;
   out.alpha = own.alpha;
   out.own = 0;
   setHead(out.head, LEVEL);
@@ -547,18 +519,17 @@ const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export function blendEyes(a: Eyes, b: Eyes, t: number, out: Eyes = newEyes()): Eyes {
   lerpPose(a.pose, b.pose, t, out.pose);
-  out.track.x = mix(a.track.x, b.track.x, t);
-  out.track.y = mix(a.track.y, b.track.y, t);
   out.alpha = mix(a.alpha, b.alpha, t);
   out.own = mix(a.own, b.own, t);
   out.head.roll = mix(a.head.roll, b.head.roll, t);
   out.head.yaw = mix(a.head.yaw, b.head.yaw, t);
+  out.head.pitch = mix(a.head.pitch, b.head.pitch, t);
   out.head.spread = mix(a.head.spread, b.head.spread, t);
   return out;
 }
 
 /**
  * The blink masking a `blinkIn` entrance, in seconds: shut at half, open at
- * the end. `motion.css`'s `mo-blink-in` plays it; the timeline only says when.
+ * the end. The renderer plays it; the timeline only says when.
  */
 export const ENTRANCE_BLINK = 0.2;

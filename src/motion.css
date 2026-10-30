@@ -702,11 +702,6 @@
   animation-delay: calc((var(--mo-blink-phase, 0ms) + var(--mo-elag, 0ms)) * var(--mo-rate, 1));
 }
 
-.mo-eye rect {
-  --mo-lean: 0;
-  rotate: calc(var(--mo-rot, 0) * 1deg);
-}
-
 /**
  * The closed pose carries `--mo-amp` rather than being a constant, which is
  * what lets a blink caught by hover-out re-open instead of leaving the bolota
@@ -778,6 +773,80 @@ svg[data-mo-js] .mo-eye > *,
 svg[data-mo-js] .mo-eye > * > path,
 svg[data-mo-js] .mo-eye rect {
   animation: none !important;
+}
+
+/**
+ * The live engine's idle at rest (`src/live/idle.ts`, the same arithmetic).
+ *
+ * A mounted engine marks its root `data-mo-live` (never under reduced motion,
+ * which keeps the reset below) and owns the idle life from then on, as
+ * bloub's engine did: none of the loops above runs under it, not
+ * the saccade, the bob or their blink. While it animates it drives everything
+ * from its frame clock (`data-mo-js`, above); at rest it hands the stylesheet
+ * the two loops a resting face still has, the breath and the blink, from the
+ * phase it reached (`--mo-lag`, `--mo-elag`).
+ */
+svg[data-mo-live] .mo-bob,
+svg[data-mo-live] .mo-eyes,
+svg[data-mo-live] .mo-eye > * > * {
+  animation: none;
+}
+
+/** bloub's breath: the height alone, half a percent each way over 3.4s. */
+svg[data-mo-live] .mo-breathe {
+  animation-name: mo-live-breathe;
+  animation-duration: calc(1700ms * var(--mo-rate, 1));
+  animation-delay: calc(var(--mo-lag, 0ms) * var(--mo-rate, 1));
+  animation-direction: alternate;
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes mo-live-breathe {
+  from {
+    transform: scale(1, calc(1 - 0.005 * var(--mo-amp)));
+  }
+  to {
+    transform: scale(1, calc(1 + 0.005 * var(--mo-amp)));
+  }
+}
+
+/**
+ * bloub's blink schedule, one 16s cycle of it: gaps of 1.9 to 4.6s and a
+ * double blink, each a fast close to 6% and a slower open over 180ms. On the
+ * group under `.mo-eye`, so it closes the drawn eye on the screen's vertical.
+ */
+svg[data-mo-live] .mo-eye > * {
+  animation-name: mo-live-blink;
+  animation-duration: calc(16000ms * var(--mo-rate, 1));
+  animation-delay: calc(var(--mo-elag, 0ms) * var(--mo-rate, 1));
+  animation-timing-function: linear;
+}
+
+@keyframes mo-live-blink {
+  0%,
+  8.75%,
+  9.875%,
+  28.125%,
+  29.25%,
+  29.625%,
+  30.75%,
+  51.25%,
+  52.375%,
+  65%,
+  66.125%,
+  88.125%,
+  89.25%,
+  100% {
+    transform: scale(1, 1);
+  }
+  9.2562%,
+  28.6313%,
+  30.1313%,
+  51.7562%,
+  65.5062%,
+  88.6312% {
+    transform: scale(1, calc(1 - 0.94 * var(--mo-amp)));
+  }
 }
 
 /**
