@@ -99,7 +99,8 @@ It is a fork, twice over, and neither upstream is mine: the deterministic
 renderer comes from [blobatar][blobatar], the animation engine from
 [bloub][bloub]. What is mine is the merge of the two: every state now renders
 on the seed's own silhouette instead of the engine's built-in shapes, which is
-what makes a name's face recognisably itself while it moves.
+what makes a name's face recognisably itself while it moves. Since 0.2.0 the
+engine is native: it animates the static bolota's own markup in place.
 
 ### Tech Stack
 
@@ -204,14 +205,27 @@ bolota(user.id, { expression: happy });
 Ships: `idle`, `happy`, `sad`, `mad`, `surprised`, `wink`, `sleepy`, `smug`,
 `unsure`, `scared`, `love`, `shy`, `sick`.
 
-The live engine has its own, larger expression roster addressed by id rather
-than by import (see below). The two are separate on purpose: these thirteen
-are CSS-variable poses a static render can wear with no JavaScript running,
-the engine's are eye poses interpolated frame by frame.
+The live engine takes the same poses by name rather than by import (see
+below), plus five of its own: `attentive`, `excited`, `laughing`, `curious`,
+`proud`. A static render wears them with no JavaScript running; the engine
+interpolates between them frame by frame.
 
 ### The live engine
 
+`mountEngine` animates a bolota in place. It reads the same seed as `bolota()`
+and `parts()`, so the face you see moving is the face you rendered: same body,
+same seeded eyes, same palette. Markup already in the `<svg>` (server-rendered
+`parts()` output, or a hydrated component) is upgraded without replacing its
+nodes; an empty `<svg>` is filled with it. The eyes become `rect` rigs, the
+viewBox stays `0 0 100 100` with `overflow: visible`, and decor (rings, trails,
+particles) is drawn in the seed's palette and may extend past the box.
+
+It needs stylesheets: `@luzir/bolota/motion.css` for the idle life and poses,
+and `@luzir/bolota/gaze.css` if you call `follow()`.
+
 ```ts
+import "@luzir/bolota/motion.css";
+import "@luzir/bolota/gaze.css";
 import { mountEngine } from "@luzir/bolota/engine";
 
 const bot = mountEngine(svgElement, user.id);
@@ -260,18 +274,23 @@ Fourteen states ship, listed at runtime as `bot.states`:
 | `play`, `orbit`, `swirl`       | body choreography with rings and trails        |
 | `burst`, `comet`               | collapse into particles, reassemble            |
 
-Seventeen expressions ship, listed as `bot.expressions`: `wander`,
-`attentive`, `surprised`, `excited`, `happy`, `laughing`, `angry`, `sad`,
-`scared`, `suspicious`, `confused`, `curious`, `proud`, `shy`, `unimpressed`,
-`sleepy`, `love`. An expression only shows on a state that has a face to
-put it on, and it scales with the body, so a shrunken body never wears a
-full-size pair of eyes.
+`setExpression` accepts every static roster name (`idle`, `happy`, `sad`,
+`mad`, `surprised`, `wink`, `sleepy`, `smug`, `unsure`, `scared`, `love`,
+`shy`, `sick`), the five engine poses (`attentive`, `excited`, `laughing`,
+`curious`, `proud`), and the older bloub ids, which map onto the roster:
+`angry` is `mad`, `suspicious` and `unimpressed` are `smug`, `confused` is
+`unsure`, and `wander` is the resting face. `bot.expressions` lists the bloub
+ids; `engineExpressions()` and `engineStates()` return the same lists without
+mounting. Unknown names are ignored. An expression shows on the resting
+states (`idle`, `wander`, `swirl`) and on `play`, `burst` and `comet`; every
+other state owns its eyes.
 
-Fast motion gets velocity-proportional blur, damped frame to frame so it eases
-in and out. Each `mountEngine()` call namespaces its own filter and gradient
-ids, so several engines on one page never collide. It needs no stylesheet: the
-`<defs>` are built inline at mount. It honours `prefers-reduced-motion` by
-rendering one static pose and never starting the loop.
+Every bolota on a window shares one animation frame, and the frame loop parks
+when nothing moves. Pointer-follow measures geometry on mount, scroll and
+resize only, never per move, and ignores touch pointers. Pointer travel is the
+CSS custom property `--mo-track-travel` (viewBox units, about 1.5 to 4,
+default 3). Under `prefers-reduced-motion` the engine renders one static pose
+and never starts the loop.
 
 ***
 
@@ -283,9 +302,10 @@ rendering one static pose and never starting the loop.
 | `@luzir/bolota/blob`         | `bolota()` and `layout()` alone, without the colour utilities   |
 | `@luzir/bolota/uri`          | `bolotaUri()`, the same render as a `data:` URI                |
 | `@luzir/bolota/expression`   | the thirteen static expression values                           |
-| `@luzir/bolota/engine`       | `mountEngine()`, the live engine                               |
+| `@luzir/bolota/engine`       | `mountEngine()`, `engineStates()`, `engineExpressions()`, the live engine |
 | `@luzir/bolota/sequences`    | `runSequence()`, friendly names for four engine states         |
-| `@luzir/bolota/motion.css`   | the stylesheet the static renderer's `animate` mode needs       |
+| `@luzir/bolota/motion.css`   | the stylesheet the static renderer's `animate` mode and the engine need |
+| `@luzir/bolota/gaze.css`     | the stylesheet pointer-follow needs                             |
 
 Every render takes the same options:
 
@@ -341,7 +361,7 @@ Measured gzipped, per entry point, and enforced in CI:
 | renderer + one expression  | ~4.8 KB  |
 | `data:` URI helper         | ~4.6 KB  |
 | traits only                | ~0.5 KB  |
-| live engine                | ~17 KB   |
+| live engine                | ~20 KB   |
 | `motion.css`               | ~1.4 KB  |
 
 The engine is a separate entry point from the static renderer: importing one

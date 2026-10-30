@@ -56,9 +56,10 @@ if (!build.success) {
 // The stylesheet ships minified. `src/motion.css` is ~44 KB, nearly all of it
 // the commentary explaining why each channel exists — worth reading in the
 // repo, not worth shipping to a consumer who drops it in a <link> and gets no
-// bundler pass over it.
+// bundler pass over it. `src/gaze.css` ships beside it: the live engine's
+// pointer tracking needs it to fade the ambient drift while the eyes follow.
 const css = await Bun.build({
-  entrypoints: ["src/motion.css"],
+  entrypoints: ["src/motion.css", "src/gaze.css"],
   outdir: "dist",
   minify: true,
 });

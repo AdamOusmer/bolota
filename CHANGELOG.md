@@ -10,6 +10,68 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.2.0
+
+Static faces are unchanged: the seed-to-look mapping did not move and the
+static render path was not touched. What changed is the live engine behind
+`@luzir/bolota/engine`, which was rewritten.
+
+### Changed
+
+- **`mountEngine` runs on a new native engine.** The API is the same:
+  `mountEngine(svg, name, opts)` returns a handle with `play`, `loop`, `stop`,
+  `follow`, `setExpression`, `destroy`, `states` and `expressions`, with the
+  same 14 states and the same `play` options (`loop`, `hold`, `rest`, `for`).
+  `runSequence` from `@luzir/bolota/sequences` is untouched. The ported bloub
+  renderer, which drew a separate body path and its own eyes, is gone.
+- **The live face is the static face.** The engine upgrades the markup that
+  `parts()` already rendered, in place, instead of drawing a second figure. A
+  server-rendered bolota keeps its nodes when the engine mounts; an empty
+  `<svg>` is filled with the same markup. The eyes, their seeded shape and the
+  idle life (blink, breath, gaze drift) are the static bolota's own.
+- **The body outline is exact.** Eye containment and gaze limits are solved
+  against the real silhouette of the seed's style, not a sampled radial
+  approximation.
+- **The viewBox is `0 0 100 100` with `overflow: visible`.** The old engine
+  widened the viewBox to make room for rings and trails. The new one keeps the
+  static box and lets decor draw past it.
+- **Eyes are rectangles with rounded corners (`rect` rigs)**, which is what lets
+  a frame update them with attribute writes only.
+- **Decor takes its colours from the seed's palette** rather than a fixed
+  rainbow gradient.
+- **The face stays level in orbit.** The body spins; the eyes counter-rotate so
+  they do not.
+- **Pointer-follow reads no layout per move.** Geometry is measured on mount,
+  scroll and resize only.
+
+### Added
+
+- **Five expressions on the engine: `attentive`, `excited`, `laughing`,
+  `curious`, `proud`.** All thirteen static expressions are also accepted by
+  `setExpression`, and the old bloub names (`angry`, `suspicious`, `confused`,
+  `unimpressed`, `wander`, ...) still work and map onto the unified roster.
+  Unknown names are ignored.
+- **`@luzir/bolota/gaze.css`**, the stylesheet that fades the ambient gaze drift
+  while the eyes follow the pointer.
+- **`engineStates()` and `engineExpressions()`** list the state ids and the
+  accepted bloub expression ids without mounting.
+
+### Upgrading
+
+- **Size containers around the `0 0 100 100` box.** If you sized a wrapper,
+  clip or mask around the old widened viewBox, the bolota now fills the
+  box like a static one does; decor overflows it. Do not set `overflow: hidden`
+  on the wrapper unless you want rings and trails cut off.
+- **Load `@luzir/bolota/motion.css`, and `@luzir/bolota/gaze.css` if you use
+  `follow()`.** The engine animates the static markup, so the classes it
+  relies on must be styled.
+- **Pointer-follow travel is a CSS knob**: set `--mo-track-travel` (viewBox
+  units, about 1.5 to 4) on the bolota or an ancestor. Unset, it is 3.
+- **Anything reading the old engine's nodes breaks.** The separate body
+  `<path>` and eye paths are replaced by the static markup and `rect` eyes.
+- **The bundled engine is about 1.9 KB gzipped larger** (20.2 KB, up from
+  18.2 KB).
+
 ## 0.1.7
 
 ### Changed
