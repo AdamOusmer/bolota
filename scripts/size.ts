@@ -202,7 +202,11 @@ const ENTRIES: {
     // the engine pauses every CSS loop of an off-screen or hidden instance.
     // Measured in headless Chromium, 23 resting bolotas off screen cost the main
     // thread a style recalc and layout per frame each without it.
-    budget: 1560,
+    // Raised from 1560 to 1620 for naming the idle elements the engine's
+    // `data-mo-js` stands down instead of matching `.mo-root *`, which made
+    // every decor path a style-recalc target (UpdateLayoutTree 71 -> 46 ms/s in
+    // orbit at 23). Measured 1567 B; budget is that plus ~3%.
+    budget: 1620,
     external: [],
     ext: "css",
     source: `@import "../../src/motion.css";`,
@@ -270,9 +274,12 @@ const ENTRIES: {
     // `CHOREO` and `r3` from `engine.js` (`scripts/decor-shared.ts`), which is
     // always loaded first, and measures 6410 B. The colour, outline and
     // attribute-writer helpers stay here: sharing them would grow first load.
-    // Budget is that plus ~5%.
+    // Budget is that plus ~5%. Raised from 6730 to 7100 for the per-frame
+    // arc table (rotation recurrence plus coordinate text table): it trades
+    // bytes for no trig and no number formatting per frame, measuring 6724 B
+    // on bun 1.4.2 and 6842 B on CI's bun 1.3.10.
     name: "decor (lazy chunk)",
-    budget: 6730,
+    budget: 7100,
     external: [],
     plugins: [decorSharesEngine],
     source: `import { createDecor } from "../../src/live/decor";
