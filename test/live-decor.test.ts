@@ -1,14 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { BotEngine } from "../src/bloub/engine";
-import { RINGS } from "../src/bloub/decor";
-import { STATE_BY_ID } from "../src/bloub/states";
 import { _layout } from "../src/bolota";
 import { contrast, fromHex, toHex } from "../src/color";
-import { _seededSilhouette } from "./oracle";
 import { CHOREO, easeOutQuint, type StateId } from "../src/live/choreo";
 import { createDecor, type DecorFrame, type DecorHost } from "../src/live/decor";
 import { Timeline } from "../src/live/timeline";
+import { FADE, FRAMES, RING_WIDTHS } from "./fixtures/decor-frames";
 
 class FakeElement {
   attrs = new Map<string, string>();
@@ -106,12 +103,7 @@ const REPRESENTATIVE: [StateId, number][] = [
   ["notify", 0.9],
 ];
 
-function oldFrame(seed: string, state: StateId, t: number) {
-  const { body, draw, petals, extra } = _layout(seed);
-  const eng = new BotEngine(body.rx, state as never, _seededSilhouette(body, draw, petals, extra), null);
-  eng.reset(state as never, 0);
-  return eng.sample(t);
-}
+const oldFrame = (seed: string, state: StateId, t: number) => FRAMES[`${seed}|${state}|${t}`]!;
 
 const numbers = (d: string) => (d.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
 
@@ -202,38 +194,38 @@ describe("live decor: geometry against the old engine", () => {
         const backs = tags(r.els.back, "path");
         const fronts = tags(r.els.front, "path").filter((p) => !p.getAttribute("transform"));
         expect(backs.length).toBe(arcsOld.length);
-        arcsOld.forEach((a, i) => {
-          if (a.front) expect(pathMatches(fronts[i]!.getAttribute("d") ?? "", a.front, cx, cy)).toBe(true);
+        arcsOld.forEach(([front, back, opacity, width], i) => {
+          if (front) expect(pathMatches(fronts[i]!.getAttribute("d") ?? "", front, cx, cy)).toBe(true);
           else expect(fronts[i]!.getAttribute("opacity")).toBe("0");
-          if (a.back) expect(pathMatches(backs[i]!.getAttribute("d") ?? "", a.back, cx, cy)).toBe(true);
+          if (back) expect(pathMatches(backs[i]!.getAttribute("d") ?? "", back, cx, cy)).toBe(true);
           else expect(backs[i]!.getAttribute("opacity")).toBe("0");
-          const live = a.front ? fronts[i]! : backs[i]!;
-          const dOp = Math.abs(num(live, "opacity") - a.opacity);
+          const live = front ? fronts[i]! : backs[i]!;
+          const dOp = Math.abs(num(live, "opacity") - opacity);
           worstPath = Math.max(worstPath, dOp);
           expect(dOp).toBeLessThan(2e-3);
-          expect(Math.abs(num(live, "stroke-width") - a.width)).toBeLessThan(2e-3);
+          expect(Math.abs(num(live, "stroke-width") - width)).toBeLessThan(2e-3);
         });
 
         const offsets: [number, number][] = [];
         const around = (nx: number, ny: number, ox: number, oy: number) => offsets.push([nx - cx - ox, ny - cy - oy]);
 
-        const round = f.dots.filter((d) => !d.d);
+        const round = f.dots.filter((d) => d.length === 3);
         const circles = shown(tags(r.els.back, "circle").concat(tags(r.els.front, "circle")));
         expect(circles.length).toBe(round.length + (f.notif ? 1 : 0));
-        round.forEach((d, i) => {
-          expect(Math.abs(num(circles[i]!, "r") - d.r)).toBeLessThan(0.002);
-          around(num(circles[i]!, "cx"), num(circles[i]!, "cy"), d.x, d.y);
+        round.forEach(([x, y, radius], i) => {
+          expect(Math.abs(num(circles[i]!, "r") - radius!)).toBeLessThan(0.002);
+          around(num(circles[i]!, "cx"), num(circles[i]!, "cy"), x!, y!);
         });
 
-        const glyphs = f.dots.filter((d) => d.d);
+        const glyphs = f.dots.filter((d) => d.length === 4);
         const bars = tags(r.els.front, "path").filter((p) => p.getAttribute("transform"));
         expect(bars.length).toBe(glyphs.length);
-        glyphs.forEach((d, i) => {
+        glyphs.forEach(([x, y, rot, count], i) => {
           const m = /translate\(([-\d.]+) ([-\d.]+)\) rotate\(([-\d.]+)\) scale\(([-\d.]+)\)/.exec(bars[i]!.getAttribute("transform")!)!;
-          around(Number(m[1]), Number(m[2]), d.x, d.y);
-          expect(Math.abs(Number(m[3]) - (d.rot ?? 0))).toBeLessThan(2e-3);
+          around(Number(m[1]), Number(m[2]), x!, y!);
+          expect(Math.abs(Number(m[3]) - rot!)).toBeLessThan(2e-3);
           expect(Math.abs(Number(m[4]) - rx)).toBeLessThan(2e-3);
-          expect(numbers(bars[i]!.getAttribute("d")!).length).toBe(numbers(d.d!).length);
+          expect(numbers(bars[i]!.getAttribute("d")!).length).toBe(count!);
         });
 
         if (offsets.length) {
@@ -247,16 +239,17 @@ describe("live decor: geometry against the old engine", () => {
         }
 
         if (f.notif) {
+          const [nx, ny, nr, notchR] = f.notif;
           const badge = circles[circles.length - 1]!;
-          const dx = Math.abs(num(badge, "cx") - cx - f.notif.x) / rx;
-          const dy = Math.abs(num(badge, "cy") - cy - f.notif.y) / rx;
+          const dx = Math.abs(num(badge, "cx") - cx - nx!) / rx;
+          const dy = Math.abs(num(badge, "cy") - cy - ny!) / rx;
           worstNotif = Math.max(worstNotif, dx, dy);
           expect(dx).toBeLessThan(0.13);
           expect(dy).toBeLessThan(0.13);
-          expect(Math.abs(num(badge, "r") - f.notif.r)).toBeLessThan(2e-3);
+          expect(Math.abs(num(badge, "r") - nr!)).toBeLessThan(2e-3);
           const disc = tags(r.els.defs, "circle")[0]!;
           expect(Math.abs(num(disc, "cx") - num(badge, "cx"))).toBeLessThan(1e-9);
-          expect(Math.abs(num(disc, "r") - f.notch!.r)).toBeLessThan(2e-3);
+          expect(Math.abs(num(disc, "r") - notchR!)).toBeLessThan(2e-3);
         }
       });
     }
@@ -266,7 +259,7 @@ describe("live decor: geometry against the old engine", () => {
     const r = rig("decor-a");
     r.decor.update(one("orbit", 1.2));
     const widths = shown(tags(r.els.front, "path")).map((p) => num(p, "stroke-width"));
-    widths.forEach((w, i) => expect(Math.abs(w - RINGS[i]!.width * r.layout.body.rx)).toBeLessThan(2e-3));
+    widths.forEach((w, i) => expect(Math.abs(w - RING_WIDTHS[i]! * r.layout.body.rx)).toBeLessThan(2e-3));
   });
 
   test("worst deviations stay small", () => {
@@ -306,12 +299,10 @@ describe("live decor: cross-fade", () => {
       { state: "orbit", local: 1.2, weight: 0.3 },
       { state: "play", local: 0.9, weight: 0.7 },
     ]);
-    const orbit = STATE_BY_ID.get("orbit")!.pose(1.2).arcs;
-    const play = STATE_BY_ID.get("play")!.pose(0.9).arcs;
     const fronts = shown(tags(r.els.front, "path"));
     expect(fronts.length).toBe(10);
-    orbit.forEach((a, i) => expect(Math.abs(num(fronts[i]!, "opacity") - a.opacity * 0.3)).toBeLessThan(2e-3));
-    play.forEach((a, i) => expect(Math.abs(num(fronts[6 + i]!, "opacity") - a.opacity * 0.7)).toBeLessThan(2e-3));
+    FADE.orbit.forEach((opacity, i) => expect(Math.abs(num(fronts[i]!, "opacity") - opacity * 0.3)).toBeLessThan(2e-3));
+    FADE.play.forEach((opacity, i) => expect(Math.abs(num(fronts[6 + i]!, "opacity") - opacity * 0.7)).toBeLessThan(2e-3));
     expect(tags(r.els.defs, "linearGradient").length).toBe(10);
   });
 
@@ -321,12 +312,11 @@ describe("live decor: cross-fade", () => {
       { state: "burst", local: 0.45, weight: 0.25 },
       { state: "notify", local: 0.9, weight: 0.75 },
     ]);
-    const old = STATE_BY_ID.get("burst")!.pose(0.45).dots;
     const dots = shown(tags(r.els.back, "circle"));
-    expect(dots.length).toBe(old.length);
-    old.forEach((d, i) => {
+    expect(dots.length).toBe(FADE.burst.length);
+    FADE.burst.forEach((opacity, i) => {
       expect(num(dots[i]!, "opacity")).toBeGreaterThan(0);
-      expect(num(dots[i]!, "opacity")).toBeLessThanOrEqual(d.opacity * 0.25 + 1e-3);
+      expect(num(dots[i]!, "opacity")).toBeLessThanOrEqual(opacity * 0.25 + 1e-3);
     });
     const badge = shown(tags(r.els.front, "circle"))[0]!;
     expect(num(badge, "opacity")).toBe(0.75);

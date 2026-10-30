@@ -2,28 +2,15 @@
 
 import { describe, expect, test } from "bun:test";
 import { _layout } from "../src/bolota";
-import { BotEngine } from "../src/bloub/engine";
-import { _seededSilhouette } from "./oracle";
 import { CHOREO, ENTRANCE_BLINK, type StateId } from "../src/live/choreo";
 import { faceEyes } from "../src/live/rig";
 import { Timeline } from "../src/live/timeline";
+import { CLOSINGS, IDLE } from "./fixtures/blink-closings";
 
 const FRAME = 1 / 60;
 const STEP = 1 / 180;
 const START = 0.5;
 const IDS = Object.keys(CHOREO) as StateId[];
-
-/** Width and height of bloub's centred capsule path (M/L/A commands), from its end points. */
-function pathSize(d: string): [number, number] {
-  let w = 0;
-  let h = 0;
-  for (const seg of d.match(/[MLA][^MLAZ]*/g) ?? []) {
-    const v = (seg.match(/-?\d+\.?\d*/g) ?? []).map(Number);
-    w = Math.max(w, Math.abs(v[v.length - 2]!));
-    h = Math.max(h, Math.abs(v[v.length - 1]!));
-  }
-  return [2 * w, 2 * h];
-}
 
 /** Times each eye starts to close: its height over width falls under half of what it was over the last 0.3 s. */
 function closings(open: (number | null)[][], times: number[]): number[][] {
@@ -46,27 +33,8 @@ function closings(open: (number | null)[][], times: number[]): number[][] {
   });
 }
 
-/** The old engine's closings, every kind: its fixed idle blinks, the entrance blink and the state's own. */
-function oldClosings(seed: string, id: StateId, end: number): number[][] {
-  const l = _layout(seed);
-  const eng = new BotEngine(l.body.rx, "idle", _seededSilhouette(l.body, l.draw, l.petals, l.extra), null);
-  eng.setState(id, START, !!CHOREO[id].period);
-  const times: number[] = [];
-  const open: (number | null)[][] = [];
-  for (let t = 0; t <= end; t += STEP) {
-    const f = eng.sample(t);
-    times.push(t);
-    const row: (number | null)[] = [null, null];
-    if (f.eyes.length === 2)
-      f.eyes.forEach((e: { d: string; matrix: string; alpha: number }, i: number) => {
-        const [a, b, , d] = (e.matrix.match(/-?\d+\.?\d*/g) ?? []).map(Number);
-        const [w, h] = pathSize(e.d);
-        row[i] = e.alpha > 0.01 ? (Math.abs(d!) * h) / (Math.hypot(a!, b!) * w) : null;
-      });
-    open.push(row);
-  }
-  return closings(open, times);
-}
+/** The old engine's closings, every kind: its fixed idle blinks, the entrance blink and the state's own, frozen. */
+const oldClosings = (seed: string, id: StateId): number[][] => CLOSINGS[`${seed}|${id}`]!.map((l) => [...l]);
 
 function newClosings(seed: string, id: StateId, end: number): number[][] {
   const l = _layout(seed);
@@ -85,11 +53,7 @@ function newClosings(seed: string, id: StateId, end: number): number[][] {
 const near = (list: number[], t: number) => list.some((g) => Math.abs(g - t) <= FRAME);
 
 /** The old engine's fixed idle blinks for a seed, which the seeded CSS blink replaces. */
-const idles = new Map<string, number[]>();
-const idleBlinks = (seed: string) => {
-  if (!idles.has(seed)) idles.set(seed, oldClosings(seed, "idle", START + 9)[0]!);
-  return idles.get(seed)!;
-};
+const idleBlinks = (seed: string) => [...IDLE[seed]!];
 
 describe("scripted eye events match bloub", () => {
   for (const id of IDS) {
@@ -99,7 +63,7 @@ describe("scripted eye events match bloub", () => {
       tl.play(id, START, { loop: !!CHOREO[id].period });
       const cue = tl.blinkCue(START - FRAME, START);
       for (const seed of ["alain", "seed-7"]) {
-        const [left, right] = oldClosings(seed, id, end) as [number[], number[]];
+        const [left, right] = oldClosings(seed, id) as [number[], number[]];
         const idle = idleBlinks(seed);
         const entrance = left.some((t) => near(right, t) && t >= START && t <= START + ENTRANCE_BLINK);
         const both = [...idle, ...left.filter((t) => near(right, t))];

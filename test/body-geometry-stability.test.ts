@@ -7,7 +7,7 @@ import { bolota } from "../src/bolota";
  * Pinned regression guard, prompted by a user report: seed "anna" appeared
  * to render a different silhouette than before, suspected as the bloub
  * engine work leaking into the static renderer. It wasn't — `src/engine.ts`
- * and `src/bloub/` are a separate render path from `bolota()`/`parts()`
+ * and the engine behind it are a separate render path from `bolota()`/`parts()`
  * (`styles/compose.ts`'s own `render()`), and nothing in this fork's session
  * touched `styles/blob.ts`'s `BANDS` table (last changed at `bf26067 feat:
  * release v2`, upstream, before this fork's first commit `acb549c`). The

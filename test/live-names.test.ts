@@ -1,13 +1,13 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
 import { describe, expect, test } from "bun:test";
-import { EXPRESSIONS } from "../src/bloub/expressions";
 import * as roster from "../src/expression";
 import { ALIASES, resolveExpression } from "../src/live/names";
+import { EXPRESSION_IDS } from "./fixtures/expression-ids";
 
 describe("bloub expression names", () => {
   test("every bloub id has an alias, and nothing else does", () => {
-    expect(Object.keys(ALIASES).sort()).toEqual(EXPRESSIONS.map((e) => e.id).sort());
+    expect(Object.keys(ALIASES).sort()).toEqual([...EXPRESSION_IDS].sort());
   });
 
   test("every alias resolves to the roster pose it names", () => {

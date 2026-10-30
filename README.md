@@ -444,8 +444,8 @@ endorses it.
 
 - **[blobatar][blobatar]** by Alain, the deterministic blob-avatar renderer
   this is built on. MIT licensed.
-- **[bloub][bloub]** by Jérémy Perret, the animation engine ported into
-  `@luzir/bolota/engine`. MIT licensed; its visual design imitates x.ai's and
+- **[bloub][bloub]** by Jérémy Perret, the animation engine whose states,
+  timings and decor `@luzir/bolota/engine` derives from. MIT licensed; its visual design imitates x.ai's and
   is not affiliated with or endorsed by x.ai.
 
 [blobatar]: https://github.com/Alain00/blobatar
