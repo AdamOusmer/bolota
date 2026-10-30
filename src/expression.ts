@@ -615,9 +615,9 @@ export const sick: Expression = {
  * scales, `split` for `edx`, `pitch` for `edy`, eye tilt plus head roll for
  * `tilt`), then were tuned against bloub frames of the same seeds.
  *
- * Head roll and yaw go through the same composition as the live states'
- * `head` in `live/choreo.ts`, on bloub's 26-unit eye sphere with the pair 9.5 units
- * either side: a roll `r` lifts the left eye `9.5·sin r` over the right
+ * Head roll and yaw go through the composition `faceEyes` in `live/rig.ts`
+ * applies per seed, baked here for a median face: a 26-unit eye sphere with
+ * the pair 9.5 units either side. A roll `r` lifts the left eye `9.5·sin r` over the right
  * (`edy`, `edy2`), and a yaw slides the pair toward the turn (`epx`), closes
  * it a little (`edx`) and narrows the far eye (`esx`, `esx2`).
  *

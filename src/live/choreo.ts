@@ -71,6 +71,27 @@ export interface Eyes {
   track: Track;
   /** Face opacity, 0–1. The same curve as `Act.eyeAlpha`; a renderer reads one of them. */
   alpha: number;
+  /**
+   * Whose eye the pose shapes, 0–1: 0 is the seeded resting eye, 1 is bloub's
+   * resting eye (`EYE_W` × `EYE_H` of the body radius) on the seeded centre.
+   * A state that draws its own face is 1, so bloub's on-screen sizes come out
+   * as bloub draws them; the resting face and any expression are 0. Blended
+   * like every other channel, so entering or leaving a state morphs the size.
+   */
+  own: number;
+  /** bloub's head turn on this face; `faceEyes` places the eyes for it per seed. */
+  head: Head;
+}
+
+/**
+ * bloub's head: `roll` and `yaw` in degrees, clockwise and rightward positive,
+ * and `spread`, how much wider than bloub's resting split the pair sits, as a
+ * fraction of the body radius.
+ */
+export interface Head {
+  roll: number;
+  yaw: number;
+  spread: number;
 }
 
 /**
@@ -87,75 +108,49 @@ const nod = (pitch: number): Track => ({ x: 0, y: -pitch / TRACK_TURN });
 
 const pose = (p: Partial<Pose>): Pose => ({ ...IDENT, ...p });
 
-/**
- * bloub's eye sphere on a median seed (0.8 × `body.rx` 32.6) and the median
- * half spacing of the pair on it. Whatever this asks of a small or narrow
- * seed, `fitEyes` settles per frame.
- */
-const FACE_R = 26;
-const HALF_GAP = 9.5;
-const SPREAD = Math.asin(HALF_GAP / FACE_R);
 const rad = (deg: number) => (deg * Math.PI) / 180;
 
-/** bloub's resting eye, `EYE_W` × `EYE_H`, and its `EYE_SPLIT` in degrees, from `bloub/face.ts`. */
-const EYE_W = 0.186;
-const EYE_H = 0.412;
-const EYE_SPLIT = 15.46;
-/** A median seed's `body.rx`, the length bloub's unit split angles are measured on. */
-const SPLIT_R = 33;
+/** bloub's resting eye, `EYE_W` × `EYE_H` of the body radius, and its `EYE_SPLIT` in degrees, from `bloub/face.ts`. */
+export const EYE_W = 0.186;
+export const EYE_H = 0.412;
+export const EYE_SPLIT = 15.46;
 
-/** A bloub eye of `w` × `h` with a pair split of `split` degrees, as factors and spread on the seeded eyes. */
-const bloubEye = (w: number, h: number, split = EYE_SPLIT): Partial<Pose> => ({
-  esx: w / EYE_W,
-  esy: h / EYE_H,
-  edx: (Math.sin(rad(split)) - Math.sin(rad(EYE_SPLIT))) * SPLIT_R,
-});
+export const LEVEL: Head = { roll: 0, yaw: 0, spread: 0 };
+
+/** A bloub eye of `w` × `h`, as factors on bloub's resting eye. */
+const bloubEye = (w: number, h: number): Partial<Pose> => ({ esx: w / EYE_W, esy: h / EYE_H });
 
 /**
- * `p` with bloub's head roll and yaw composed on, in degrees, clockwise and
- * rightward positive.
- *
- * Roll leans both eyes the same way and turns the pair about its midpoint, so
- * the right eye drops as far as the left one rises. The lean is locked,
+ * bloub's head roll and yaw, in degrees, clockwise and rightward positive, and
+ * its pair split, as a `Head`; and the roll's lean on `p`. The lean is locked,
  * because bloub draws every eye at the roll alone; the seeded lean stacked on
- * top doubles it on half the seeds and cancels it on the rest.
- *
- * Yaw turns the eye sphere: the pair slides toward the turn, closes up a
- * little, and the far eye narrows as the near one widens.
+ * top doubles it on half the seeds and cancels it on the rest. Where the eyes
+ * move for the head is per seed, so it is `faceEyes`'s to work out.
  */
-function head(p: Partial<Pose>, roll: number, yaw = 0): Pose {
-  const b = pose(p);
-  const lift = HALF_GAP * Math.sin(rad(roll));
-  const y = rad(yaw);
-  const left = Math.cos(y - SPREAD) / Math.cos(SPREAD);
-  const right = Math.cos(y + SPREAD) / Math.cos(SPREAD);
+function face(p: Partial<Pose>, roll: number, yaw = 0, split = EYE_SPLIT): { pose: Pose; head: Head } {
   return {
-    ...b,
-    tilt: -roll,
-    tilt2: 2 * roll,
-    lock: 1,
-    edy: b.edy - lift,
-    edy2: b.edy2 + 2 * lift,
-    epx: b.epx + FACE_R * Math.sin(y) * Math.cos(SPREAD),
-    edx: b.edx + FACE_R * Math.sin(SPREAD) * (Math.cos(y) - 1),
-    esx: b.esx * left,
-    esx2: (b.esx + b.esx2) * right - b.esx * left,
+    pose: pose({ ...p, tilt: -roll, tilt2: 2 * roll, lock: 1 }),
+    head: { roll, yaw, spread: Math.sin(rad(split)) - Math.sin(rad(EYE_SPLIT)) },
   };
 }
 
-const REST: Eyes = { pose: IDENT, track: CENTRE, alpha: 1 };
-const EYELESS: Eyes = { pose: IDENT, track: CENTRE, alpha: 0 };
+const REST: Eyes = { pose: IDENT, track: CENTRE, alpha: 1, own: 0, head: LEVEL };
+/** bloub's own resting face, for a state that draws its face but leaves it at rest. */
+const BLOUB_REST: Eyes = { pose: pose({ lock: 1 }), track: CENTRE, alpha: 1, own: 1, head: LEVEL };
+const EYELESS: Eyes = { ...BLOUB_REST, alpha: 0 };
 const rest = (): Eyes => REST;
+const bloubRest = (): Eyes => BLOUB_REST;
 const eyeless = (): Eyes => EYELESS;
 
 /** bloub's `REST_GAZE`: the sideways, upward glance `wander` holds. */
-const WANDER_EYES: Eyes = { pose: head({}, -13, 28.49), track: nod(28.62), alpha: 1 };
+const WANDER_EYES: Eyes = { ...face({}, -13, 28.49), track: nod(28.62), alpha: 1, own: 0 };
 
 /** bloub's open 0.236 × 0.464 eye, and its 0.447 × 0.089 slit on the right. */
-const WINK_OPEN_POSE = head(bloubEye(0.236, 0.464, 16.25), 6.7, -5.37);
+const WINK_FACE = face(bloubEye(0.236, 0.464), 6.7, -5.37, 16.25);
+const WINK_OPEN_POSE = WINK_FACE.pose;
 const WINK_SHUT_POSE: Pose = {
   ...WINK_OPEN_POSE,
-  esx2: WINK_OPEN_POSE.esx2 + (0.447 - 0.236) / EYE_W,
+  esx2: (0.447 - 0.236) / EYE_W,
   esy2: (0.089 - 0.464) / EYE_H,
 };
 const WINK_LOOK = nod(4.55);
@@ -171,22 +166,14 @@ function winkShut(t: number): number {
  * eye anchor re-centres a stare that large, and on screen the eyes sit level,
  * so a faithful track reads as downcast instead of startled.
  */
-const WIDE_EYES: Eyes = {
-  pose: head(bloubEye(0.356, 0.875, 18.43), 11.6, 6.92),
-  track: CENTRE,
-  alpha: 1,
-};
+const WIDE_EYES: Eyes = { ...face(bloubEye(0.356, 0.875), 11.6, 6.92, 18.43), track: CENTRE, alpha: 1, own: 1 };
 
 /** bloub's big round 0.505 × 0.498 eyes, turned away from the badge. */
-const NOTIFY_EYES: Eyes = {
-  pose: head(bloubEye(0.505, 0.498, 18.89), -12.2, -21.94),
-  track: nod(-5.82),
-  alpha: 1,
-};
+const NOTIFY_EYES: Eyes = { ...face(bloubEye(0.505, 0.498), -12.2, -21.94, 18.89), track: nod(-5.82), alpha: 1, own: 1 };
 
 /** bloub's 0.18 × 0.34 eyes for `play` and `orbit`, a little under rest. */
 const SMALL = bloubEye(0.18, 0.34);
-const PLAY_EYES: Eyes = { pose: head(bloubEye(0.18, 0.34, 15), -6, 12), track: nod(-8), alpha: 1 };
+const PLAY_EYES: Eyes = { ...face(SMALL, -6, 12, 15), track: nod(-8), alpha: 1, own: 1 };
 const ORBIT_JOSTLE_YAW = 16;
 const ORBIT_JOSTLE_PITCH = 10;
 const ORBIT_JOSTLE_ROLL = 6;
@@ -237,7 +224,7 @@ function collapse(t: number, down: number, depth: number, at: number, up: number
 
 const burstCollapse = (t: number) => collapse(t, 0.7, 0.834, 1.7, 0.7);
 const cometCollapse = (t: number) => collapse(t, 0.55, 1 - COMET_DOT, 1.85, 0.6);
-const fading = (alpha: number): Eyes => ({ pose: IDENT, track: CENTRE, alpha });
+const fading = (alpha: number): Eyes => ({ ...BLOUB_REST, alpha });
 
 export type StateId =
   | "idle"
@@ -305,6 +292,8 @@ export const CHOREO: Record<StateId, Choreo> = {
       pose: lerpPose(WINK_OPEN_POSE, WINK_SHUT_POSE, winkShut(t)),
       track: WINK_LOOK,
       alpha: 1,
+      own: 1,
+      head: WINK_FACE.head,
     }),
   },
   wide: {
@@ -336,7 +325,7 @@ export const CHOREO: Record<StateId, Choreo> = {
         s: GLYPH_DOT_R,
       };
     },
-    eyes: rest,
+    eyes: bloubRest,
   },
   notify: {
     duration: 2.2,
@@ -356,7 +345,7 @@ export const CHOREO: Record<StateId, Choreo> = {
     baseFace: false,
     still: 0.8,
     act: () => ({ ...IDLE_ACT, y: GLYPH_DOT_CY, s: GLYPH_DOT_R }),
-    eyes: rest,
+    eyes: bloubRest,
   },
   snooze: {
     duration: 2.4,
@@ -407,9 +396,10 @@ export const CHOREO: Record<StateId, Choreo> = {
     eyes: (t) => {
       const rot = -TAU * 1.25 * t;
       return {
-        pose: head(SMALL, Math.sin(rot * 2) * ORBIT_JOSTLE_ROLL, Math.sin(rot) * ORBIT_JOSTLE_YAW),
+        ...face(SMALL, Math.sin(rot * 2) * ORBIT_JOSTLE_ROLL, Math.sin(rot) * ORBIT_JOSTLE_YAW),
         track: nod(Math.cos(rot) * ORBIT_JOSTLE_PITCH),
         alpha: 1,
+        own: 1,
       };
     },
   },
@@ -468,14 +458,22 @@ export const EXPRESSION_MORPH = 0.55;
  */
 export function expressed(c: Choreo, own: Eyes, expression: Pose | null): Eyes {
   if (!expression || !(c.baseFace || c.acceptsExpression)) return own;
-  return { pose: expression, track: CENTRE, alpha: own.alpha };
+  return { pose: expression, track: CENTRE, alpha: own.alpha, own: 0, head: LEVEL };
 }
+
+const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export function blendEyes(a: Eyes, b: Eyes, t: number): Eyes {
   return {
     pose: lerpPose(a.pose, b.pose, t),
-    track: { x: a.track.x + (b.track.x - a.track.x) * t, y: a.track.y + (b.track.y - a.track.y) * t },
-    alpha: a.alpha + (b.alpha - a.alpha) * t,
+    track: { x: mix(a.track.x, b.track.x, t), y: mix(a.track.y, b.track.y, t) },
+    alpha: mix(a.alpha, b.alpha, t),
+    own: mix(a.own, b.own, t),
+    head: {
+      roll: mix(a.head.roll, b.head.roll, t),
+      yaw: mix(a.head.yaw, b.head.yaw, t),
+      spread: mix(a.head.spread, b.head.spread, t),
+    },
   };
 }
 
@@ -485,9 +483,13 @@ export const blinkScale = (lid: number) => 0.06 + 0.94 * clamp(lid);
 /** The blink masking a `blinkIn` entrance: shut at 0.1 s, open again at 0.2 s. */
 export const ENTRANCE_BLINK = 0.2;
 
-/** `e` with the entrance blink `since` seconds into it applied, as a vertical squash. */
-export function blinked(e: Eyes, since: number): Eyes {
-  if (since >= ENTRANCE_BLINK || since < 0) return e;
-  const k = blinkScale(Math.abs((since / ENTRANCE_BLINK) * 2 - 1));
+/** How open an entrance blink `since` seconds in leaves the lids, 0–1. */
+export const entranceLid = (since: number) =>
+  since >= ENTRANCE_BLINK || since < 0 ? 1 : Math.abs((since / ENTRANCE_BLINK) * 2 - 1);
+
+/** `e` with its lids `lid` open, as a squash across each eye. */
+export function blinked(e: Eyes, lid: number): Eyes {
+  if (lid >= 1) return e;
+  const k = blinkScale(lid);
   return { ...e, pose: { ...e.pose, esy: e.pose.esy * k, esy2: e.pose.esy2 * k } };
 }

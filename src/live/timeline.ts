@@ -3,11 +3,13 @@
 
 import type { Pose } from "../morph";
 import { blendAct, type Act } from "./act";
+import { ambientLid } from "./blink";
 import {
   CHOREO,
   EXPRESSION_MORPH,
   blendEyes,
   blinked,
+  entranceLid,
   clamp,
   easeInOutCubic,
   easeOutQuint,
@@ -128,7 +130,12 @@ function posedEyes(r: Regs, id: StateId, since: number, now: number, looping: bo
   return blendEyes(expressed(c, own, r.exprFrom), to, easeInOutCubic(k));
 }
 
-/** The eyes on screen: the same cross-fade as `composed`, then the entrance blink. */
+/**
+ * The eyes on screen: the same cross-fade as `composed`, then the entrance
+ * blink and bloub's ambient blink, the nearer to shut of the two, as bloub's
+ * engine takes them. A renderer driving these lids leaves `motion.css`'s own
+ * blink off, or the face blinks on two schedules.
+ */
 function composedEyes(r: Regs, now: number): Eyes {
   const since = now - r.tCur;
   const eyes = posedEyes(r, r.cur, since, now, r.looping);
@@ -138,7 +145,8 @@ function composedEyes(r: Regs, now: number): Eyes {
       ? null
       : r.frozenEyes ?? (r.prev ? posedEyes(r, r.prev, now - r.tPrev, now, r.loopingPrev) : null);
   const shown = origin ? blendEyes(origin, eyes, easeOutQuint(clamp(since / morph))) : eyes;
-  return r.prev !== null && CHOREO[r.cur].blinkIn ? blinked(shown, since) : shown;
+  const entrance = r.prev !== null && CHOREO[r.cur].blinkIn ? entranceLid(since) : 1;
+  return blinked(shown, Math.min(ambientLid(now), entrance));
 }
 
 /**

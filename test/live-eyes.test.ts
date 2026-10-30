@@ -7,7 +7,8 @@ import { actTransform, type Act } from "../src/live/act";
 import { CHOREO, ENTRANCE_BLINK, type StateId } from "../src/live/choreo";
 import { Timeline } from "../src/live/timeline";
 import { uprightTransform } from "../src/live/upright";
-import { IDENT, bakePose, type Pose } from "../src/morph";
+import { faceEyes } from "../src/live/rig";
+import { IDENT } from "../src/morph";
 
 const IDS = Object.keys(CHOREO) as StateId[];
 const span = (id: StateId) => CHOREO[id].period ?? CHOREO[id].duration;
@@ -47,23 +48,32 @@ describe("per-state eyes", () => {
   });
 
   test("notify looks away and orbit's head jostles round a full turn", () => {
-    expect(CHOREO.notify.eyes(1).pose.epx).toBeLessThan(-5);
-    const ps = times("orbit").map((t) => CHOREO.orbit.eyes(t).pose);
-    expect(Math.min(...ps.map((p) => p.epx))).toBeLessThan(-4);
-    expect(Math.max(...ps.map((p) => p.epx))).toBeGreaterThan(4);
-    expect(Math.max(...ps.map((p) => Math.abs(p.edy2)))).toBeGreaterThan(1);
+    expect(CHOREO.notify.eyes(1).head.yaw).toBeLessThan(-20);
+    const hs = times("orbit").map((t) => CHOREO.orbit.eyes(t).head);
+    expect(Math.min(...hs.map((h) => h.yaw))).toBeLessThan(-12);
+    expect(Math.max(...hs.map((h) => h.yaw))).toBeGreaterThan(12);
+    expect(Math.max(...hs.map((h) => Math.abs(h.roll)))).toBeGreaterThan(4);
   });
 
   test("a head roll lifts one eye over the other, a turn narrows the far eye", () => {
     const l = _layout("seed-7");
-    const level = (p: Pose) => {
-      const [a, b] = bakePose(l, p).l.eyes;
-      return { drop: b!.cy - a!.cy - (l.eyes[1]!.cy - l.eyes[0]!.cy), width: b!.rx / l.eyes[1]!.rx / (a!.rx / l.eyes[0]!.rx) };
+    const level = (id: StateId) => {
+      const [a, b] = faceEyes(l, CHOREO[id].eyes(1));
+      return { drop: b!.cy - a!.cy, width: b!.rx / a!.rx, slide: (a!.cx + b!.cx) / 2 - l.face.cx };
     };
-    expect(level(CHOREO.wide.eyes(1).pose).drop).toBeGreaterThan(3);
-    expect(level(CHOREO.notify.eyes(1).pose).drop).toBeLessThan(-3);
-    expect(level(CHOREO.notify.eyes(1).pose).width).toBeGreaterThan(1.1);
-    expect(level(CHOREO.play.eyes(1).pose).width).toBeLessThan(0.95);
+    expect(level("wide").drop).toBeGreaterThan(2);
+    expect(level("notify").drop).toBeLessThan(-2);
+    expect(level("notify").width).toBeGreaterThan(1.1);
+    expect(level("notify").slide).toBeLessThan(-5);
+    expect(level("play").width).toBeLessThan(0.95);
+  });
+
+  test("a state's own face is bloub's size on the seed's face, the resting face the seed's", () => {
+    const l = _layout("seed-7");
+    const [a] = faceEyes(l, { ...CHOREO.wide.eyes(1), head: { roll: 0, yaw: 0, spread: 0 } });
+    expect(a!.rx * 2).toBeCloseTo(0.356 * l.face.rx, 6);
+    expect(a!.ry * 2).toBeCloseTo(0.875 * l.face.ry, 6);
+    expect(faceEyes(l, CHOREO.idle.eyes(1))).toEqual(l.eyes.map(({ cx, cy, rx, ry, rot }) => ({ cx, cy, rx, ry, rot })));
   });
 
 });
@@ -106,7 +116,7 @@ describe("timeline eyes", () => {
   test("a one-shot hands the eyes back to the rest state", () => {
     const tl = new Timeline("idle");
     tl.play("wink", 0);
-    expect(tl.eyes(10).pose).toEqual(IDENT);
+    expect(tl.eyes(11).pose).toEqual(IDENT);
   });
 });
 

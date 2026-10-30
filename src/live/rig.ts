@@ -1,6 +1,10 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
 import { bakePose, r3, type Posable, type Pose } from "../morph";
+import { EYE_H, EYE_SPLIT, EYE_W, type Head } from "./choreo";
+
+/** bloub's resting half spacing, `sin(EYE_SPLIT)` of the body radius. */
+const REST_HALF = Math.sin((EYE_SPLIT * Math.PI) / 180);
 
 type Eye = Posable["eyes"][number];
 
@@ -40,6 +44,61 @@ export function eyeRig(e: Eye): EyeRig {
 /** Both eyes of `l` under pose `p`: the static bake's geometry, as rigs. */
 export function eyeRigs(l: Posable, p: Pose): EyeRig[] {
   return bakePose(l, p).l.eyes.map(eyeRig);
+}
+
+export interface FaceLayout extends Posable {
+  face: { cx: number; cy: number; rx: number; ry: number };
+}
+
+/**
+ * The posed eyes a live frame shows, body frame.
+ *
+ * bloub draws its face on a ball; a seed's ball is its face region, the
+ * ellipse each silhouette declares as where eyes belong (the whole body on a
+ * round seed, a smaller one on a triangle). `own` moves the eyes the pose
+ * shapes from the seeded resting pair toward bloub's on that ellipse: each eye
+ * toward bloub's resting `EYE_W` × `EYE_H` of its radii, the pair toward
+ * bloub's `EYE_SPLIT` spacing about its centre, level. A state that draws its
+ * own face therefore comes out at bloub's size and spacing for that face, and
+ * the morph in and out is a blend of the two.
+ *
+ * `head` then places the pair on that ball: roll turns it about its midpoint,
+ * yaw slides it toward the turn, closes it a little and narrows the far eye as
+ * the near one widens, and `spread` widens the split.
+ */
+export function faceEyes(l: FaceLayout, e: { pose: Pose; own: number; head: Head }): Eye[] {
+  const u = e.own;
+  const { face } = l;
+  const R = face.rx;
+  const [a, b] = l.eyes as [Eye, Eye];
+  const mx = (a.cx + b.cx) / 2 + (face.cx - (a.cx + b.cx) / 2) * u;
+  const seeded = (b.cx - a.cx) / 2;
+  const half = seeded + (REST_HALF * R - seeded) * u + e.head.spread * R;
+  const spread = Math.asin(Math.min(0.95, half / R));
+  const lift = half * Math.sin((e.head.roll * Math.PI) / 180);
+  const y = (e.head.yaw * Math.PI) / 180;
+  const left = Math.cos(y - spread) / Math.cos(spread);
+  const right = Math.cos(y + spread) / Math.cos(spread);
+  const p = e.pose;
+  const posed: Pose = {
+    ...p,
+    edy: p.edy - lift,
+    edy2: p.edy2 + 2 * lift,
+    epx: p.epx + R * Math.sin(y) * Math.cos(spread),
+    edx: p.edx + half * (Math.cos(y) - 1),
+    esx: p.esx * left,
+    esx2: (p.esx + p.esx2) * right - p.esx * left,
+  };
+  const base = {
+    eyes: [a, b].map((s, i) => ({
+      ...s,
+      cx: mx + (i ? half : -half),
+      cy: s.cy + (face.cy - s.cy) * u,
+      rx: s.rx + ((EYE_W / 2) * face.rx - s.rx) * u,
+      ry: s.ry + ((EYE_H / 2) * face.ry - s.ry) * u,
+    })),
+  };
+  return bakePose(base, posed).l.eyes.map(({ cx, cy, rx, ry, rot }) => ({ cx, cy, rx, ry, rot }));
 }
 
 /**
