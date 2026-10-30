@@ -6,10 +6,9 @@
  *
  * The core is traced from the same parameters, with the same curves, as the
  * drawing functions in `shape.ts` (`superellipse`, `blobPath`, `polygon`,
- * `box`); petals are exact circles. The droplet's taper is left out: its tip
- * is not in the layout, and it only adds area above the head, so leaving it
- * out keeps every answer on the inside. Built on first use per layout and
- * held in a `WeakMap`, so a dropped layout takes its table with it.
+ * `box`, and the droplet's `taper` from the `tip` its layout records); petals
+ * are exact circles. Built on first use per layout and held in a `WeakMap`,
+ * so a dropped layout takes its table with it.
  */
 
 export interface OutlineLayout {
@@ -24,6 +23,7 @@ export interface OutlineLayout {
     radii: number[];
     sides?: number;
     round?: number;
+    tip?: number;
   };
   petals: { cx: number; cy: number; r: number }[];
 }
@@ -126,6 +126,20 @@ function box({ cx, cy, rx, ry }: OutlineLayout["body"]): Trace {
   return [cx - hx, cy - ry, cx + hx, cy - ry, cx + hx, cy + ry, cx - hx, cy + ry, cx - hx, cy - ry];
 }
 
+/** The droplet's taper, as `shape.ts`'s `taper` draws it from the same `tip`. */
+function taper({ cx, cy, rx, ry, tip = 1.05 }: OutlineLayout["body"]): Trace {
+  const t = Math.max(1.05, tip);
+  const tx = rx * Math.sqrt(1 - 1 / (t * t));
+  const ty = cy - ry / t;
+  const apex = cy - t * ry;
+  const px = tx * 0.14;
+  const py = ty + 0.86 * (apex - ty);
+  const out: Trace = [cx - tx, ty, cx - px, py];
+  quad(out, cx - px, py, cx, apex, cx + px, py);
+  out.push(cx + tx, ty, cx - tx, ty);
+  return out;
+}
+
 function core(l: OutlineLayout): Trace {
   switch (l.shape) {
     case "organic":
@@ -162,13 +176,17 @@ function crossings(tr: Trace, ox: number, oy: number, dx: number, dy: number, hi
 }
 
 /** How far the ray from the body centre at `theta` stays inside the union before it first leaves it. */
-function exitAlong(l: OutlineLayout, tr: Trace, theta: number, hits: number[]): number {
+function exitAlong(l: OutlineLayout, traces: Trace[], theta: number, hits: number[]): number {
   const { cx, cy } = l.body;
   const dx = Math.cos(theta);
   const dy = Math.sin(theta);
-  crossings(tr, cx, cy, dx, dy, hits);
-  const spans: [number, number][] = [[0, hits[0] ?? 0]];
-  for (let i = 1; i + 1 < hits.length; i += 2) spans.push([hits[i]!, hits[i + 1]!]);
+  const spans: [number, number][] = [];
+  for (const tr of traces) {
+    crossings(tr, cx, cy, dx, dy, hits);
+    let i = 0;
+    if (hits.length % 2) spans.push([0, hits[i++]!]);
+    for (; i + 1 < hits.length; i += 2) spans.push([hits[i]!, hits[i + 1]!]);
+  }
   for (const p of l.petals) {
     const fx = cx - p.cx;
     const fy = cy - p.cy;
@@ -195,10 +213,10 @@ const tables = new WeakMap<object, Float64Array>();
 function table(l: OutlineLayout): Float64Array {
   let t = tables.get(l);
   if (t) return t;
-  const tr = core(l);
+  const traces = l.body.tip ? [core(l), taper(l.body)] : [core(l)];
   const hits: number[] = [];
   t = new Float64Array(RAYS);
-  for (let i = 0; i < RAYS; i++) t[i] = exitAlong(l, tr, (i / RAYS) * Math.PI * 2, hits);
+  for (let i = 0; i < RAYS; i++) t[i] = exitAlong(l, traces, (i / RAYS) * Math.PI * 2, hits);
   tables.set(l, t);
   return t;
 }

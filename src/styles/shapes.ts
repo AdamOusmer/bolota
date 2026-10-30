@@ -30,6 +30,8 @@ export interface Body {
   n: number; rot: number; radii: number[];
   /** Polygon-only, set by the shapes that draw one. */
   sides?: number; round?: number;
+  /** Droplet-only: the taper's apex height, in units of `ry` above the centre. */
+  tip?: number;
 }
 export interface Ellipse { cx: number; cy: number; rx: number; ry: number }
 export interface Deco {
@@ -133,10 +135,10 @@ export const droplet: Shape = {
   // Shifted down by what the taper adds above, so the whole silhouette — head
   // and point together — sits centred in the frame rather than the head alone.
   // `n` is pinned to a true ellipse, which is the curve the taper is tangent to.
-  body: (_t, b) => { b.cy += 0.22 * b.ry; b.n = 2; },
+  body: (t, b) => { b.cy += 0.22 * b.ry; b.n = 2; b.tip = t.num("droplet.tip", 1.4, 1.65); },
   face: b => ({ cx: b.cx, cy: b.cy + b.ry * 0.05, rx: b.rx * 0.88, ry: b.ry * 0.88 }),
-  decorate: (t, b, out) => {
-    out.extra.push(taper(b.cx, b.cy, b.rx, b.ry, t.num("droplet.tip", 1.4, 1.65)));
+  decorate: (_t, b, out) => {
+    out.extra.push(taper(b.cx, b.cy, b.rx, b.ry, b.tip!));
   },
 };
 
