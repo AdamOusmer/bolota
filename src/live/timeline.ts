@@ -3,6 +3,7 @@
 
 import type { Pose } from "../morph";
 import { blendAct, type Act } from "./act";
+import type { DecorFrame } from "./decor";
 import {
   CHOREO,
   EXPRESSION_MORPH,
@@ -333,6 +334,25 @@ export class Timeline {
 
   sample(now: number): Act {
     return composed(this.at(now), now);
+  }
+
+  /**
+   * What decor draws at `now`: the current state, and during its entrance the
+   * outgoing one, weighted by the same curve `sample` blends the act on.
+   */
+  decorFrames(now: number): DecorFrame[] {
+    const r = this.at(now);
+    const since = now - r.tCur;
+    const morph = CHOREO[r.cur].morph;
+    const here = Math.max(0, since);
+    if (since >= morph || !r.prev) {
+      return [{ state: r.cur, local: local(r, r.cur, here, r.looping), weight: 1 }];
+    }
+    const k = easeOutQuint(clamp(since / morph));
+    return [
+      { state: r.prev, local: local(r, r.prev, Math.max(0, now - r.tPrev), r.loopingPrev), weight: 1 - k },
+      { state: r.cur, local: local(r, r.cur, here, r.looping), weight: k },
+    ];
   }
 
   /** The eyes at `now`, blended alongside the act. */
