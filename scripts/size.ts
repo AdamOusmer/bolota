@@ -235,28 +235,31 @@ const ENTRIES: {
     // palette plumbing and the duplicated unknown-state throw. Budget is 16747
     // plus ~5%.
     //
-    // Raised to 16999 (budget 17850) when the decor chunk started importing the
-    // helpers it shares with this module instead of bundling them again. The
-    // row now imports the whole module namespace: `engine.js` exports ten
-    // underscore names (`_contrast`, `_toHex`, `_edge`, ...) that a consumer's
-    // bundler cannot drop, because `decor.js` imports them. 16999 B against
-    // 16917 B for the same namespace import before (+82 B), and in exchange the
-    // decor row below loses 3.5 KB. Engine plus decor: 24284 -> 20851 B.
+    // Re-measured as a consumer ships it: `mountEngine` plus the two private
+    // underscore exports (`_CHOREO`, `_r3`) that `decor.js` imports, which a
+    // bundler therefore cannot drop. 16766 B (16765 for `mountEngine` alone).
+    // Both are helpers the engine already holds for itself, so sharing them
+    // costs it +1 B and takes them out of the decor chunk. Adding `putter`
+    // measured 16770, `edge` and the colour helpers more (16999 with all ten),
+    // so those stay in the decor chunk. The budget is held under the old
+    // engine's 16770 on purpose: first-load size is the priority, so there is
+    // no 5% room here. Engine plus decor: 24132 -> 23176 B.
     name: "engine",
-    budget: 17850,
+    budget: 16769,
     external: ["*/decor.js"],
-    source: `import * as engine from "../../src/engine";
-             globalThis.x = engine;`,
+    source: `import { mountEngine, _CHOREO, _r3 } from "../../src/engine";
+             globalThis.x = [mountEngine, _CHOREO, _r3];`,
   },
   {
     // The chunk the engine loads on idle or on the first decor-bearing state.
-    // Measured 7367 B while it carried its own copies of the colour, outline,
-    // attribute-writer, `r3` and choreo helpers the engine also holds. It now
-    // imports them from `engine.js` (`scripts/decor-shared.ts`), which is always
-    // loaded first, and measures 3852 B: decor code only. Budget is that plus
-    // ~5%.
+    // Measured 7367 B while it carried its own copies of `r3`, the attribute
+    // writer and the choreo table the engine also holds. It now imports
+    // `CHOREO` and `r3` from `engine.js` (`scripts/decor-shared.ts`), which is
+    // always loaded first, and measures 6410 B. The colour, outline and
+    // attribute-writer helpers stay here: sharing them would grow first load.
+    // Budget is that plus ~5%.
     name: "decor (lazy chunk)",
-    budget: 4050,
+    budget: 6730,
     external: [],
     plugins: [decorSharesEngine],
     source: `import { createDecor } from "../../src/live/decor";
