@@ -24,6 +24,7 @@
 
 import { rmSync } from "node:fs";
 import { $ } from "bun";
+import { decorSharesEngine } from "./decor-shared";
 
 // One per package.json `exports` subpath that resolves to `dist` (i.e. every
 // subpath except `./motion.css`, built separately below as CSS, and
@@ -39,6 +40,11 @@ const ENTRIES = [
 
 rmSync("dist", { recursive: true, force: true });
 
+// The live engine's decor layer is its own module, loaded by a dynamic
+// `import("./decor.js")` in `src/live/mount.ts`. That specifier is external for
+// the entries and resolves, from `dist/engine.js`, to the file built second
+// below, so a consumer's bundler splits it into a chunk of its own. Hand-rolled
+// rather than Bun's splitting for the reason above.
 const build = await Bun.build({
   entrypoints: ENTRIES,
   outdir: "dist",
@@ -46,6 +52,7 @@ const build = await Bun.build({
   format: "esm",
   minify: true,
   sourcemap: "linked",
+  external: ["*/decor.js"],
 });
 
 if (!build.success) {
@@ -53,12 +60,31 @@ if (!build.success) {
   process.exit(1);
 }
 
+// Helpers the chunk shares with the engine are imported from `./engine.js`
+// rather than bundled again; see `scripts/decor-shared.ts`.
+const decor = await Bun.build({
+  entrypoints: ["src/live/decor.ts"],
+  outdir: "dist",
+  naming: "decor.js",
+  target: "browser",
+  format: "esm",
+  minify: true,
+  sourcemap: "linked",
+  plugins: [decorSharesEngine],
+});
+
+if (!decor.success) {
+  for (const log of decor.logs) console.error(log);
+  process.exit(1);
+}
+
 // The stylesheet ships minified. `src/motion.css` is ~44 KB, nearly all of it
 // the commentary explaining why each channel exists — worth reading in the
 // repo, not worth shipping to a consumer who drops it in a <link> and gets no
-// bundler pass over it.
+// bundler pass over it. `src/gaze.css` ships beside it: the live engine's
+// pointer tracking needs it to fade the ambient drift while the eyes follow.
 const css = await Bun.build({
-  entrypoints: ["src/motion.css"],
+  entrypoints: ["src/motion.css", "src/gaze.css"],
   outdir: "dist",
   minify: true,
 });

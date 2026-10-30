@@ -116,7 +116,7 @@ export function compose(bands: Band[], fit: Fit) {
     const eye = (e: Eye, i: number) => {
       const path = `<path d="${capsulePath(e.cx, e.cy, e.rx * 2, e.ry * 2, e.rot)}"/>`;
       return mo
-        ? `<g class="mo-eye" style="--mo-wrap:${i ? 1 : -1};--mo-lean:${r2(e.rot)};transform-origin:${r2(e.cx)}px ${r2(e.cy)}px">${path}</g>`
+        ? `<g class="mo-eye" style="--mo-wrap:${i ? 1 : -1};--mo-lean:${r2(e.rot)};transform-origin:${r2(e.cx)}px ${r2(e.cy)}px"><g>${path}</g></g>`
         : path;
     };
     const body =

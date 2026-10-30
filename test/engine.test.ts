@@ -1,46 +1,44 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
 import { describe, expect, test } from "bun:test";
-import { BotEngine } from "../src/bloub/engine";
+import * as engine from "../src/engine";
+import { SEQUENCES, runSequence } from "../src/sequences";
+import { frame, mounted } from "./engine-dom";
 
-describe("engine.ts SSR safety", () => {
-  test("importing the bridge module touches no document/window at module scope", async () => {
-    // bun test's own runtime has neither global (see bunfig.toml — no DOM
-    // preload), so this is a real check, not a simulated one: a top-level
-    // `document.createElementNS(...)` or `window.matchMedia(...)` in
-    // `src/engine.ts` would throw a ReferenceError the instant this import
-    // resolves, before any test body ever runs.
+describe("engine entry", () => {
+  test("importing it touches no document or window at module scope", async () => {
     await import("../src/engine");
+    await import("../src/sequences");
     expect(typeof document).toBe("undefined");
     expect(typeof window).toBe("undefined");
   });
-});
 
-describe("BotEngine.sample(t) determinism", () => {
-  // `BotEngine` is bloub's own class (src/bloub/engine.ts), ported verbatim —
-  // "clockless engine: sample(t) is a pure function of time" per its
-  // own doc comment. Asserted here on two states rather than trusted from
-  // that comment: this is the property `engine.ts`'s render loop leans on to
-  // never desync from wall-clock time.
-  test('"thinking" — same instance, same t, twice', () => {
-    const engine = new BotEngine(100, "thinking");
-    expect(engine.sample(1.2)).toEqual(engine.sample(1.2));
+  test("the public surface is mountEngine, engineStates and engineExpressions", () => {
+    expect(
+      Object.keys(engine)
+        .filter((k) => !k.startsWith("_"))
+        .sort(),
+    ).toEqual(["engineExpressions", "engineStates", "mountEngine"]);
   });
 
-  test('"thinking" — two fresh instances agree at the same t', () => {
-    const a = new BotEngine(100, "thinking");
-    const b = new BotEngine(100, "thinking");
-    expect(a.sample(1.2)).toEqual(b.sample(1.2));
+  test("a handle carries the documented API and the same rosters as the helpers", () => {
+    const { handle } = mounted();
+    for (const k of ["play", "loop", "stop", "follow", "destroy", "setExpression"] as const) {
+      expect(typeof handle[k]).toBe("function");
+    }
+    expect(handle.states).toEqual(engine.engineStates());
+    expect(handle.expressions).toEqual(engine.engineExpressions());
+    expect(handle.states).toContain("idle");
+    handle.destroy();
   });
 
-  test('"orbit" — same instance, same t, twice', () => {
-    const engine = new BotEngine(100, "orbit");
-    expect(engine.sample(2.0)).toEqual(engine.sample(2.0));
-  });
-
-  test('"orbit" — two fresh instances agree at the same t', () => {
-    const a = new BotEngine(100, "orbit");
-    const b = new BotEngine(100, "orbit");
-    expect(a.sample(2.0)).toEqual(b.sample(2.0));
+  test("every sequence name plays a state the handle lists", () => {
+    const { doc, handle } = mounted();
+    for (const [name, state] of Object.entries(SEQUENCES)) {
+      expect(handle.states).toContain(state);
+      expect(() => runSequence(handle, name as keyof typeof SEQUENCES)).not.toThrow();
+    }
+    frame(doc, 16);
+    handle.destroy();
   });
 });

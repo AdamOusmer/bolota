@@ -1,0 +1,86 @@
+/*
+ * Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
+ * Derived from blobatar (c) 2026 Alain, MIT. See LICENSE.
+ *
+ * The gaze layer's geometry: `gaze.ts` writes the direction, this decides
+ * what it is worth on screen. Inert until a host sets `--mo-track-travel`
+ * (viewBox units, about 1.5 to 4) on or above `.mo-eyes`.
+ */
+
+@property --mo-track-x {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --mo-track-y {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --mo-track-travel {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --mo-track-hold {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+/* Restates `motion.css`'s three `.mo-eye` transform properties with the gaze
+   terms folded in, at higher specificity so stylesheet order cannot matter. */
+.mo-root .mo-eye {
+  --mo-gz-dx: calc(
+    var(--mo-gz-dx1, 0) + (var(--mo-gz-dx2, 0) - var(--mo-gz-dx1, 0)) * var(--mo-sel)
+  );
+  --mo-gz-dy: calc(
+    var(--mo-gz-dy1, 0) + (var(--mo-gz-dy2, 0) - var(--mo-gz-dy1, 0)) * var(--mo-sel)
+  );
+  --mo-gz-sx: calc(
+    var(--mo-gz-sx1, 1) + (var(--mo-gz-sx2, 1) - var(--mo-gz-sx1, 1)) * var(--mo-sel)
+  );
+  --mo-gz-sy: calc(
+    var(--mo-gz-sy1, 1) + (var(--mo-gz-sy2, 1) - var(--mo-gz-sy1, 1)) * var(--mo-sel)
+  );
+  --mo-gz-t: calc(
+    var(--mo-gz-t1, 0) + (var(--mo-gz-t2, 0) - var(--mo-gz-t1, 0)) * var(--mo-sel)
+  );
+
+  translate: calc(
+      (var(--mo-edx) * var(--mo-wrap, 1) + var(--mo-epx) + var(--mo-gz-dx)) * 1px
+    )
+    calc((var(--mo-edy) + var(--mo-edy2) * var(--mo-sel) + var(--mo-gz-dy)) * 1px);
+
+  rotate: calc(
+    (
+        var(--mo-t) * var(--mo-wrap, 1) - var(--mo-lean, 0) * var(--mo-lock) +
+          var(--mo-gz-t)
+      ) * 1deg
+  );
+
+  transform: rotate(calc(var(--mo-lean, 0) * 1deg))
+    scaleX(calc(var(--mo-x) * var(--mo-gz-sx)))
+    scaleY(calc(var(--mo-y) * var(--mo-gz-sy)))
+    rotate(calc(var(--mo-lean, 0) * -1deg));
+}
+
+/* The idle saccade fades out as the driver takes hold and back as it lets go.
+   The seeds are captured on the `<svg>` first, because `.mo-root` cannot read
+   a variable it is itself redefining. */
+svg:has(> .mo-root) {
+  --mo-look-seed-x: var(--mo-look-x, 1.4);
+  --mo-look-seed-y: var(--mo-look-y, 1.1);
+  --mo-look-seed-mx: var(--mo-look-mx, 1.4);
+  --mo-look-seed-my: var(--mo-look-my, 1.1);
+}
+
+.mo-root {
+  --mo-look-x: calc(var(--mo-look-seed-x, 1.4) * (1 - var(--mo-track-hold)));
+  --mo-look-y: calc(var(--mo-look-seed-y, 1.1) * (1 - var(--mo-track-hold)));
+  --mo-look-mx: calc(var(--mo-look-seed-mx, 1.4) * (1 - var(--mo-track-hold)));
+  --mo-look-my: calc(var(--mo-look-seed-my, 1.1) * (1 - var(--mo-track-hold)));
+}

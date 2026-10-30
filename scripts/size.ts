@@ -13,6 +13,8 @@
  */
 
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import type { BunPlugin } from "bun";
+import { decorSharesEngine } from "./decor-shared";
 
 const DIR = "scripts/.fixtures";
 
@@ -23,6 +25,7 @@ const ENTRIES: {
   source: string;
   /** Entry file extension. Defaults to a TSX consumer. */
   ext?: string;
+  plugins?: BunPlugin[];
 }[] = [
   {
     // Expressions are passed in as values from `bolota/expression`, so a
@@ -119,6 +122,20 @@ const ENTRIES: {
              globalThis.x = bolota(String(globalThis.seed), { expression: happy });`,
   },
   {
+    // What one pose of the fourth roster costs on top of another already
+    // imported: its data and nothing else. This row measured 4751 B against
+    // `blob + happy`'s 4705, so +46 B. Measured the same way as plain `.ts`
+    // consumers (base 4705): `attentive` +46, `excited` +46, `laughing` +50,
+    // `curious` +52, `proud` +45. Budget is `blob + happy`'s plus the 80 B a
+    // pose is allowed. `curious` is the row because it is the heaviest.
+    name: "blob + happy + curious",
+    budget: 4950,
+    external: [],
+    source: `import { bolota } from "../../src/blob";
+             import { curious, happy } from "../../src/expression";
+             globalThis.x = bolota(String(globalThis.seed), { expression: globalThis.s ? happy : curious });`,
+  },
+  {
     name: "traits only",
     budget: 600,
     external: [],
@@ -173,43 +190,99 @@ const ENTRIES: {
     // registered custom properties, which recalculate on the main thread
     // rather than compositing. A grid that reads as a crowd is the case this
     // library invites, so that is the case worth being cheap in.
-    budget: 1450,
+    //
+    // Raised from 1450 to 1500 for the live engine's entrance blink, measured
+    // at 1486 (+58 B over 1428). The engine computes no lids, so the one blink
+    // a state change fires has to live here: a 200 ms keyframe on the live
+    // eye's rect, stated twice so each flip of `data-mo-blink` restarts it in
+    // the same frame (one name measured 1466 but needs a frame's delay to
+    // restart), plus the rect in the reduced-motion reset. The pose-channel
+    // additions that came first (edy2, epx) cost 21 B and fit the old budget.
+    // Raised from 1500 to 1560 for `[data-mo-asleep] *`, measured 1505 (+7 B):
+    // the engine pauses every CSS loop of an off-screen or hidden instance.
+    // Measured in headless Chromium, 23 resting bolotas off screen cost the main
+    // thread a style recalc and layout per frame each without it.
+    budget: 1560,
     external: [],
     ext: "css",
     source: `@import "../../src/motion.css";`,
   },
   {
-    // The bloub engine: 14 states' worth of pose math, decor geometry and
-    // eye-fit tables (`src/bloub/`), plus `_layout` for the seed-to-silhouette
-    // bridge. Heavier by design — it is an opt-in animation engine, not part
-    // of the static-render path `blob only`/`barrel` above measure — but
-    // still gated so it cannot grow silently.
-    // Raised from 15200 by ~600 B for velocity-scaled motion blur: three
-    // `feGaussianBlur` filters (body/rings/particles), the damped speed
-    // tracking that drives them, and the tightened rAF delta clamp.
-    // Raised from 15850 to 17400 (2026-08-19): loop-phase timeline, wink
-    // gesture timeline, and follow-vs-idle arbitration — deliberate feature
-    // growth (measured 16640), not creep. The headroom on top also absorbs
-    // cross-platform gzip variance: `Bun.gzipSync` on CI's linux/x64 runners
-    // lands ~100 B above the same bundle gzipped on macOS/arm64 for identical
-    // input bytes, which once failed this row on CI with no source change.
-    // Raised from 17400 (2026-08-20) for the per-seed gaze solve: the window
-    // fillers, and `_safeGaze` walking a real silhouette with the eye's own
-    // extent at mount. Measured 17618, so this keeps the usual ~3% of room.
-    // Raised from 18200 (2026-10-29) for the shared per-window frame loop and
-    // the node pools that let a frame update the SVG in place instead of
-    // rebuilding it. Measured 18220 on CI's linux runner, so ~3% of room again.
+    // The native live engine (`src/live/`): timeline and choreography for 14
+    // states, the exact outline and eye-containment solve, the decor layer,
+    // the gaze pursuit and the in-place renderer behind `mountEngine`.
+    // Heavier by design: an opt-in animation engine, not part of the
+    // static-render path `blob only`/`barrel` above measure, but still gated so
+    // it cannot grow silently.
+    // Replaced the bloub-port row (budget 18800, last measured 18220 on CI's
+    // linux runner) when `mountEngine` became a facade over `mountLive`
+    // (0.2.0). Measured 20138 B on macOS/arm64 against the engine at the start
+    // of that change, 20179 with the follow-up timeline/decor fixes, so +1.9 KB
+    // over the old engine: the exact outline, the per-state fit solve and the
+    // roster of 18 poses are what the old DOM renderer did not carry. Budget is
+    // 20179 plus ~5%, which also absorbs the ~100 B by which `Bun.gzipSync` on
+    // CI's linux/x64 runners lands above macOS/arm64 for identical input bytes.
+    //
+    // Decor became a lazy chunk (`import("./decor.js")` in `live/mount.ts`), so
+    // this row is the first-load cost: 19693 B with decor inline, 16494 B with
+    // it split out, under the old engine's 16770. The dynamic import is
+    // external here, as it is in `dist`.
+    // Raised to 16747 (+253 B) for the automatic pool: the per-window registry
+    // under a global symbol (shared rAF across copies, version guard) and the
+    // shared IntersectionObserver + visibilitychange watcher that park an
+    // off-screen or hidden instance. Paid back inside the budget of the old
+    // engine by dropping `Timeline.loop` (unused here), the decor warm-up and
+    // palette plumbing and the duplicated unknown-state throw. Budget is 16747
+    // plus ~5%.
+    //
+    // Re-measured as a consumer ships it: `mountEngine` plus the two private
+    // underscore exports (`_CHOREO`, `_r3`) that `decor.js` imports, which a
+    // bundler therefore cannot drop. 16766 B (16765 for `mountEngine` alone).
+    // Both are helpers the engine already holds for itself, so sharing them
+    // costs it +1 B and takes them out of the decor chunk. Adding `putter`
+    // measured 16770, `edge` and the colour helpers more (16999 with all ten),
+    // so those stay in the decor chunk. The budget is held under the old
+    // engine's 16770 on purpose: first-load size is the priority, so there is
+    // no 5% room here. Engine plus decor: 24132 -> 23176 B.
+    //
+    // Raised from 16769 to 19490 for the 0.2.0 engine with the JS/CSS hybrid
+    // idle (`live/idle.ts`, `motionSeeds`), the compositor hand-off and hover
+    // amplitude. Measured 18919 B (+2150 over the 16766 B before those
+    // commits); budget is that plus ~3%. Size accepted over 0.1.7's 16770 B in
+    // exchange for ~0.7 ms/s idle and animation near the old engine's cost.
+    //
+    // Raised from 19490 to 21690 for the allocation-free frame: reused act,
+    // eye and box records with `out` parameters through the timeline, choreo,
+    // rig and gaze, the number-first rig writer and draw memo in `mount.ts`,
+    // the outline's shortest radius for `fit.ts`, and `putter`'s slots. Measured
+    // 21052 B (+1562 over the previous budget); budget is that plus ~3%. Size
+    // accepted for the script time of a frame, which falls several-fold.
     name: "engine",
-    budget: 18800,
+    budget: 21690,
+    external: ["*/decor.js"],
+    source: `import { mountEngine, _CHOREO, _r3 } from "../../src/engine";
+             globalThis.x = [mountEngine, _CHOREO, _r3];`,
+  },
+  {
+    // The chunk the engine loads on idle or on the first decor-bearing state.
+    // Measured 7367 B while it carried its own copies of `r3`, the attribute
+    // writer and the choreo table the engine also holds. It now imports
+    // `CHOREO` and `r3` from `engine.js` (`scripts/decor-shared.ts`), which is
+    // always loaded first, and measures 6410 B. The colour, outline and
+    // attribute-writer helpers stay here: sharing them would grow first load.
+    // Budget is that plus ~5%.
+    name: "decor (lazy chunk)",
+    budget: 6730,
     external: [],
-    source: `import { mountEngine } from "../../src/engine";
-             globalThis.x = mountEngine;`,
+    plugins: [decorSharesEngine],
+    source: `import { createDecor } from "../../src/live/decor";
+             globalThis.x = createDecor;`,
   },
   {
     // `runSequence`'s only import from `./engine` is the `EngineHandle`
     // *type*, erased under `verbatimModuleSyntax` — this must stay near-free
-    // and must NOT pull in `engine.ts`'s runtime (bloub, `_layout`) for a
-    // consumer who only wants the four friendly names.
+    // and must NOT pull in the engine runtime for a consumer who only wants
+    // the four friendly names.
     name: "sequences",
     budget: 260,
     external: [],
@@ -233,6 +306,7 @@ for (const entry of ENTRIES) {
     target: "browser",
     minify: true,
     external: entry.external,
+    plugins: entry.plugins,
   });
 
   if (!build.success) {
