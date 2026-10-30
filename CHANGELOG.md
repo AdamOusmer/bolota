@@ -10,7 +10,7 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
-## Unreleased
+## 0.2.3
 
 No face changes. The live engine moves the way the 0.1 engine did again.
 The 0.2 engine kept bloub's states but not its motion: the stylesheet's
