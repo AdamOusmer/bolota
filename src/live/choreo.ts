@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 // Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
-import { IDENT, lerpPose, type Pose } from "../morph";
-import { IDLE_ACT, type Act } from "./act";
+import { IDENT, lerpPose, setPose, type Pose } from "../morph";
+import { IDLE_ACT, restAct, type Act } from "./act";
 
 /**
  * The bloub state catalog reduced to what it does to the body and the eyes:
@@ -103,6 +103,34 @@ export const TRACK_TURN = 35;
 
 export const CENTRE: Track = { x: 0, y: 0 };
 
+const newAct = (): Act => ({ ...IDLE_ACT });
+
+/** Eyes that own every object they hold, for a caller that fills them frame after frame. */
+export const newEyes = (): Eyes => ({
+  pose: { ...IDENT },
+  track: { x: 0, y: 0 },
+  alpha: 1,
+  own: 0,
+  head: { roll: 0, yaw: 0, spread: 0 },
+});
+
+const setHead = (out: Head, from: Head): void => {
+  out.roll = from.roll;
+  out.yaw = from.yaw;
+  out.spread = from.spread;
+};
+
+/** Copies `from` into `out`, which keeps its own pose, track and head. */
+export function setEyes(out: Eyes, from: Eyes): Eyes {
+  setPose(out.pose, from.pose);
+  out.track.x = from.track.x;
+  out.track.y = from.track.y;
+  out.alpha = from.alpha;
+  out.own = from.own;
+  setHead(out.head, from.head);
+  return out;
+}
+
 /** bloub's head `pitch` in degrees as a track. bloub's pitch is up-positive. */
 const nod = (pitch: number): Track => ({ x: 0, y: -pitch / TRACK_TURN });
 
@@ -174,6 +202,7 @@ const NOTIFY_EYES: Eyes = { ...face(bloubEye(0.505, 0.498), -12.2, -21.94, 18.89
 /** bloub's 0.18 × 0.34 eyes for `play` and `orbit`, a little under rest. */
 const SMALL = bloubEye(0.18, 0.34);
 const PLAY_EYES: Eyes = { ...face(SMALL, -6, 12, 15), track: nod(-8), alpha: 1, own: 1 };
+const ORBIT_BASE = pose({ ...SMALL, lock: 1 });
 const ORBIT_JOSTLE_YAW = 16;
 const ORBIT_JOSTLE_PITCH = 10;
 const ORBIT_JOSTLE_ROLL = 6;
@@ -201,12 +230,18 @@ export interface Choreo {
   ownsLiveliness?: boolean;
   /** Local time at which the state reads best, for a single still frame. */
   still: number;
-  act(local: number): Act;
-  /** What the state does to the seeded eyes, before any expression. */
-  eyes(local: number): Eyes;
+  /**
+   * The act at `local`. A state that moves fills `out` and returns it; one that
+   * does not returns a shared record. Either way the result is read-only.
+   */
+  act(local: number, out?: Act): Act;
+  /** What the state does to the seeded eyes, before any expression. Read-only, as `act`. */
+  eyes(local: number, out?: Eyes): Eyes;
 }
 
 const still = (): Act => IDLE_ACT;
+const EXCLAIM_ACT: Act = { ...IDLE_ACT, y: GLYPH_DOT_CY, s: GLYPH_DOT_R };
+const PLAY_ACT: Act = { ...IDLE_ACT, y: TRI_ORBIT, s: TRI_MEAN };
 
 function dotPulse(t: number, index: number): number {
   const p = ((((t - index * 0.5) / 1.5) % 1) + 1) % 1;
@@ -214,17 +249,40 @@ function dotPulse(t: number, index: number): number {
   return clamp(k * 2);
 }
 
-/** `burst` and `comet`: collapse, sit, regrow, with the face fading on the same curve. */
+const COLLAPSED = { s: 1, eyeAlpha: 1 };
+
+/** `burst` and `comet`: collapse, sit, regrow, with the face fading on the same curve. Fills a record the next call reuses. */
 function collapse(t: number, down: number, depth: number, at: number, up: number) {
   const frac = easeOutQuint(clamp(t / down));
   const shrunk = 1 - depth * frac;
   const regrow = easeOutQuint(clamp((t - at) / up));
-  return { s: shrunk + (1 - shrunk) * regrow, eyeAlpha: t < at ? 1 - frac : regrow };
+  COLLAPSED.s = shrunk + (1 - shrunk) * regrow;
+  COLLAPSED.eyeAlpha = t < at ? 1 - frac : regrow;
+  return COLLAPSED;
 }
 
 const burstCollapse = (t: number) => collapse(t, 0.7, 0.834, 1.7, 0.7);
 const cometCollapse = (t: number) => collapse(t, 0.55, 1 - COMET_DOT, 1.85, 0.6);
-const fading = (alpha: number): Eyes => ({ ...BLOUB_REST, alpha });
+const fading = (alpha: number, out: Eyes): Eyes => {
+  setEyes(out, BLOUB_REST);
+  out.alpha = alpha;
+  return out;
+};
+
+/** The orbit's angle at `t`, with the sines and cosines `act` and `eyes` both need. */
+const SPIN = { t: NaN, rot: 0, sin: 0, cos: 0, sin2: 0 };
+
+function spin(t: number) {
+  if (SPIN.t !== t) {
+    const rot = -TAU * 1.25 * t;
+    SPIN.t = t;
+    SPIN.rot = rot;
+    SPIN.sin = Math.sin(rot);
+    SPIN.cos = Math.cos(rot);
+    SPIN.sin2 = Math.sin(rot * 2);
+  }
+  return SPIN;
+}
 
 export type StateId =
   | "idle"
@@ -271,12 +329,13 @@ export const CHOREO: Record<StateId, Choreo> = {
     baseBody: false,
     baseFace: false,
     still: 1.1,
-    act: (t) => ({
-      ...IDLE_ACT,
-      x: DOT_X1,
-      s: DOT_R * (1 + (DOT_PEAK - 1) * dotPulse(t, 1)),
-      eyeAlpha: 0,
-    }),
+    act: (t, o = newAct()) => {
+      restAct(o);
+      o.x = DOT_X1;
+      o.s = DOT_R * (1 + (DOT_PEAK - 1) * dotPulse(t, 1));
+      o.eyeAlpha = 0;
+      return o;
+    },
     eyes: eyeless,
   },
   wink: {
@@ -288,13 +347,15 @@ export const CHOREO: Record<StateId, Choreo> = {
     baseFace: false,
     still: 0.8,
     act: still,
-    eyes: (t) => ({
-      pose: lerpPose(WINK_OPEN_POSE, WINK_SHUT_POSE, winkShut(t)),
-      track: WINK_LOOK,
-      alpha: 1,
-      own: 1,
-      head: WINK_FACE.head,
-    }),
+    eyes: (t, o = newEyes()) => {
+      lerpPose(WINK_OPEN_POSE, WINK_SHUT_POSE, winkShut(t), o.pose);
+      o.track.x = WINK_LOOK.x;
+      o.track.y = WINK_LOOK.y;
+      o.alpha = 1;
+      o.own = 1;
+      setHead(o.head, WINK_FACE.head);
+      return o;
+    },
   },
   wide: {
     duration: 1.8,
@@ -314,16 +375,15 @@ export const CHOREO: Record<StateId, Choreo> = {
     baseBody: false,
     baseFace: false,
     still: 0.75,
-    act: (t) => {
+    act: (t, o = newAct()) => {
       const travel = easeInOutCubic(clamp(t / 1.5)) * 0.82 - 0.087;
       const back = t > 1.6 ? clamp((t - 1.6) / 0.4) : 0;
       const buzz = Math.sin(t * 2.5 * TAU) * 0.005;
-      return {
-        ...IDLE_ACT,
-        x: travel * (1 - back) + 0.1 * back,
-        y: GLYPH_DOT_CY + buzz * 2.8,
-        s: GLYPH_DOT_R,
-      };
+      restAct(o);
+      o.x = travel * (1 - back) + 0.1 * back;
+      o.y = GLYPH_DOT_CY + buzz * 2.8;
+      o.s = GLYPH_DOT_R;
+      return o;
     },
     eyes: bloubRest,
   },
@@ -344,7 +404,7 @@ export const CHOREO: Record<StateId, Choreo> = {
     baseBody: false,
     baseFace: false,
     still: 0.8,
-    act: () => ({ ...IDLE_ACT, y: GLYPH_DOT_CY, s: GLYPH_DOT_R }),
+    act: () => EXCLAIM_ACT,
     eyes: bloubRest,
   },
   snooze: {
@@ -354,12 +414,13 @@ export const CHOREO: Record<StateId, Choreo> = {
     baseBody: false,
     baseFace: false,
     still: 0.45,
-    act: (t) => ({
-      ...IDLE_ACT,
-      y: 0.11 + Math.sin(t * (TAU / 0.6)) * 0.19,
-      s: 0.1585,
-      eyeAlpha: 0,
-    }),
+    act: (t, o = newAct()) => {
+      restAct(o);
+      o.y = 0.11 + Math.sin(t * (TAU / 0.6)) * 0.19;
+      o.s = 0.1585;
+      o.eyeAlpha = 0;
+      return o;
+    },
     eyes: eyeless,
   },
   play: {
@@ -370,7 +431,7 @@ export const CHOREO: Record<StateId, Choreo> = {
     baseFace: false,
     acceptsExpression: true,
     still: 0.9,
-    act: () => ({ ...IDLE_ACT, y: TRI_ORBIT, s: TRI_MEAN }),
+    act: () => PLAY_ACT,
     eyes: () => PLAY_EYES,
   },
   orbit: {
@@ -382,25 +443,30 @@ export const CHOREO: Record<StateId, Choreo> = {
     baseFace: false,
     ownsLiveliness: true,
     still: 1.2,
-    act: (t) => {
-      const rot = -TAU * 1.25 * t;
-      return {
-        ...IDLE_ACT,
-        x: -TRI_ORBIT * Math.sin(rot),
-        y: TRI_ORBIT * Math.cos(rot),
-        rot: (rot * 180) / Math.PI,
-        s: TRI_MEAN,
-        upright: 1,
-      };
+    act: (t, o = newAct()) => {
+      const w = spin(t);
+      restAct(o);
+      o.x = -TRI_ORBIT * w.sin;
+      o.y = TRI_ORBIT * w.cos;
+      o.rot = (w.rot * 180) / Math.PI;
+      o.s = TRI_MEAN;
+      o.upright = 1;
+      return o;
     },
-    eyes: (t) => {
-      const rot = -TAU * 1.25 * t;
-      return {
-        ...face(SMALL, Math.sin(rot * 2) * ORBIT_JOSTLE_ROLL, Math.sin(rot) * ORBIT_JOSTLE_YAW),
-        track: nod(Math.cos(rot) * ORBIT_JOSTLE_PITCH),
-        alpha: 1,
-        own: 1,
-      };
+    eyes: (t, o = newEyes()) => {
+      const w = spin(t);
+      const roll = w.sin2 * ORBIT_JOSTLE_ROLL;
+      setPose(o.pose, ORBIT_BASE);
+      o.pose.tilt = -roll;
+      o.pose.tilt2 = 2 * roll;
+      o.head.roll = roll;
+      o.head.yaw = w.sin * ORBIT_JOSTLE_YAW;
+      o.head.spread = 0;
+      o.track.x = 0;
+      o.track.y = -(w.cos * ORBIT_JOSTLE_PITCH) / TRACK_TURN;
+      o.alpha = 1;
+      o.own = 1;
+      return o;
     },
   },
   swirl: {
@@ -424,8 +490,14 @@ export const CHOREO: Record<StateId, Choreo> = {
     baseFace: false,
     acceptsExpression: true,
     still: 0.45,
-    act: (t) => ({ ...IDLE_ACT, ...burstCollapse(t) }),
-    eyes: (t) => fading(burstCollapse(t).eyeAlpha),
+    act: (t, o = newAct()) => {
+      const c = burstCollapse(t);
+      restAct(o);
+      o.s = c.s;
+      o.eyeAlpha = c.eyeAlpha;
+      return o;
+    },
+    eyes: (t, o = newEyes()) => fading(burstCollapse(t).eyeAlpha, o),
   },
   comet: {
     duration: 2.4,
@@ -437,12 +509,15 @@ export const CHOREO: Record<StateId, Choreo> = {
     baseFace: false,
     acceptsExpression: true,
     still: 1.15,
-    act: (t) => ({
-      ...IDLE_ACT,
-      ...cometCollapse(t),
-      y: Math.sin(clamp(t / 1.7) * Math.PI) * 0.035,
-    }),
-    eyes: (t) => fading(cometCollapse(t).eyeAlpha),
+    act: (t, o = newAct()) => {
+      const c = cometCollapse(t);
+      restAct(o);
+      o.s = c.s;
+      o.eyeAlpha = c.eyeAlpha;
+      o.y = Math.sin(clamp(t / 1.7) * Math.PI) * 0.035;
+      return o;
+    },
+    eyes: (t, o = newEyes()) => fading(cometCollapse(t).eyeAlpha, o),
   },
 };
 
@@ -456,25 +531,30 @@ export const EXPRESSION_MORPH = 0.55;
  * replaces gaze, split and eye shape; the state keeps the opacity. `null` is no
  * expression, so the state's own eyes.
  */
-export function expressed(c: Choreo, own: Eyes, expression: Pose | null): Eyes {
+export function expressed(c: Choreo, own: Eyes, expression: Pose | null, out?: Eyes): Eyes {
   if (!expression || !(c.baseFace || c.acceptsExpression)) return own;
-  return { pose: expression, track: CENTRE, alpha: own.alpha, own: 0, head: LEVEL };
+  if (!out) return { pose: expression, track: CENTRE, alpha: own.alpha, own: 0, head: LEVEL };
+  setPose(out.pose, expression);
+  out.track.x = CENTRE.x;
+  out.track.y = CENTRE.y;
+  out.alpha = own.alpha;
+  out.own = 0;
+  setHead(out.head, LEVEL);
+  return out;
 }
 
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 
-export function blendEyes(a: Eyes, b: Eyes, t: number): Eyes {
-  return {
-    pose: lerpPose(a.pose, b.pose, t),
-    track: { x: mix(a.track.x, b.track.x, t), y: mix(a.track.y, b.track.y, t) },
-    alpha: mix(a.alpha, b.alpha, t),
-    own: mix(a.own, b.own, t),
-    head: {
-      roll: mix(a.head.roll, b.head.roll, t),
-      yaw: mix(a.head.yaw, b.head.yaw, t),
-      spread: mix(a.head.spread, b.head.spread, t),
-    },
-  };
+export function blendEyes(a: Eyes, b: Eyes, t: number, out: Eyes = newEyes()): Eyes {
+  lerpPose(a.pose, b.pose, t, out.pose);
+  out.track.x = mix(a.track.x, b.track.x, t);
+  out.track.y = mix(a.track.y, b.track.y, t);
+  out.alpha = mix(a.alpha, b.alpha, t);
+  out.own = mix(a.own, b.own, t);
+  out.head.roll = mix(a.head.roll, b.head.roll, t);
+  out.head.yaw = mix(a.head.yaw, b.head.yaw, t);
+  out.head.spread = mix(a.head.spread, b.head.spread, t);
+  return out;
 }
 
 /**

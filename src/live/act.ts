@@ -47,21 +47,36 @@ export const IDLE_ACT: Act = { x: 0, y: 0, rot: 0, s: 1, sx: 1, sy: 1, eyeAlpha:
  * `shape.ts`'s `blend` does: an orbit handing back at -1300° must unwind the
  * last fraction of a turn, not three and a half turns.
  */
-export function blendAct(a: Act, b: Act, t: number): Act {
+export function blendAct(a: Act, b: Act, t: number, out: Act = { ...IDLE_ACT }): Act {
   let dRot = b.rot - a.rot;
   while (dRot > 180) dRot -= 360;
   while (dRot < -180) dRot += 360;
-  return {
-    x: a.x + (b.x - a.x) * t,
-    y: a.y + (b.y - a.y) * t,
-    rot: a.rot + dRot * t,
-    s: a.s + (b.s - a.s) * t,
-    sx: a.sx + (b.sx - a.sx) * t,
-    sy: a.sy + (b.sy - a.sy) * t,
-    eyeAlpha: a.eyeAlpha + (b.eyeAlpha - a.eyeAlpha) * t,
-    upright: a.upright + (b.upright - a.upright) * t,
-  };
+  out.x = a.x + (b.x - a.x) * t;
+  out.y = a.y + (b.y - a.y) * t;
+  out.rot = a.rot + dRot * t;
+  out.s = a.s + (b.s - a.s) * t;
+  out.sx = a.sx + (b.sx - a.sx) * t;
+  out.sy = a.sy + (b.sy - a.sy) * t;
+  out.eyeAlpha = a.eyeAlpha + (b.eyeAlpha - a.eyeAlpha) * t;
+  out.upright = a.upright + (b.upright - a.upright) * t;
+  return out;
 }
+
+/** Copies `from` into `out`. */
+export function setAct(out: Act, from: Act): Act {
+  out.x = from.x;
+  out.y = from.y;
+  out.rot = from.rot;
+  out.s = from.s;
+  out.sx = from.sx;
+  out.sy = from.sy;
+  out.eyeAlpha = from.eyeAlpha;
+  out.upright = from.upright;
+  return out;
+}
+
+/** `out` at rest: the identity act. */
+export const restAct = (out: Act): Act => setAct(out, IDLE_ACT);
 
 /**
  * The act as one SVG `transform` for a group around the static markup, whose

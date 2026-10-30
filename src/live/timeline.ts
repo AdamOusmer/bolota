@@ -2,7 +2,7 @@
 // Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
 import type { Pose } from "../morph";
-import { blendAct, type Act } from "./act";
+import { IDLE_ACT, blendAct, setAct, type Act } from "./act";
 import type { DecorFrame } from "./decor";
 import {
   CHOREO,
@@ -12,6 +12,8 @@ import {
   easeInOutCubic,
   easeOutQuint,
   expressed,
+  newEyes,
+  setEyes,
   type Eyes,
   type StateId,
 } from "./choreo";
@@ -109,40 +111,49 @@ function local(r: Regs, id: StateId, elapsed: number, looping: boolean): number 
   return looping && period ? t % period : t;
 }
 
-function posed(r: Regs, id: StateId, since: number, looping: boolean): Act {
-  return CHOREO[id].act(local(r, id, Math.max(0, since), looping));
+const blankAct = (): Act => ({ ...IDLE_ACT });
+
+/** What a query builds its answer in before it copies the result out; one per role, since a query is never re-entered. */
+const ACT_CUR = blankAct();
+const ACT_ORIGIN = blankAct();
+const EYES_OWN = newEyes();
+const EYES_TO = newEyes();
+const EYES_FROM = newEyes();
+const EYES_CUR = newEyes();
+const EYES_ORIGIN = newEyes();
+
+function posed(r: Regs, id: StateId, since: number, looping: boolean, out: Act): Act {
+  return CHOREO[id].act(local(r, id, Math.max(0, since), looping), out);
 }
 
-function composed(r: Regs, now: number): Act {
-  const act = posed(r, r.cur, now - r.tCur, r.looping);
+function composed(r: Regs, now: number, out: Act): Act {
   const since = now - r.tCur;
+  const act = posed(r, r.cur, since, r.looping, ACT_CUR);
   const morph = CHOREO[r.cur].morph;
-  if (since >= morph) return act;
-  const origin = r.frozen ?? (r.prev ? posed(r, r.prev, now - r.tPrev, r.loopingPrev) : null);
-  if (!origin) return act;
-  return blendAct(origin, act, easeOutQuint(clamp(since / morph)));
+  if (since >= morph) return setAct(out, act);
+  const origin = r.frozen ?? (r.prev ? posed(r, r.prev, now - r.tPrev, r.loopingPrev, ACT_ORIGIN) : null);
+  if (!origin) return setAct(out, act);
+  return blendAct(origin, act, easeOutQuint(clamp(since / morph)), out);
 }
 
 /** A state's eyes with the held expression shown through, mid-change included. */
-function posedEyes(r: Regs, id: StateId, since: number, now: number, looping: boolean): Eyes {
+function posedEyes(r: Regs, id: StateId, since: number, now: number, looping: boolean, out: Eyes): Eyes {
   const c = CHOREO[id];
-  const own = c.eyes(local(r, id, Math.max(0, since), looping));
-  const to = expressed(c, own, r.exprTo);
+  const own = c.eyes(local(r, id, Math.max(0, since), looping), EYES_OWN);
+  const to = expressed(c, own, r.exprTo, EYES_TO);
   const k = clamp((now - r.exprAt) / EXPRESSION_MORPH);
-  if (r.exprFrom === r.exprTo || k >= 1) return to;
-  return blendEyes(expressed(c, own, r.exprFrom), to, easeInOutCubic(k));
+  if (r.exprFrom === r.exprTo || k >= 1) return setEyes(out, to);
+  return blendEyes(expressed(c, own, r.exprFrom, EYES_FROM), to, easeInOutCubic(k), out);
 }
 
 /** The eyes on screen: the same cross-fade as `composed`. */
-function composedEyes(r: Regs, now: number): Eyes {
+function composedEyes(r: Regs, now: number, out: Eyes): Eyes {
   const since = now - r.tCur;
-  const eyes = posedEyes(r, r.cur, since, now, r.looping);
   const morph = CHOREO[r.cur].morph;
-  const origin =
-    since >= morph
-      ? null
-      : r.frozenEyes ?? (r.prev ? posedEyes(r, r.prev, now - r.tPrev, now, r.loopingPrev) : null);
-  return origin ? blendEyes(origin, eyes, easeOutQuint(clamp(since / morph))) : eyes;
+  if (since >= morph) return posedEyes(r, r.cur, since, now, r.looping, out);
+  const eyes = posedEyes(r, r.cur, since, now, r.looping, EYES_CUR);
+  const origin = r.frozenEyes ?? (r.prev ? posedEyes(r, r.prev, now - r.tPrev, now, r.loopingPrev, EYES_ORIGIN) : null);
+  return origin ? blendEyes(origin, eyes, easeOutQuint(clamp(since / morph)), out) : setEyes(out, eyes);
 }
 
 /**
@@ -152,8 +163,8 @@ function composedEyes(r: Regs, now: number): Eyes {
  */
 function setState(r: Regs, id: StateId, now: number, loop: boolean): void {
   const midMorph = r.prev !== null && now - r.tCur < CHOREO[r.cur].morph;
-  r.frozen = midMorph ? composed(r, now) : null;
-  r.frozenEyes = midMorph ? composedEyes(r, now) : null;
+  r.frozen = midMorph ? composed(r, now, blankAct()) : null;
+  r.frozenEyes = midMorph ? composedEyes(r, now, newEyes()) : null;
   r.prev = r.cur;
   r.tPrev = r.tCur;
   r.loopingPrev = r.looping;
@@ -170,6 +181,49 @@ function stretch(r: Regs, id: StateId | null, scale: number): void {
 function restartPeriod(r: Regs): number {
   const c = CHOREO[r.current];
   return r.loop && !c.period ? c.duration + c.morph : 0;
+}
+
+function framed(into: DecorFrame[], i: number, state: StateId, at: number, weight: number): void {
+  const f = into[i];
+  if (f) {
+    f.state = state;
+    f.local = at;
+    f.weight = weight;
+  } else into[i] = { state, local: at, weight };
+}
+
+/** Whether `advance` would apply a transition by `now`. */
+function ready(r: Regs, now: number): boolean {
+  const period = restartPeriod(r);
+  return period ? Math.floor((now - r.stateStart) / period) >= 1 : due(r) <= now;
+}
+
+/** `from` copied into `into`, or into a new record when there is none yet. */
+function copyRegs(into: Regs | null, from: Regs): Regs {
+  if (!into) return { ...from };
+  into.current = from.current;
+  into.stateStart = from.stateStart;
+  into.loop = from.loop;
+  into.rest = from.rest;
+  into.restLoop = from.restLoop;
+  into.hold = from.hold;
+  into.windowFor = from.windowFor;
+  into.windowStart = from.windowStart;
+  into.windowLoop = from.windowLoop;
+  into.cur = from.cur;
+  into.prev = from.prev;
+  into.frozen = from.frozen;
+  into.frozenEyes = from.frozenEyes;
+  into.exprFrom = from.exprFrom;
+  into.exprTo = from.exprTo;
+  into.exprAt = from.exprAt;
+  into.tCur = from.tCur;
+  into.tPrev = from.tPrev;
+  into.looping = from.looping;
+  into.loopingPrev = from.loopingPrev;
+  into.stretchOf = from.stretchOf;
+  into.stretchBy = from.stretchBy;
+  return into;
 }
 
 /** When the next automatic transition fires, from these registers. */
@@ -293,11 +347,21 @@ export class Timeline {
     if (i > 0) this.log.splice(0, i);
   }
 
+  private seen: Regs | null = null;
+  private seenAt = NaN;
+  private seenFrom: Regs | null = null;
+
+  /** The registers at `now`, to read and never to change: a command's own entry when nothing is due since, else one reused copy. */
   private at(now: number): Regs {
     let i = this.log.length - 1;
     while (i > 0 && this.log[i]!.at > now) i--;
-    const r = { ...this.log[i]!.regs };
+    const base = this.log[i]!.regs;
+    if (!ready(base, now)) return base;
+    if (this.seenAt === now && this.seenFrom === base) return this.seen!;
+    const r = (this.seen = copyRegs(this.seen, base));
     advance(r, now);
+    this.seenAt = now;
+    this.seenFrom = base;
     return r;
   }
 
@@ -305,7 +369,10 @@ export class Timeline {
     if (now < this.log[this.log.length - 1]!.at) {
       throw new RangeError(`Timeline: command at ${now} is earlier than the last one`);
     }
-    const r = this.at(now);
+    let i = this.log.length - 1;
+    while (i > 0 && this.log[i]!.at > now) i--;
+    const r = { ...this.log[i]!.regs };
+    advance(r, now);
     apply(r);
     this.log.push({ at: now, regs: r });
   }
@@ -339,32 +406,36 @@ export class Timeline {
     return due(this.at(now));
   }
 
-  sample(now: number): Act {
-    return composed(this.at(now), now);
+  /** The act at `now`, written into `out` when a caller that samples every frame brings one. */
+  sample(now: number, out: Act = blankAct()): Act {
+    return composed(this.at(now), now, out);
   }
 
   /**
    * What decor draws at `now`: the current state, and during its entrance the
    * outgoing one, weighted by the same curve `sample` blends the act on.
+   * `into` is refilled and returned in place of a new array.
    */
-  decorFrames(now: number): DecorFrame[] {
+  decorFrames(now: number, into: DecorFrame[] = []): DecorFrame[] {
     const r = this.at(now);
     const since = now - r.tCur;
     const morph = CHOREO[r.cur].morph;
     const here = Math.max(0, since);
     if (since >= morph || !r.prev) {
-      return [{ state: r.cur, local: local(r, r.cur, here, r.looping), weight: 1 }];
+      framed(into, 0, r.cur, local(r, r.cur, here, r.looping), 1);
+      into.length = 1;
+      return into;
     }
     const k = easeOutQuint(clamp(since / morph));
-    return [
-      { state: r.prev, local: local(r, r.prev, Math.max(0, now - r.tPrev), r.loopingPrev), weight: 1 - k },
-      { state: r.cur, local: local(r, r.cur, here, r.looping), weight: k },
-    ];
+    framed(into, 0, r.prev, local(r, r.prev, Math.max(0, now - r.tPrev), r.loopingPrev), 1 - k);
+    framed(into, 1, r.cur, local(r, r.cur, here, r.looping), k);
+    into.length = 2;
+    return into;
   }
 
-  /** The eyes at `now`, blended alongside the act. */
-  eyes(now: number): Eyes {
-    return composedEyes(this.at(now), now);
+  /** The eyes at `now`, blended alongside the act, written into `out` when given. */
+  eyes(now: number, out: Eyes = newEyes()): Eyes {
+    return composedEyes(this.at(now), now, out);
   }
 
   /**

@@ -251,13 +251,42 @@ export function poseTransforms<L extends Posable>(
  * Written `from·(1 − t) + to·t` so `t = 1` returns the target's numbers exactly:
  * a settled morph must be the static pose, not merely resemble it.
  */
-export function lerpPose(a: Pose | undefined, b: Pose | undefined, t: number): Pose {
+export function lerpPose(a: Pose | undefined, b: Pose | undefined, t: number, out: Pose = { ...IDENT }): Pose {
   const from = a ?? IDENT;
   const to = b ?? IDENT;
-  const out = {} as Pose;
-  for (const k in IDENT) {
-    const c = k as keyof Pose;
-    out[c] = from[c] * (1 - t) + to[c] * t;
-  }
+  const u = 1 - t;
+  out.esx = from.esx * u + to.esx * t;
+  out.esy = from.esy * u + to.esy * t;
+  out.tilt = from.tilt * u + to.tilt * t;
+  out.edy = from.edy * u + to.edy * t;
+  out.edx = from.edx * u + to.edx * t;
+  out.esx2 = from.esx2 * u + to.esx2 * t;
+  out.esy2 = from.esy2 * u + to.esy2 * t;
+  out.tilt2 = from.tilt2 * u + to.tilt2 * t;
+  out.edy2 = from.edy2 * u + to.edy2 * t;
+  out.epx = from.epx * u + to.epx * t;
+  out.lock = from.lock * u + to.lock * t;
+  out.heat = from.heat * u + to.heat * t;
+  out.shake = from.shake * u + to.shake * t;
+  out.bdy = from.bdy * u + to.bdy * t;
+  return out;
+}
+
+/** Copies every channel of `from` into `out`. */
+export function setPose(out: Pose, from: Pose): Pose {
+  out.esx = from.esx;
+  out.esy = from.esy;
+  out.tilt = from.tilt;
+  out.edy = from.edy;
+  out.edx = from.edx;
+  out.esx2 = from.esx2;
+  out.esy2 = from.esy2;
+  out.tilt2 = from.tilt2;
+  out.edy2 = from.edy2;
+  out.epx = from.epx;
+  out.lock = from.lock;
+  out.heat = from.heat;
+  out.shake = from.shake;
+  out.bdy = from.bdy;
   return out;
 }

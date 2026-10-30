@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
-import { bakePose, r3, type Posable, type Pose } from "../morph";
+import { IDENT, bakePose, r3, setPose, type Posable, type Pose } from "../morph";
 import { EYE_H, EYE_SPLIT, EYE_W, type Head } from "./choreo";
 import { ballEdge, ballRadius, type OutlineLayout } from "./outline";
 
@@ -57,7 +57,25 @@ interface Face {
   head: Head;
 }
 
-const pick = ({ cx, cy, rx, ry, rot }: Eye): Eye => ({ cx, cy, rx, ry, rot });
+const pair = (): Eye[] => [
+  { cx: 0, cy: 0, rx: 0, ry: 0, rot: 0 },
+  { cx: 0, cy: 0, rx: 0, ry: 0, rot: 0 },
+];
+
+/** Scratch a frame builds in: the pose it bakes, the seeded and own faces it blends, and bloub's two eyes before the pose. */
+const POSED: Pose = { ...IDENT };
+const SEEDED = pair();
+const OWNED = pair();
+const GROUND = pair();
+
+/** `bakePose` for one eye of a pair, written into `o`: the same sums in the same order. */
+function bake(s: Eye, i: number, p: Pose, o: Eye): void {
+  o.cx = s.cx + p.edx * (i ? 1 : -1) + p.epx;
+  o.cy = s.cy + p.edy + (i ? p.edy2 : 0);
+  o.rx = s.rx * (p.esx + (i ? p.esx2 : 0));
+  o.ry = s.ry * (p.esy + (i ? p.esy2 : 0));
+  o.rot = s.rot * (1 - p.lock) + (p.tilt + (i ? p.tilt2 : 0)) * (i ? 1 : -1);
+}
 
 /**
  * The seeded face under a head turn: the seeded eyes at their seeded spacing,
@@ -65,25 +83,26 @@ const pick = ({ cx, cy, rx, ry, rot }: Eye): Eye => ({ cx, cy, rx, ry, rot });
  * yaw slides it toward the turn, closes it a little and narrows the far eye
  * as the near one widens.
  */
-function seededEyes(l: FaceLayout, { pose: p, head }: Face): Eye[] {
+function seededEyes(l: FaceLayout, { pose: p, head }: Face, out: Eye[]): Eye[] {
   const R = l.face.rx;
   const [a, b] = l.eyes as [Eye, Eye];
   const half = (b.cx - a.cx) / 2 + head.spread * R;
   const spread = Math.asin(Math.min(0.95, half / R));
   const lift = half * Math.sin((head.roll * Math.PI) / 180);
   const y = (head.yaw * Math.PI) / 180;
-  const left = Math.cos(y - spread) / Math.cos(spread);
-  const right = Math.cos(y + spread) / Math.cos(spread);
-  const posed: Pose = {
-    ...p,
-    edy: p.edy - lift,
-    edy2: p.edy2 + 2 * lift,
-    epx: p.epx + R * Math.sin(y) * Math.cos(spread),
-    edx: p.edx + half * (Math.cos(y) - 1) + head.spread * R,
-    esx: p.esx * left,
-    esx2: (p.esx + p.esx2) * right - p.esx * left,
-  };
-  return bakePose(l, posed).l.eyes.map(pick);
+  const cs = Math.cos(spread);
+  const left = Math.cos(y - spread) / cs;
+  const right = Math.cos(y + spread) / cs;
+  setPose(POSED, p);
+  POSED.edy = p.edy - lift;
+  POSED.edy2 = p.edy2 + 2 * lift;
+  POSED.epx = p.epx + R * Math.sin(y) * cs;
+  POSED.edx = p.edx + half * (Math.cos(y) - 1) + head.spread * R;
+  POSED.esx = p.esx * left;
+  POSED.esx2 = (p.esx + p.esx2) * right - p.esx * left;
+  bake(a, 0, POSED, out[0]!);
+  bake(b, 1, POSED, out[1]!);
+  return out;
 }
 
 /**
@@ -100,28 +119,36 @@ function seededEyes(l: FaceLayout, { pose: p, head }: Face): Eye[] {
  * of the polygon's own mean radius stands in, as `posed()` scales by the mean
  * radius of a profile.
  */
-function bloubEyes(l: FaceLayout, { pose: p, head }: Face, turn: number): Eye[] {
+function bloubEyes(l: FaceLayout, { pose: p, head }: Face, turn: number, out: Eye[]): Eye[] {
   const R = l.body.sides ? ballRadius(l) : l.body.rx;
   const y = (head.yaw * Math.PI) / 180;
   const r = (head.roll * Math.PI) / 180;
   const split = Math.asin(Math.min(0.95, REST_HALF + head.spread));
   const cy = Math.cos(y), sy = Math.sin(y), cr = Math.cos(r), sr = Math.sin(r);
-  const width: number[] = [];
-  const eyes = l.eyes.map((s, i) => {
-    const a = split * (i ? 1 : -1);
-    const ca = Math.cos(a), sa = Math.sin(a);
-    const x = (sy * ca + cy * cr * sa) * R;
-    const v = sr * sa * R;
-    width.push(Math.hypot(cy * cr * ca - sy * sa, sr * ca));
+  const ca = Math.cos(split), sa = Math.sin(split);
+  let w0 = 1;
+  let w1 = 1;
+  for (let i = 0; i < 2; i++) {
+    const si = i ? sa : -sa;
+    const x = (sy * ca + cy * cr * si) * R;
+    const v = sr * si * R;
+    const width = Math.hypot(cy * cr * ca - sy * si, sr * ca);
+    if (i) w1 = width;
+    else w0 = width;
     const fit = ballEdge(l, Math.atan2(v, x) - (turn * Math.PI) / 180) / R;
-    return { ...s, cx: l.body.cx + x * fit, cy: l.body.cy + v * fit, rx: (EYE_W / 2) * R, ry: (EYE_H / 2) * R };
-  });
-  const posed: Pose = {
-    ...p,
-    esx: p.esx * width[0]!,
-    esx2: (p.esx + p.esx2) * width[1]! - p.esx * width[0]!,
-  };
-  return bakePose({ eyes }, posed).l.eyes.map(pick);
+    const g = GROUND[i]!;
+    g.cx = l.body.cx + x * fit;
+    g.cy = l.body.cy + v * fit;
+    g.rx = (EYE_W / 2) * R;
+    g.ry = (EYE_H / 2) * R;
+    g.rot = l.eyes[i]!.rot;
+  }
+  setPose(POSED, p);
+  POSED.esx = p.esx * w0;
+  POSED.esx2 = (p.esx + p.esx2) * w1 - p.esx * w0;
+  bake(GROUND[0]!, 0, POSED, out[0]!);
+  bake(GROUND[1]!, 1, POSED, out[1]!);
+  return out;
 }
 
 /**
@@ -130,22 +157,23 @@ function bloubEyes(l: FaceLayout, { pose: p, head }: Face, turn: number): Eye[] 
  * shows bloub's eyes at bloub's size and place, and the morph in and out of it
  * is continuous.
  */
-export function faceEyes(l: FaceLayout, e: Face, turn = 0): Eye[] {
+export function faceEyes(l: FaceLayout, e: Face, turn = 0, out: Eye[] = pair()): Eye[] {
   const u = e.own;
-  if (u <= 0) return seededEyes(l, e);
-  const b = bloubEyes(l, e, turn);
-  if (u >= 1) return b;
-  const s = seededEyes(l, e);
-  return s.map((x, i) => {
+  if (u <= 0) return seededEyes(l, e, out);
+  if (u >= 1) return bloubEyes(l, e, turn, out);
+  const s = seededEyes(l, e, SEEDED);
+  const b = bloubEyes(l, e, turn, OWNED);
+  for (let i = 0; i < 2; i++) {
+    const x = s[i]!;
     const y = b[i]!;
-    return {
-      cx: x.cx + (y.cx - x.cx) * u,
-      cy: x.cy + (y.cy - x.cy) * u,
-      rx: x.rx + (y.rx - x.rx) * u,
-      ry: x.ry + (y.ry - x.ry) * u,
-      rot: x.rot + (y.rot - x.rot) * u,
-    };
-  });
+    const o = out[i]!;
+    o.cx = x.cx + (y.cx - x.cx) * u;
+    o.cy = x.cy + (y.cy - x.cy) * u;
+    o.rx = x.rx + (y.rx - x.rx) * u;
+    o.ry = x.ry + (y.ry - x.ry) * u;
+    o.rot = x.rot + (y.rot - x.rot) * u;
+  }
+  return out;
 }
 
 /**

@@ -56,14 +56,30 @@ function frameLoop(view: Window): Registry {
   return mine;
 }
 
+function rethrow(error: unknown) {
+  queueMicrotask(() => {
+    throw error;
+  });
+}
+
 function guarded(run: () => void) {
   try {
     run();
   } catch (error) {
-    queueMicrotask(() => {
-      throw error;
-    });
+    rethrow(error);
   }
+}
+
+/** The ticks of the frame being run, as a stack so a frame run from inside a tick keeps its own. */
+const pending: FrameTick[] = [];
+
+const callbacks = new WeakMap<Window, FrameRequestCallback>();
+
+/** One callback per window for every frame, instead of a closure per request. */
+function frameCallback(view: Window): FrameRequestCallback {
+  let cb = callbacks.get(view);
+  if (!cb) callbacks.set(view, (cb = (ms) => runFrame(view, ms)));
+  return cb;
 }
 
 function runFrame(view: Window, ms: number): void {
@@ -75,12 +91,22 @@ function runFrame(view: Window, ms: number): void {
     for (const read of reads) guarded(read);
   }
   if (loop.ticks.size === 0) return;
-  loop.id = view.requestAnimationFrame((next) => runFrame(view, next));
-  for (const tick of [...loop.ticks]) guarded(() => tick(ms));
+  loop.id = view.requestAnimationFrame(frameCallback(view));
+  const from = pending.length;
+  for (const tick of loop.ticks) pending.push(tick);
+  const to = pending.length;
+  for (let i = from; i < to; i++) {
+    try {
+      pending[i]!(ms);
+    } catch (error) {
+      rethrow(error);
+    }
+  }
+  pending.length = from;
 }
 
 function schedule(view: Window, loop: { id: number }) {
-  if (!loop.id) loop.id = view.requestAnimationFrame((ms) => runFrame(view, ms));
+  if (!loop.id) loop.id = view.requestAnimationFrame(frameCallback(view));
 }
 
 export function startFrames(view: Window, tick: FrameTick): void {

@@ -39,8 +39,19 @@ export const smoothstep = (t: number) => t * t * (3 - 2 * t);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /** The share of the remaining distance a step of `dt` ms covers. Frame-rate independent. */
-export const pursuit = (dt: number, settle: number = SETTLE) =>
-  settle <= 0 ? 1 : 1 - Math.exp(-dt / settle);
+export const pursuit = (dt: number, settle: number = SETTLE) => {
+  if (settle <= 0) return 1;
+  if (dt !== pursuitDt || settle !== pursuitSettle) {
+    pursuitDt = dt;
+    pursuitSettle = settle;
+    pursuitK = 1 - Math.exp(-dt / settle);
+  }
+  return pursuitK;
+};
+
+let pursuitDt = NaN;
+let pursuitSettle = NaN;
+let pursuitK = 0;
 
 /** The write threshold in aim units for a bolota `width` px wide with `travel` px of excursion. */
 export function threshold(width: number, travel: number): number {
@@ -71,54 +82,82 @@ export interface Projection {
   t: number;
 }
 
-const patch = (x: number, y: number, z: number) => {
+interface Patch {
+  sx: number;
+  sy: number;
+  sh: number;
+}
+
+const REST_PATCH: Patch = { sx: 1, sy: 1, sh: 0 };
+const NOW_PATCH: Patch = { sx: 1, sy: 1, sh: 0 };
+
+function patch(x: number, y: number, z: number, p: Patch): void {
   const r2 = x * x + y * y;
-  if (r2 < 1e-9) return { sx: 1, sy: 1, sh: 0 };
+  if (r2 < 1e-9) {
+    p.sx = 1;
+    p.sy = 1;
+    p.sh = 0;
+    return;
+  }
   const d = Math.max(0, z);
-  return {
-    sx: (d * x * x + y * y) / r2,
-    sy: (d * y * y + x * x) / r2,
-    sh: ((d - 1) * x * y) / r2,
-  };
-};
+  p.sx = (d * x * x + y * y) / r2;
+  p.sy = (d * y * y + x * x) / r2;
+  p.sh = ((d - 1) * x * y) / r2;
+}
+
+let turnYaw = NaN;
+let turnPitch = NaN;
+let cosYaw = 1;
+let sinYaw = 0;
+let cosPitch = 1;
+let sinPitch = 0;
+
+const SIDE = Math.sqrt(1 - LIMB * LIMB);
 
 /**
  * A mark on the face's sphere turned by `yaw` and `pitch` radians. Positive
- * pitch looks down, because SVG's y grows downward.
+ * pitch looks down, because SVG's y grows downward. Writes into `out` when
+ * given, and keeps the last turn's sines and cosines, so the second eye of a
+ * pair costs no trigonometry.
  */
-export function project(m: Mark, yaw: number, pitch: number): Projection {
+export function project(m: Mark, yaw: number, pitch: number, out: Projection = { dx: 0, dy: 0, sx: 1, sy: 1, t: 0 }): Projection {
   const r2 = m.x * m.x + m.y * m.y;
   const k = r2 > 1 ? 1 / Math.sqrt(r2) : 1;
   const x0 = m.x * k;
   const y0 = m.y * k;
   const z0 = Math.sqrt(Math.max(0, 1 - x0 * x0 - y0 * y0));
 
-  const cy = Math.cos(yaw);
-  const sy = Math.sin(yaw);
-  const x1 = x0 * cy + z0 * sy;
-  const z1 = z0 * cy - x0 * sy;
+  if (yaw !== turnYaw) {
+    turnYaw = yaw;
+    cosYaw = Math.cos(yaw);
+    sinYaw = Math.sin(yaw);
+  }
+  if (pitch !== turnPitch) {
+    turnPitch = pitch;
+    cosPitch = Math.cos(pitch);
+    sinPitch = Math.sin(pitch);
+  }
+  const x1 = x0 * cosYaw + z0 * sinYaw;
+  const z1 = z0 * cosYaw - x0 * sinYaw;
 
-  const cp = Math.cos(pitch);
-  const sp = Math.sin(pitch);
-  const y1 = y0 * cp + z1 * sp;
-  const z2 = z1 * cp - y0 * sp;
+  const y1 = y0 * cosPitch + z1 * sinPitch;
+  const z2 = z1 * cosPitch - y0 * sinPitch;
 
   const rho = Math.hypot(x1, y1);
   const over = z2 <= 0 || rho > LIMB;
   const back = over ? LIMB / (rho || 1) : 1;
   const px = x1 * back;
   const py = y1 * back;
-  const pz = over ? Math.sqrt(1 - LIMB * LIMB) : z2;
+  const pz = over ? SIDE : z2;
 
-  const rest = patch(x0, y0, z0);
-  const now = patch(px, py, pz);
-  return {
-    dx: px - m.x,
-    dy: py - m.y,
-    sx: Math.min(1, now.sx / (rest.sx || 1)),
-    sy: Math.min(1, now.sy / (rest.sy || 1)),
-    t: TILT * (now.sh - rest.sh),
-  };
+  patch(x0, y0, z0, REST_PATCH);
+  patch(px, py, pz, NOW_PATCH);
+  out.dx = px - m.x;
+  out.dy = py - m.y;
+  out.sx = Math.min(1, NOW_PATCH.sx / (REST_PATCH.sx || 1));
+  out.sy = Math.min(1, NOW_PATCH.sy / (REST_PATCH.sy || 1));
+  out.t = TILT * (NOW_PATCH.sh - REST_PATCH.sh);
+  return out;
 }
 
 /** One bolota's smoothed gaze direction, as the caller keeps it. */
@@ -147,14 +186,19 @@ export interface StepResult extends Aim {
   f: number;
 }
 
-export function step(i: StepInput): StepResult {
+export function step(i: StepInput, out: StepResult = { x: 0, y: 0, tx: 0, ty: 0, f: 0 }): StepResult {
   const d = Math.hypot(i.dx, i.dy);
   const near = i.radius > 0 ? smoothstep(Math.min(1, d / (i.radius * DEADZONE))) : 1;
   const amp = (i.gain ?? 1) * near;
   const tx = d > 0 ? (i.dx / d) * amp : 0;
   const ty = d > 0 ? (i.dy / d) * amp : 0;
   const f = Math.hypot(tx - i.x, ty - i.y) > (i.snap ?? SNAP) ? 1 : i.k;
-  return { x: i.x + (tx - i.x) * f, y: i.y + (ty - i.y) * f, tx, ty, f };
+  out.x = i.x + (tx - i.x) * f;
+  out.y = i.y + (ty - i.y) * f;
+  out.tx = tx;
+  out.ty = ty;
+  out.f = f;
+  return out;
 }
 
 /** The eyes as marks on the face, and the face's radii in viewBox units. */
