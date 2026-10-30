@@ -103,9 +103,9 @@ describe("eye rig", () => {
     expect([a.width, a.height, a.rx, a.ry]).toEqual(["9", "9", "4.5", "4.5"]);
   });
 
-  test("the live markup gives each ambient transform its own element under .mo-eye", () => {
+  test("the live markup keeps .mo-eye > * a bare group, as the static markup has it", () => {
     const html = rigMarkup(_layout("seed-7"), IDENT);
-    expect(html.match(/<g class="mo-eye" style="--mo-wrap:-?1;--mo-lean:[\d.-]+;transform-origin:[\d.]+px [\d.]+px"><g><g><rect [^>]*style="--mo-rot:-?[\d.]+"\/><\/g><\/g><\/g>/g)?.length).toBe(2);
+    expect(html.match(/<g class="mo-eye" style="--mo-wrap:-?1;--mo-lean:[\d.-]+;transform-origin:[\d.]+px [\d.]+px"><g><rect [^>]*\/><\/g><\/g>/g)?.length).toBe(2);
     expect(html).not.toContain("<path");
   });
 });

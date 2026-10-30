@@ -453,7 +453,7 @@
    */
   animation-name: mo-breathe;
   animation-duration: calc(2800ms * var(--mo-rate, 1));
-  animation-delay: calc(var(--mo-phase, 0ms) * var(--mo-rate, 1));
+  animation-delay: calc((var(--mo-phase, 0ms) + var(--mo-lag, 0ms)) * var(--mo-rate, 1));
   animation-iteration-count: infinite;
   animation-direction: alternate;
   animation-timing-function: ease-in-out;
@@ -490,7 +490,7 @@
   translate: 0 calc(var(--mo-bdy) * 1px);
   animation-name: mo-bob;
   animation-duration: calc(3400ms * var(--mo-rate, 1));
-  animation-delay: calc(var(--mo-bob-phase, 0ms) * var(--mo-rate, 1));
+  animation-delay: calc((var(--mo-bob-phase, 0ms) + var(--mo-lag, 0ms)) * var(--mo-rate, 1));
   animation-iteration-count: infinite;
   animation-direction: alternate;
   animation-timing-function: ease-in-out;
@@ -678,8 +678,7 @@
  * same duration and phase variables that group does. They stay frame-exact
  * because they are literally the same expression, not because their periods
  * happen to be close. Both animate `transform`, so each needs an element of its
- * own: wrap on the group under `.mo-eye`, blink on the shape (the live rect,
- * whose `rotate` carries the lean, so its blink needs no bracket).
+ * own: wrap on the group under `.mo-eye`, blink on the shape.
  */
 .mo-eye > *,
 .mo-eye > * > path,
@@ -693,14 +692,14 @@
 .mo-eye > * {
   animation-name: mo-wrap;
   animation-duration: calc(var(--mo-saccade, 5600ms) * var(--mo-rate, 1));
-  animation-delay: calc(var(--mo-saccade-phase, 0ms) * var(--mo-rate, 1));
+  animation-delay: calc((var(--mo-saccade-phase, 0ms) + var(--mo-elag, 0ms)) * var(--mo-rate, 1));
 }
 
 .mo-eye > * > path,
 .mo-eye rect {
   animation-name: mo-blink;
   animation-duration: calc(var(--mo-blink, 4800ms) * var(--mo-rate, 1));
-  animation-delay: calc(var(--mo-blink-phase, 0ms) * var(--mo-rate, 1));
+  animation-delay: calc((var(--mo-blink-phase, 0ms) + var(--mo-elag, 0ms)) * var(--mo-rate, 1));
 }
 
 .mo-eye rect {
@@ -763,29 +762,16 @@
 }
 
 /**
- * The entrance blink on a live eye: one 200 ms close and open, linear, down
- * to 6%, as bloub masks a change of state. The engine fires it by flipping
- * `data-mo-blink` between "0" and "1" on the root; the two names are what
- * make each flip restart it. It rides a group of its own between the wrap and
- * the rect, because the idle blink holds the rect's `transform`.
+ * A mounted engine drives these loops itself while it is animating
+ * (`src/live/idle.ts`, the same arithmetic) and marks its root `data-mo-js`, so
+ * the stylesheet's copy stands down there; the pose and hover declarations
+ * stay. At rest it takes the mark off and the compositor runs the loops again,
+ * from the phase the engine hands back in `--mo-lag` (breathe, bob, saccade)
+ * and `--mo-elag` (blink, wrap).
  */
-@keyframes mo-blink-in {
-  50% {
-    transform: scale(1, 0.06);
-  }
-}
-@keyframes mo-blink-in2 {
-  50% {
-    transform: scale(1, 0.06);
-  }
-}
-[data-mo-blink] .mo-eye > * > g {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: mo-blink-in 0.2s linear;
-}
-[data-mo-blink="1"] .mo-eye > * > g {
-  animation-name: mo-blink-in2;
+svg[data-mo-js] .mo-root,
+svg[data-mo-js] .mo-root * {
+  animation: none !important;
 }
 
 /**
@@ -814,7 +800,7 @@
 .mo-eyes {
   animation-name: mo-saccade;
   animation-duration: calc(var(--mo-saccade, 5600ms) * var(--mo-rate, 1));
-  animation-delay: calc(var(--mo-saccade-phase, 0ms) * var(--mo-rate, 1));
+  animation-delay: calc((var(--mo-saccade-phase, 0ms) + var(--mo-lag, 0ms)) * var(--mo-rate, 1));
   animation-iteration-count: infinite;
   animation-timing-function: linear;
 }
@@ -1075,7 +1061,7 @@
  * A live state that drives the whole body (`data-mo-still`, set by the engine
  * on the root) leaves no room for breath, bob or glance; the blink stays.
  */
-[data-mo-still] g:not(.mo-eye > *, .mo-eye > * > g) {
+[data-mo-still] g:not(.mo-eye > *) {
   animation-play-state: paused;
 }
 
@@ -1128,7 +1114,8 @@
   .mo-eyes,
   .mo-eye,
   .mo-eye > *,
-  .mo-eye > * > *,
+  .mo-eye > * > path,
+  .mo-eye rect,
   .mo-bob g[fill] {
     animation: none;
     transition: none;

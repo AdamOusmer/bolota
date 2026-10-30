@@ -87,6 +87,40 @@ export function motionVars(t: Traits): Record<string, string> {
   };
 }
 
+export interface MotionSeeds {
+  phase: number;
+  bobPhase: number;
+  blink: number;
+  blinkPhase: number;
+  saccade: number;
+  saccadePhase: number;
+  lookX: number;
+  lookY: number;
+  lookMX: number;
+  lookMY: number;
+}
+
+/** `motionVars` as numbers (ms, signed look offsets), for a driver with no stylesheet to read them. */
+export function motionSeeds(t: Traits): MotionSeeds {
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  const blink = Math.round(t.num("motion.blink", 3500, 6500));
+  const saccade = Math.round(t.num("motion.saccade", 2600, 4800));
+  const lookX = t.num("motion.lookX", 1.4, 3);
+  const lookY = t.num("motion.lookY", 1.1, 2.3);
+  return {
+    phase: Math.round(t.num("motion.phase", 0, 2800)),
+    bobPhase: Math.round(t.num("motion.bob", 0, 3400)),
+    blink,
+    blinkPhase: Math.round(t.num("motion.blinkPhase", 0, blink)),
+    saccade,
+    saccadePhase: Math.round(t.num("motion.saccadePhase", 0, saccade)),
+    lookX: r2(lookX * (t.bool("motion.lookXFlip") ? -1 : 1)),
+    lookY: r2(lookY * (t.bool("motion.lookYFlip") ? -1 : 1)),
+    lookMX: r2(lookX),
+    lookMY: r2(lookY),
+  };
+}
+
 /** `--a:1;--b:2` — for the string API, which has no style object to hand. */
 export const serializeVars = (vars: Record<string, string>) =>
   Object.entries(vars)

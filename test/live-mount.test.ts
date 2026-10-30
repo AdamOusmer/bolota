@@ -9,7 +9,7 @@ import { FakeDocument, FakeElement, frame, makeSvg, run } from "./live-dom";
 const NAME = "mount-seed";
 const inner = parts(NAME, { animate: "always" }).inner;
 const asSvg = (el: FakeElement) => el as unknown as SVGSVGElement;
-const rectsOf = (svg: FakeElement) => svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!.children[0]!.children[0]!);
+const rectsOf = (svg: FakeElement) => svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!.children[0]!);
 const attrs = (svg: FakeElement) => rectsOf(svg).map((r) => [...r.attrs.values()].join(","));
 
 function ssr() {
@@ -21,7 +21,7 @@ function ssr() {
 function mounted(expression?: string) {
   const doc = new FakeDocument();
   const svg = makeSvg(doc);
-  const handle = mountLive(asSvg(svg), NAME, { expression });
+  const handle = mountLive(asSvg(svg), NAME, { expression, animate: "hover" });
   return { doc, svg, handle };
 }
 
@@ -33,12 +33,13 @@ describe("mountLive markup", () => {
     expect(figure.children.map((c) => c.tagName)).toEqual(["defs", "g", "g", "g"]);
     expect(figure.children[2]!.hasAttribute("data-mo-head")).toBe(true);
     expect(figure.children[2]!.children.map((c) => c.getAttribute("class"))).toEqual(["mo-act"]);
-    const expected = inner.replace(/(<g class="mo-eye"[^>]*><g>)<path[^>]*\/>(<\/g><\/g>)/g, "$1<g><rect/></g>$2");
+    const expected = inner.replace(/(<g class="mo-eye"[^>]*><g>)<path[^>]*\/>(<\/g><\/g>)/g, "$1<rect/>$2");
     const actual = svg
       .querySelector(".mo-breathe")!
       .outerHTML.replace(/<g data-mo-figure=""><defs\/><g\/><g data-mo-head=""><g class="mo-act"[^>]*>/, "")
       .replace("</g></g><g/></g>", "")
       .replace(/(class="mo-eyes"[^>]*>)<g>(.*)<\/g>(<\/g>)/, "$1$2$3")
+      .replace(/ transform="[^"]*"/g, "")
       .replace(/<rect[^>]*\/>/g, "<rect/>");
     expect(actual).toBe(expected);
     expect(svg.getAttribute("overflow")).toBe("visible");
@@ -174,14 +175,20 @@ describe("mountLive clock", () => {
     expect(svg.getAttribute("data-mo-still")).toBeNull();
   });
 
-  test("a blinkIn entrance fires the one-shot blink once", () => {
+  test("a blinkIn entrance closes the eyes once, down to 6%, in 200 ms", () => {
     const { doc, svg, handle } = mounted();
     handle.play("thinking");
-    run(doc, 0, 0.5);
-    const first = svg.getAttribute("data-mo-blink");
-    expect(first).not.toBeNull();
-    run(doc, 600, 0.3);
-    expect(svg.getAttribute("data-mo-blink")).toBe(first);
+    const depths: number[] = [];
+    for (let ms = 16; ms <= 900; ms += 16) {
+      frame(doc, ms);
+      const hit = /scale\(1 (\d\.?\d*)\)/.exec(rectsOf(svg)[0]!.getAttribute("transform") ?? "");
+      depths.push(hit ? Number(hit[1]) : 1);
+    }
+    expect(Math.min(...depths)).toBeLessThan(0.15);
+    const closed = depths.map((d, i) => (d < 1 ? i : -1)).filter((i) => i >= 0);
+    expect(closed.length).toBeGreaterThan(8);
+    expect(closed.length).toBeLessThan(16);
+    expect(closed[closed.length - 1]! - closed[0]!).toBe(closed.length - 1);
   });
 
   test("unknown states throw; unknown expressions are ignored", () => {
@@ -199,12 +206,12 @@ describe("mountLive expressions", () => {
   test("old bloub names and roster names move the eyes; null returns them", () => {
     const { doc, svg, handle } = mounted();
     const rest = attrs(svg);
-    for (const name of ["angry", "surprised", "mad", "happy"]) {
+    for (const [k, name] of ["angry", "surprised", "mad", "happy"].entries()) {
       handle.setExpression(name);
-      run(doc, 0, 2);
+      run(doc, k * 10_000, 2);
       expect(attrs(svg), name).not.toEqual(rest);
       handle.setExpression(null);
-      run(doc, 0, 2);
+      run(doc, k * 10_000 + 4000, 2);
       expect(attrs(svg), name).toEqual(rest);
     }
   });
@@ -311,7 +318,7 @@ describe("mountLive reduced motion", () => {
     doc.defaultView.reduced = true;
     const svg = makeSvg(doc, `<g class="mo-root">${inner}</g>`);
     const before = svg.outerHTML;
-    return { doc, svg, before, handle: mountLive(asSvg(svg), NAME) };
+    return { doc, svg, before, handle: mountLive(asSvg(svg), NAME, { animate: "hover" }) };
   }
 
   test("the markup is untouched until a state asks for its still frame", () => {

@@ -9,14 +9,6 @@ const REST_HALF = Math.sin((EYE_SPLIT * Math.PI) / 180);
 
 type Eye = Posable["eyes"][number];
 
-/** The root attribute whose every change plays `motion.css`'s `mo-blink-in` once. */
-export const BLINK_ATTR = "data-mo-blink";
-
-/** Fires the entrance blink on a live bolota's root, at a `Timeline.blinkCue`. */
-export function cueBlink(root: Element): void {
-  root.setAttribute(BLINK_ATTR, root.getAttribute(BLINK_ATTR) === "0" ? "1" : "0");
-}
-
 /**
  * A live eye's shape, as the attributes of one `<rect>`.
  *
@@ -24,9 +16,8 @@ export function cueBlink(root: Element): void {
  * any aspect, and a circle when its sides are equal, so an engine-driven eye
  * changes shape by writing numbers: no path string is built per frame, and a
  * transform never stretches the round caps. Centred on the eye and turned by
- * `rot` degrees about that centre, it covers the static `capsulePath` of the
- * same baked eye. The turn is `--mo-rot`, which `motion.css` maps to the rect's
- * `rotate` so its blink scales along the eye's own axis.
+ * `rot` degrees about that centre (the `transform` the driver composes with the
+ * idle layers), it covers the static `capsulePath` of the same baked eye.
  */
 export interface EyeRig {
   x: string;
@@ -158,10 +149,8 @@ export function faceEyes(l: FaceLayout, e: Face, turn = 0): Eye[] {
 }
 
 /**
- * The live eye markup: `.mo-eye > g` takes the wrap, the `<g>` under it the
- * entrance blink, and the rect the idle blink, each as the one `transform`
- * animation on its element. The rect's turn is its `rotate`, so that blink
- * closes the eye across its own axis with no lean bracket.
+ * The live eye markup. `.mo-eye > *` stays a bare group, as in the static
+ * markup; the rect carries the driver's `transform` (turn, idle blink and wrap).
  */
 export function rigMarkup(l: Posable, p: Pose): string {
   const baked = bakePose(l, p).l.eyes;
@@ -170,7 +159,7 @@ export function rigMarkup(l: Posable, p: Pose): string {
       const a = eyeRig(e);
       return (
         `<g class="mo-eye" style="--mo-wrap:${i ? 1 : -1};--mo-lean:${r3(e.rot)};transform-origin:${r3(e.cx)}px ${r3(e.cy)}px">` +
-        `<g><g><rect x="${a.x}" y="${a.y}" width="${a.width}" height="${a.height}" rx="${a.rx}" ry="${a.ry}" style="--mo-rot:${a.rot}"/></g></g></g>`
+        `<g><rect x="${a.x}" y="${a.y}" width="${a.width}" height="${a.height}" rx="${a.rx}" ry="${a.ry}" transform="rotate(${a.rot} ${r3(e.cx)} ${r3(e.cy)})"/></g></g>`
       );
     })
     .join("");

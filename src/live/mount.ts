@@ -3,16 +3,20 @@
 
 import type { EngineHandle } from "../engine";
 import { HOLD_EPS, pursuit, project, step, threshold, type Mark } from "../gaze";
+import { motionSeeds } from "../animate";
 import { _layout, parts, type BolotaOptions } from "../bolota";
+import { EASE_OUT, MORPH_IN, MORPH_OUT } from "../ease";
 import type { Expression } from "../expression";
 import { r3, type Pose } from "../morph";
+import { resolve } from "../render";
 import { actTransform, type Act } from "./act";
 import { CHOREO, TRACK_TURN, expressed, type Eyes, type StateId } from "./choreo";
 import type { Decor, DecorFrame, DecorHost, DecorPalette } from "./decor.js";
 import { fitEyes, type Correction } from "./fit";
 import { cancelRead, readNextFrame, startFrames, stopFrames, watchSight } from "./frames";
 import { ALIASES, resolveExpression } from "./names";
-import { cueBlink, eyeRig, faceEyes, type EyeRig } from "./rig";
+import { idleBody, idleEyes, idleFrame, idleShake } from "./idle";
+import { eyeRig, faceEyes, type EyeRig } from "./rig";
 import { Timeline, frameDt, type PlayOptions } from "./timeline";
 import { putter } from "./put";
 import { uprightTransform } from "./upright";
@@ -26,6 +30,14 @@ const QUIET = 1;
 
 /** The gaze excursion, in viewBox units, when the host sets no `--mo-track-travel`. */
 const TRAVEL = 3;
+
+/** The entrance blink: one linear close to 6% and open, in seconds. */
+const ENTRANCE = 0.2;
+
+/** `.mo-root`'s `--mo-amp` transition on hover, in seconds. */
+const AMP_RAMP = 0.4;
+
+const q = (v: number, k: number) => Math.round(v * k);
 
 const POSE_VARS = [
   "esx", "esy", "tilt", "edy", "edx", "esx2", "esy2", "tilt2", "edy2", "epx", "lock", "shake", "bdy",
@@ -107,11 +119,43 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let decor: Decor | null = null;
   let decorHost!: DecorHost;
 
+  const seeds = motionSeeds(resolve(name, base).t);
+  const hoverMode = base.animate === "hover";
+  const idle = idleFrame();
+  const eyeSig = new Float64Array(8).fill(NaN);
+  const eyeKey = new Float64Array(4);
+  let wraps: Element[] = [];
+  let hybrid = false;
+  let jsPhase = true;
+  let baseBody = 0;
+  let baseEye = 0;
+  let pendingWake = false;
+  let bodyMs = 0;
+  let eyeMs = 0;
+  let amp = hoverMode ? 0 : 1;
+  let ampFrom = 0;
+  let ampTo = hoverMode ? 0 : 1;
+  let ampAt = 0;
+  let shakeFrom = 0;
+  let shakeTo = 0;
+  let shakeAt = 0;
+  let shakeCurve = MORPH_OUT;
+  let entranceAt = -1;
+  let held = false;
+  let sigBreathe = NaN;
+  let sigBreatheY = NaN;
+  let sigBob = NaN;
+  let sigSacX = NaN;
+  let sigSacY = NaN;
+  let sigShakeX = NaN;
+  let sigShakeY = NaN;
+  let ticking = false;
+  let awake = false;
+
   let clock = 0;
   let last = 0;
   let cuedTo = -1e-6;
   let liveAt = 0;
-  let running = false;
   let rest: StateId = "idle";
   let restLoop = false;
   let exprPose: Pose | null = null;
@@ -144,10 +188,100 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     return put(rect, "--mo-rot", a.rot) || changed;
   }
 
+  function entrance(): number {
+    const p = (clock - entranceAt) / ENTRANCE;
+    return entranceAt < 0 || p >= 1 ? 1 : 1 - 0.94 * (1 - Math.abs(2 * p - 1));
+  }
+
+  /**
+   * One eye's idle layers. The wrap goes on the group under `.mo-eye`, about the
+   * eye's centre by `motion.css`'s `fill-box` origin; the blink (with the
+   * entrance) goes on the rect, whose `rotate` is the eye's turn, so it closes
+   * the eye across its own axis. Both stand down to `none` at identity.
+   */
+  function writeEye(i: number): boolean {
+    if (!jsPhase) return false;
+    const side = i ? 1 : -1;
+    const wr = idle.wrapRot * side;
+    const sx = 1 + idle.wrapMx + idle.wrapSide * side;
+    const sy = 1 + idle.wrapSy;
+    const shut = idle.blink * entrance();
+    const k = eyeKey;
+    k[0] = q(wr, 1000);
+    k[1] = q(sx, 10000);
+    k[2] = q(sy, 10000);
+    k[3] = q(shut, 1000);
+    const o = i * 4;
+    let changed = false;
+    for (let j = 0; j < 4; j++) {
+      if (eyeSig[o + j] === k[j]) continue;
+      eyeSig[o + j] = k[j]!;
+      changed = true;
+    }
+    if (!changed) return false;
+    const wrap = k[0] || k[1] !== 10000 || k[2] !== 10000 ? `rotate(${r3(wr)}) scale(${r3(sx)} ${r3(sy)})` : null;
+    put(wraps[i]!, "transform", wrap);
+    put(rects[i]!, "transform", k[3] === 1000 ? null : `scale(1 ${r3(shut)})`);
+    return true;
+  }
+
+  function ampNow(): number {
+    const p = (clock - ampAt) / AMP_RAMP;
+    return p >= 1 ? ampTo : ampFrom + (ampTo - ampFrom) * EASE_OUT(p < 0 ? 0 : p);
+  }
+
+  function shakeNow(): number {
+    const p = (clock - shakeAt) / (shakeCurve.ms / 1000);
+    return p >= 1 ? shakeTo : shakeFrom + (shakeTo - shakeFrom) * shakeCurve.ease(p < 0 ? 0 : p);
+  }
+
+  function idleEval(): void {
+    if (hoverMode) amp = ampNow();
+    idleBody(seeds, bodyMs, amp, hold, idle);
+    idleEyes(seeds, eyeMs, amp, hold, idle);
+  }
+
+  /** Writes what the evaluated idle layers moved. */
+  function idleWrite(): void {
+    if (!jsPhase) return;
+    const bx = q(idle.breatheX, 10000);
+    const by = q(idle.breatheY, 10000);
+    if (bx !== sigBreathe || by !== sigBreatheY) {
+      sigBreathe = bx;
+      sigBreatheY = by;
+      put(breathe, "transform", `scale(${bx / 10000} ${by / 10000})`);
+    }
+    const bb = q(idle.bob, 1000);
+    if (bb !== sigBob) {
+      sigBob = bb;
+      put(bob, "transform", `translate(0 ${bb / 1000})`);
+    }
+    const sx = q(idle.sacX, 1000);
+    const sy = q(idle.sacY, 1000);
+    if (sx !== sigSacX || sy !== sigSacY) {
+      sigSacX = sx;
+      sigSacY = sy;
+      put(eyesG, "transform", `translate(${sx / 1000} ${sy / 1000})`);
+    }
+    const sh = shakeNow();
+    if (sh !== 0 || sigShakeX !== 0 || sigShakeY !== 0) {
+      idleShake(bodyMs, sh, idle);
+      const hx = q(idle.shakeX, 1000);
+      const hy = q(idle.shakeY, 1000);
+      if (hx !== sigShakeX || hy !== sigShakeY) {
+        sigShakeX = hx;
+        sigShakeY = hy;
+        put(host, "transform", hx || hy ? `translate(${hx / 1000} ${hy / 1000})` : null);
+      }
+    }
+    writeEye(0);
+    writeEye(1);
+  }
+
   function build(): void {
     if (built) return;
     built = true;
-    snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-still", "data-mo-blink", "data-mo-asleep"]);
+    snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-still", "data-mo-js", "data-mo-asleep"]);
     let found = svg.querySelector(".mo-breathe");
     if (!found) {
       const p = parts(name, { ...base, animate: base.animate ?? "always" });
@@ -179,30 +313,52 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     svg.style.setProperty("--mo-eye", palette.eye!);
     if (!svg.hasAttribute("viewBox")) svg.setAttribute("viewBox", "0 0 100 100");
     svg.setAttribute("overflow", "visible");
+    hybrid = !hoverMode && !reduced && typeof breathe.getAnimations === "function";
+    jsPhase = !hybrid;
+    if (!reduced && jsPhase) svg.setAttribute("data-mo-js", "");
+    for (const el of [host, breathe]) snapshot(el, ["transform"]);
 
     eyesG = breathe.querySelector(".mo-eyes")!;
-    snapshot(eyesG, ["style", "opacity"]);
+    snapshot(eyesG, ["style", "opacity", "transform"]);
     upG = mk("g");
     while (eyesG.firstChild) upG.appendChild(eyesG.firstChild);
     eyesG.appendChild(upG);
     eyeEls = Array.from(breathe.querySelectorAll(".mo-eye"));
+    wraps = eyeEls.map((eye) => eye.firstElementChild!);
     rects = eyeEls.map((eye, i) => {
       snapshot(eye, ["style"]);
       const wrap = eye.firstElementChild!;
+      snapshot(wrap, ["transform"]);
       const first = wrap.firstElementChild!;
-      const mine = first.firstElementChild?.tagName === "rect";
-      const rect = mine ? (first.firstElementChild as Rect) : mk("rect");
+      const mine = first.tagName === "rect";
+      const rect = mine ? (first as Rect) : mk("rect");
       if (!mine) {
-        const g = mk("g");
-        g.appendChild(rect);
-        wrap.replaceChild(g, first);
-        swaps.push([wrap, g, first]);
+        wrap.replaceChild(rect, first);
+        swaps.push([wrap, rect, first]);
       }
       setRig(rect, eyeRig(L.eyes[i]!));
       return rect;
     });
 
     bob = breathe.firstElementChild!;
+    snapshot(bob, ["transform"]);
+    if (hoverMode && !reduced) {
+      const aim = (to: number) => (ev: Event) => {
+        if ((ev as PointerEvent).pointerType === "touch") return;
+        ampFrom = ampNow();
+        ampTo = to;
+        ampAt = clock;
+        wake();
+      };
+      const enter = aim(1);
+      const leave = aim(0);
+      host.addEventListener("pointerenter", enter, { passive: true });
+      host.addEventListener("pointerleave", leave, { passive: true });
+      undo.push(() => {
+        host.removeEventListener("pointerenter", enter);
+        host.removeEventListener("pointerleave", leave);
+      });
+    }
     kids = Array.from(bob.children);
     bodyG = kids[0]!;
     snapshot(bodyG, ["fill"]);
@@ -263,6 +419,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     fitEyes(L, boxes, turn, out);
     boxes.forEach((b, i) => {
       changed = setRig(rects[i]!, eyeRig(b)) || changed;
+      writeEye(i);
     });
     return changed;
   }
@@ -305,11 +462,12 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     const act = tl.sample(now);
     let changed = paint(act, tl.eyes(now), ax, ay, hold);
     changed = put(svg, "--mo-track-hold", hold ? hold.toFixed(3) : null) || changed;
-    changed = put(svg, "data-mo-still", c.ownsLiveliness && !c.baseFace ? "" : null) || changed;
+    held = !!c.ownsLiveliness && !c.baseFace;
+    changed = put(svg, "data-mo-still", held ? "" : null) || changed;
 
     const cue = tl.blinkCue(cuedTo, now);
     cuedTo = now;
-    if (cue !== null) cueBlink(svg);
+    if (cue !== null) entranceAt = now;
 
     const drawn = drawDecor(tl.decorFrames(now));
 
@@ -322,24 +480,74 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     const dt = frameDt(last, ms);
     last = ms;
     clock += dt;
-    if (frame(clock, dt)) liveAt = clock;
-    else if (clock - liveAt > QUIET) park();
+    eyeMs += dt * 1000;
+    if (!held) bodyMs += dt * 1000;
+    idleEval();
+    if (awake) {
+      if (frame(clock, dt)) liveAt = clock;
+      else if (clock - liveAt > QUIET) awake = false;
+    }
+    if (!awake && hybrid && shakeTo === 0 && entrance() === 1) {
+      giveBack();
+      halt();
+      return;
+    }
+    idleWrite();
+    if (!awake && hoverMode && ampTo === 0 && clock >= ampAt + AMP_RAMP && shakeTo === 0 && clock >= shakeAt + shakeCurve.ms / 1000 && entrance() === 1) halt();
   }
 
-  function park(): void {
-    if (!running) return;
-    running = false;
+  function halt(): void {
+    awake = false;
+    if (!ticking) return;
+    ticking = false;
     last = 0;
     stopFrames(view, tick);
   }
 
-  function wake(): void {
-    if (dead || paused || reduced || !sight) return;
-    liveAt = clock;
-    if (running) return;
-    running = true;
+  function start(): void {
+    if (dead || paused || reduced || !sight || ticking) return;
+    ticking = true;
     last = 0;
     startFrames(view, tick);
+  }
+
+  /** The compositor's loops hand over to the frame clock, from the phase they have reached. */
+  function takeOver(): void {
+    if (jsPhase) return;
+    const elapsed = (el: Element) => Number(el.getAnimations()[0]?.currentTime) || 0;
+    bodyMs = baseBody + elapsed(breathe);
+    eyeMs = baseEye + elapsed(wraps[0]!);
+    jsPhase = true;
+    sigBreathe = sigBob = sigSacX = NaN;
+    eyeSig.fill(NaN);
+    svg.setAttribute("data-mo-js", "");
+    idleEval();
+  }
+
+  /** And back: the stylesheet restarts the loops at the phase the frame clock stopped on. */
+  function giveBack(): void {
+    if (!jsPhase) return;
+    baseBody = bodyMs;
+    baseEye = eyeMs;
+    svg.style.setProperty("--mo-lag", `${-Math.round(bodyMs)}ms`);
+    svg.style.setProperty("--mo-elag", `${-Math.round(eyeMs)}ms`);
+    for (const el of [host, breathe, bob, eyesG, ...wraps, ...rects]) put(el, "transform", null);
+    eyeSig.fill(NaN);
+    sigShakeX = sigShakeY = NaN;
+    svg.removeAttribute("data-mo-js");
+    jsPhase = false;
+  }
+
+  function wake(): void {
+    if (dead || paused || reduced) return;
+    if (!sight) {
+      pendingWake = true;
+      return;
+    }
+    if (hybrid) takeOver();
+    liveAt = clock;
+    awake = true;
+    start();
   }
 
   function measure(): void {
@@ -368,9 +576,12 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   function sightChange(visible: boolean): void {
     sight = visible;
     put(svg, "data-mo-asleep", visible ? null : "");
-    if (!visible) return park();
+    if (!visible) return halt();
     if (following) readNextFrame(view, measure);
-    wake();
+    if (!hybrid || jsPhase || following || pendingWake) {
+      pendingWake = false;
+      wake();
+    }
   }
 
   function release(): void {
@@ -422,7 +633,10 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     const tint = (e?.tint && e.tint(palette, e.p)) || palette;
     build();
     put(svg, "--mo-bdy", e && e.p.bdy ? String(e.p.bdy) : null);
-    put(svg, "--mo-shake", e && e.p.shake ? String(e.p.shake) : null);
+    shakeFrom = instant ? (e?.p.shake ?? 0) : shakeNow();
+    shakeTo = e?.p.shake ?? 0;
+    shakeAt = clock;
+    shakeCurve = e ? MORPH_IN : MORPH_OUT;
     put(svg, "--mo-head", tint.head!);
     put(svg, "--mo-eye", tint.eye!);
     put(bodyG, "fill", tint.head!);
@@ -440,14 +654,19 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
 
   if (!reduced) {
     build();
+    idleEval();
     frame(0, 0);
+    idleWrite();
   }
   if (initial) express(initial, true);
   if (!decorModule) {
     if (view.requestIdleCallback) view.requestIdleCallback(fetchDecor, { timeout: 2000 });
     else setTimeout(fetchDecor, 200);
   }
-  if (!reduced) unwatch = watchSight(view, svg, sightChange);
+  if (!reduced) {
+    unwatch = watchSight(view, svg, sightChange);
+    if (!hoverMode && !hybrid) start();
+  }
 
   const handle: EngineHandle = {
     states: Object.keys(CHOREO),
@@ -482,7 +701,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     },
     stop() {
       paused = true;
-      park();
+      halt();
     },
     follow(target = "window") {
       if (dead) return;
@@ -498,7 +717,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       if (dead) return;
       dead = true;
       unwatch?.();
-      park();
+      halt();
       release();
       if (!built) return;
       decor?.destroy();

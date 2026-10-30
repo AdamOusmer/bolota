@@ -9,7 +9,7 @@ export const asSvg = (el: FakeElement) => el as unknown as SVGSVGElement;
 
 export function mountOn(doc: FakeDocument, name: string, opts?: EngineOptions) {
   const svg = makeSvg(doc);
-  const handle = mountEngine(asSvg(svg), name, opts);
+  const handle = mountEngine(asSvg(svg), name, { animate: "hover", ...opts });
   return { doc, svg, handle };
 }
 
@@ -18,7 +18,7 @@ export function mounted(name = "facade-seed", opts?: EngineOptions) {
 }
 
 export const rectsOf = (svg: FakeElement) =>
-  svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!.children[0]!.children[0]!);
+  svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!.children[0]!);
 
 export const eyeAttrs = (svg: FakeElement) => rectsOf(svg).map((r) => [...r.attrs.values()].join(","));
 

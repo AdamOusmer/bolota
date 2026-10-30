@@ -43,7 +43,7 @@ function world() {
 
 function avatar(doc: FakeDocument, name: string) {
   const svg = makeSvg(doc);
-  const handle = mountLive(asSvg(svg), name);
+  const handle = mountLive(asSvg(svg), name, { animate: "hover" });
   return { svg, handle };
 }
 
