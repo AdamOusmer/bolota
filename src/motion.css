@@ -770,7 +770,13 @@
  * and `--mo-elag` (blink, wrap).
  */
 svg[data-mo-js] .mo-root,
-svg[data-mo-js] .mo-root * {
+svg[data-mo-js] .mo-breathe,
+svg[data-mo-js] .mo-bob,
+svg[data-mo-js] .mo-eyes,
+svg[data-mo-js] .mo-eye,
+svg[data-mo-js] .mo-eye > *,
+svg[data-mo-js] .mo-eye > * > path,
+svg[data-mo-js] .mo-eye rect {
   animation: none !important;
 }
 

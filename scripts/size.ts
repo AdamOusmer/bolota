@@ -202,7 +202,11 @@ const ENTRIES: {
     // the engine pauses every CSS loop of an off-screen or hidden instance.
     // Measured in headless Chromium, 23 resting bolotas off screen cost the main
     // thread a style recalc and layout per frame each without it.
-    budget: 1560,
+    // Raised from 1560 to 1620 for naming the idle elements the engine's
+    // `data-mo-js` stands down instead of matching `.mo-root *`, which made
+    // every decor path a style-recalc target (UpdateLayoutTree 71 -> 46 ms/s in
+    // orbit at 23). Measured 1567 B; budget is that plus ~3%.
+    budget: 1620,
     external: [],
     ext: "css",
     source: `@import "../../src/motion.css";`,
