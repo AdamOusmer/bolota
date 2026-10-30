@@ -31,10 +31,18 @@ import {
  * the frame rate. Here they happen at the threshold itself. A driver that
  * samples on frames sees the same thing up to that one frame of latency.
  *
- * The quirks of the old pair are kept because the parity test holds them:
- * an outgoing state is wrapped by the incoming state's `looping`, a hand-back
- * plays the rest state unlooped, and replaying the current state only updates
- * its looping without restarting its blend clock.
+ * Three behaviours of the old pair are corrected, and `test/live-parity.test.ts`
+ * holds everything else to it:
+ *
+ * - Each side of a cross-fade keeps its own looping. The old blend wrapped the
+ *   outgoing state with the incoming one's, so a looped `orbit` handed to a
+ *   one-shot ran unwrapped for the length of the fade.
+ * - A hand-back plays the rest state the way it was last played. A rest
+ *   entered by `loop` is still looped after a one-shot over it, so a looped
+ *   state without a `period` keeps restarting instead of freezing on its last
+ *   frame.
+ * - Replaying the current state restarts it, fading from what is on screen,
+ *   like any other change. The old player only updated its looping.
  */
 
 /** `STATE_HOLD` in `../engine.ts`: how long a one-shot dwells before handing back. */
@@ -67,6 +75,8 @@ interface Regs {
   stateStart: number;
   loop: boolean;
   rest: StateId;
+  /** Whether the rest state was entered by `loop`, so a hand-back loops it again. */
+  restLoop: boolean;
   hold: number;
   windowFor: number;
   windowStart: number;
@@ -82,34 +92,36 @@ interface Regs {
   tCur: number;
   tPrev: number;
   looping: boolean;
+  /** The outgoing state's own looping, which its side of the fade keeps. */
+  loopingPrev: boolean;
   stretchOf: StateId | null;
   stretchBy: number;
 }
 
-function local(r: Regs, id: StateId, elapsed: number): number {
+function local(r: Regs, id: StateId, elapsed: number, looping: boolean): number {
   const period = CHOREO[id].period;
   const t = id === r.stretchOf ? elapsed * r.stretchBy : elapsed;
-  return r.looping && period ? t % period : t;
+  return looping && period ? t % period : t;
 }
 
-function posed(r: Regs, id: StateId, since: number): Act {
-  return CHOREO[id].act(local(r, id, Math.max(0, since)));
+function posed(r: Regs, id: StateId, since: number, looping: boolean): Act {
+  return CHOREO[id].act(local(r, id, Math.max(0, since), looping));
 }
 
 function composed(r: Regs, now: number): Act {
-  const act = posed(r, r.cur, now - r.tCur);
+  const act = posed(r, r.cur, now - r.tCur, r.looping);
   const since = now - r.tCur;
   const morph = CHOREO[r.cur].morph;
   if (since >= morph) return act;
-  const origin = r.frozen ?? (r.prev ? posed(r, r.prev, now - r.tPrev) : null);
+  const origin = r.frozen ?? (r.prev ? posed(r, r.prev, now - r.tPrev, r.loopingPrev) : null);
   if (!origin) return act;
   return blendAct(origin, act, easeOutQuint(clamp(since / morph)));
 }
 
 /** A state's eyes with the held expression shown through, mid-change included. */
-function posedEyes(r: Regs, id: StateId, since: number, now: number): Eyes {
+function posedEyes(r: Regs, id: StateId, since: number, now: number, looping: boolean): Eyes {
   const c = CHOREO[id];
-  const own = c.eyes(local(r, id, Math.max(0, since)));
+  const own = c.eyes(local(r, id, Math.max(0, since), looping));
   const to = expressed(c, own, r.exprTo);
   const k = clamp((now - r.exprAt) / EXPRESSION_MORPH);
   if (r.exprFrom === r.exprTo || k >= 1) return to;
@@ -119,10 +131,12 @@ function posedEyes(r: Regs, id: StateId, since: number, now: number): Eyes {
 /** The eyes on screen: the same cross-fade as `composed`, then the entrance blink. */
 function composedEyes(r: Regs, now: number): Eyes {
   const since = now - r.tCur;
-  const eyes = posedEyes(r, r.cur, since, now);
+  const eyes = posedEyes(r, r.cur, since, now, r.looping);
   const morph = CHOREO[r.cur].morph;
   const origin =
-    since >= morph ? null : r.frozenEyes ?? (r.prev ? posedEyes(r, r.prev, now - r.tPrev, now) : null);
+    since >= morph
+      ? null
+      : r.frozenEyes ?? (r.prev ? posedEyes(r, r.prev, now - r.tPrev, now, r.loopingPrev) : null);
   const shown = origin ? blendEyes(origin, eyes, easeOutQuint(clamp(since / morph))) : eyes;
   return r.prev !== null && CHOREO[r.cur].blinkIn ? blinked(shown, since) : shown;
 }
@@ -133,15 +147,12 @@ function composedEyes(r: Regs, now: number): Eyes {
  * already exactly what is on screen.
  */
 function setState(r: Regs, id: StateId, now: number, loop: boolean): void {
-  if (id === r.cur) {
-    r.looping = loop;
-    return;
-  }
   const midMorph = r.prev !== null && now - r.tCur < CHOREO[r.cur].morph;
   r.frozen = midMorph ? composed(r, now) : null;
   r.frozenEyes = midMorph ? composedEyes(r, now) : null;
   r.prev = r.cur;
   r.tPrev = r.tCur;
+  r.loopingPrev = r.looping;
   r.cur = id;
   r.tCur = now;
   r.looping = loop;
@@ -172,10 +183,15 @@ function due(r: Regs): number {
  * is found in closed form, however far `now` is.
  */
 function advance(r: Regs, now: number): void {
+  while (step(r, now));
+}
+
+/** Applies the next automatic transition if it is due by `now`; whether one was. */
+function step(r: Regs, now: number): boolean {
   const period = restartPeriod(r);
   if (period) {
     const k = Math.floor((now - r.stateStart) / period);
-    if (k < 1) return;
+    if (k < 1) return false;
     const at = r.stateStart + k * period;
     r.cur = r.current;
     r.prev = null;
@@ -185,16 +201,18 @@ function advance(r: Regs, now: number): void {
     r.tPrev = at;
     r.looping = false;
     r.stateStart = at;
-    return;
+    return true;
   }
   const at = due(r);
-  if (at > now) return;
+  if (at > now) return false;
   r.current = r.rest;
   r.stateStart = at;
+  r.loop = r.restLoop;
   r.windowFor = 0;
   r.windowLoop = false;
   stretch(r, null, 1);
-  setState(r, r.rest, at, false);
+  setState(r, r.rest, at, r.restLoop);
+  return true;
 }
 
 function play(r: Regs, id: StateId, o: PlayOptions, now: number): void {
@@ -213,7 +231,9 @@ function play(r: Regs, id: StateId, o: PlayOptions, now: number): void {
   // hands back on a whole number of periods where the wrap is seamless.
   r.windowLoop = r.windowFor > 0 && !!c.period;
   if (r.windowLoop) r.windowFor = Math.ceil(r.windowFor / c.period!) * c.period!;
-  r.rest = o.rest ?? (r.loop ? id : r.rest);
+  const rest = o.rest ?? (r.loop ? id : r.rest);
+  r.restLoop = r.loop ? true : rest === r.rest && r.restLoop;
+  r.rest = rest;
   setState(r, id, now, r.loop || r.windowLoop);
 }
 
@@ -235,6 +255,7 @@ export class Timeline {
           stateStart: 0,
           loop: false,
           rest: initial,
+          restLoop: false,
           hold: HOLD,
           windowFor: 0,
           windowStart: 0,
@@ -249,6 +270,7 @@ export class Timeline {
           tCur: 0,
           tPrev: 0,
           looping: false,
+          loopingPrev: false,
           stretchOf: null,
           stretchBy: 1,
         },

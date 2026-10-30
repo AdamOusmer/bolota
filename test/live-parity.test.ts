@@ -171,7 +171,8 @@ class Rig {
     const want = refAct(this.engine, this.clock);
     const got = this.tl.sample(this.clock);
     for (const k of FIELDS) {
-      const d = Math.abs(got[k] - want[k]);
+      const raw = got[k] - want[k];
+      const d = k === "rot" ? Math.abs(raw - 360 * Math.round(raw / 360)) : Math.abs(raw);
       if (d > worst) worst = d;
       if (d > TOL) {
         throw new Error(`${k} at t=${this.clock}: timeline ${got[k]}, engine ${want[k]}`);
@@ -316,7 +317,7 @@ describe("live timeline matches the old engine", () => {
     rig.run(6);
   });
 
-  test("replaying the current state keeps its blend clock", () => {
+  test("replaying the current state, where the body pose cannot tell the restart", () => {
     const rig = new Rig(SEEDS[1]!);
     rig.play("wink", { loop: true });
     rig.run(0.7);
@@ -356,6 +357,46 @@ describe("live timeline matches the old engine", () => {
     const again = [...ts].reverse().map((t) => tl.sample(t)).reverse();
     expect(again).toEqual(first);
     expect(() => tl.play("idle", 0.2)).toThrow(RangeError);
+  });
+});
+
+describe("corrected from the old engine", () => {
+  test("an outgoing state keeps its own looping through the fade", () => {
+    const tl = new Timeline();
+    tl.loop("orbit", 0);
+    tl.play("burst", 5);
+    const period = CHOREO.orbit.period!;
+    expect(tl.sample(5).rot).toBeCloseTo(CHOREO.orbit.act(5 % period).rot, 9);
+    expect(tl.eyes(5).pose).toEqual(CHOREO.orbit.eyes(5 % period).pose);
+  });
+
+  test("a hand-back to a looped rest keeps it looping", () => {
+    const tl = new Timeline();
+    tl.loop("thinking", 0);
+    tl.play("exclaim", 1, { hold: 0 });
+    const back = 1 + CHOREO.exclaim.duration;
+    expect(tl.state(back + 0.01)).toBe("thinking");
+    const restart = CHOREO.thinking.duration + CHOREO.thinking.morph;
+    expect(tl.next(back + 0.01)).toBeCloseTo(back + restart, 9);
+    const later = back + restart * 3 + 0.3;
+    expect(tl.state(later)).toBe("thinking");
+    expect(tl.sample(later)).toEqual(CHOREO.thinking.act(0.3));
+  });
+
+  test("a one-shot rest stays a one-shot after a hand-back", () => {
+    const tl = new Timeline();
+    tl.play("exclaim", 1, { hold: 0 });
+    expect(tl.next(1 + CHOREO.exclaim.duration + 0.01)).toBe(Infinity);
+  });
+
+  test("replaying the current state restarts it from what is on screen", () => {
+    const tl = new Timeline();
+    tl.play("thinking", 0);
+    const shown = tl.sample(1.5);
+    tl.play("thinking", 1.5);
+    expect(tl.sample(1.5)).toEqual(shown);
+    const after = 1.5 + CHOREO.thinking.morph + 0.2;
+    expect(tl.sample(after)).toEqual(CHOREO.thinking.act(CHOREO.thinking.morph + 0.2));
   });
 });
 
