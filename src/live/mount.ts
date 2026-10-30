@@ -8,7 +8,7 @@ import type { Expression } from "../expression";
 import { r3, type Pose } from "../morph";
 import { actTransform, type Act } from "./act";
 import { CHOREO, TRACK_TURN, expressed, type Eyes, type StateId } from "./choreo";
-import { createDecor } from "./decor";
+import type { Decor, DecorFrame, DecorHost } from "./decor.js";
 import { fitEyes, type Correction } from "./fit";
 import { cancelRead, readNextFrame, startFrames, stopFrames } from "./frames";
 import { ALIASES, resolveExpression } from "./names";
@@ -36,6 +36,32 @@ const RIG_KEYS = ["x", "y", "width", "height", "rx", "ry", "transform"] as const
 const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
 const turnRad = (TRACK_TURN * Math.PI) / 180;
+
+const PLAIN = new Set<string>(["idle", "wander", "wink", "wide", "snooze"]);
+
+type DecorModule = typeof import("./decor.js");
+
+let decorModule: DecorModule | null = null;
+let decorLoad: Promise<unknown> | null = null;
+let warming = false;
+
+/** One import shared by every instance; a failed load clears itself so the next ask retries. */
+function loadDecor(): Promise<unknown> {
+  return (decorLoad ??= import("./decor.js").then(
+    (m) => (decorModule = m),
+    () => {
+      decorLoad = null;
+    },
+  ));
+}
+
+function warmDecor(view: Window): void {
+  if (warming || decorLoad) return;
+  warming = true;
+  const go = () => void loadDecor();
+  if (view.requestIdleCallback) view.requestIdleCallback(go, { timeout: 2000 });
+  else setTimeout(go, 200);
+}
 
 const statics: Partial<Record<StateId, boolean>> = {};
 
@@ -86,7 +112,9 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let eyesG!: Element;
   let eyeEls: Element[] = [];
   let rects: Rect[] = [];
-  let decor!: ReturnType<typeof createDecor>;
+  let decor: Decor | null = null;
+  let decorHost!: DecorHost;
+  let fetching = false;
 
   let clock = 0;
   let last = 0;
@@ -197,7 +225,30 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     figure.append(defs, back, headG, front);
     kids.forEach((k) => actG.appendChild(k));
     bob.appendChild(figure);
-    decor = createDecor({ back, front, defs, head: headG }, L, { head: palette.head!, eye: palette.eye!, bg: palette.bg }, Math.random().toString(36).slice(2, 8));
+    decorHost = { back, front, defs, head: headG };
+  }
+
+  function drawDecor(frames: DecorFrame[]): boolean {
+    if (!decor) {
+      if (!decorModule) {
+        if (frames.some((f) => !PLAIN.has(f.state))) fetchDecor();
+        return false;
+      }
+      const pal = { head: palette.head!, eye: palette.eye!, bg: palette.bg };
+      decor = decorModule.createDecor(decorHost, L, pal, Math.random().toString(36).slice(2, 8));
+    }
+    return decor.update(frames);
+  }
+
+  function fetchDecor(): void {
+    if (fetching) return;
+    fetching = true;
+    void loadDecor().then(() => {
+      fetching = false;
+      if (dead || !decorModule) return;
+      if (reduced) still();
+      else wake();
+    });
   }
 
   function paint(act: Act, e: Eyes, tx: number, ty: number, weight: number): boolean {
@@ -236,7 +287,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     const c = CHOREO[stillId];
     paint(c.act(c.still), expressed(c, c.eyes(c.still), exprPose), 0, 0, 0);
     put(svg, "data-mo-still", c.ownsLiveliness && !c.baseFace ? "" : null);
-    decor.update([{ state: stillId, local: c.still, weight: 1 }]);
+    drawDecor([{ state: stillId, local: c.still, weight: 1 }]);
   }
 
   function frame(now: number, dt: number): boolean {
@@ -275,7 +326,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     cuedTo = now;
     if (cue !== null) cueBlink(svg);
 
-    const drawn = decor.update(tl.decorFrames(now));
+    const drawn = drawDecor(tl.decorFrames(now));
 
     const moving = !isStatic(id);
     const animating = tl.next(now) < Infinity ? moving || id !== rest : moving && restLoop;
@@ -391,6 +442,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     frame(0, 0);
   }
   if (initial) express(initial, true);
+  warmDecor(view);
 
   const handle: EngineHandle = {
     states: Object.keys(CHOREO),
@@ -400,6 +452,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       if (o?.rest !== undefined && !has(CHOREO, o.rest)) throw new Error(`mountLive: unknown state "${o.rest}"`);
       if (dead) return;
       const id = state as StateId;
+      if (!decorModule && !PLAIN.has(id)) fetchDecor();
       if (reduced) {
         stillId = id;
         still();
@@ -443,7 +496,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       park();
       release();
       if (!built) return;
-      decor.destroy();
+      decor?.destroy();
       for (const [eye, g, path] of swaps) eye.replaceChild(path, g);
       swaps = [];
       kids.forEach((k) => bob.appendChild(k));

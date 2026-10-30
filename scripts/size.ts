@@ -215,11 +215,28 @@ const ENTRIES: {
     // roster of 18 poses are what the old DOM renderer did not carry. Budget is
     // 20179 plus ~5%, which also absorbs the ~100 B by which `Bun.gzipSync` on
     // CI's linux/x64 runners lands above macOS/arm64 for identical input bytes.
+    //
+    // Decor became a lazy chunk (`import("./decor.js")` in `live/mount.ts`), so
+    // this row is the first-load cost: 19693 B with decor inline, 16494 B now,
+    // under the old engine's 16770. The dynamic import is external here, as it
+    // is in `dist`. Budget is 16494 plus ~5%.
     name: "engine",
-    budget: 21200,
-    external: [],
+    budget: 17300,
+    external: ["*/decor.js"],
     source: `import { mountEngine } from "../../src/engine";
              globalThis.x = mountEngine;`,
+  },
+  {
+    // The chunk the engine loads on idle or on the first decor-bearing state.
+    // Measured 7367 B alone: more than the ~3.4 KB it took out of the engine
+    // row because it carries its own copies of the colour and outline helpers
+    // the engine also uses (no code splitting, see `scripts/build.ts`). Budget
+    // is 7367 plus ~5%.
+    name: "decor (lazy chunk)",
+    budget: 7750,
+    external: [],
+    source: `import { createDecor } from "../../src/live/decor";
+             globalThis.x = createDecor;`,
   },
   {
     // `runSequence`'s only import from `./engine` is the `EngineHandle`

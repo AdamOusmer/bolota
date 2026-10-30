@@ -39,6 +39,11 @@ const ENTRIES = [
 
 rmSync("dist", { recursive: true, force: true });
 
+// The live engine's decor layer is its own module, loaded by a dynamic
+// `import("./decor.js")` in `src/live/mount.ts`. That specifier is external for
+// the entries and resolves, from `dist/engine.js`, to the file built second
+// below, so a consumer's bundler splits it into a chunk of its own. Hand-rolled
+// rather than Bun's splitting for the reason above.
 const build = await Bun.build({
   entrypoints: ENTRIES,
   outdir: "dist",
@@ -46,10 +51,26 @@ const build = await Bun.build({
   format: "esm",
   minify: true,
   sourcemap: "linked",
+  external: ["*/decor.js"],
 });
 
 if (!build.success) {
   for (const log of build.logs) console.error(log);
+  process.exit(1);
+}
+
+const decor = await Bun.build({
+  entrypoints: ["src/live/decor.ts"],
+  outdir: "dist",
+  naming: "decor.js",
+  target: "browser",
+  format: "esm",
+  minify: true,
+  sourcemap: "linked",
+});
+
+if (!decor.success) {
+  for (const log of decor.logs) console.error(log);
   process.exit(1);
 }
 
