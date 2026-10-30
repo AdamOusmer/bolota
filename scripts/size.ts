@@ -195,7 +195,11 @@ const ENTRIES: {
     // the same frame (one name measured 1466 but needs a frame's delay to
     // restart), plus the rect in the reduced-motion reset. The pose-channel
     // additions that came first (edy2, epx) cost 21 B and fit the old budget.
-    budget: 1500,
+    // Raised from 1500 to 1560 for `[data-mo-asleep] *`, measured 1505 (+7 B):
+    // the engine pauses every CSS loop of an off-screen or hidden instance.
+    // Measured in headless Chromium, 23 resting bolotas off screen cost the main
+    // thread a style recalc and layout per frame each without it.
+    budget: 1560,
     external: [],
     ext: "css",
     source: `@import "../../src/motion.css";`,

@@ -1033,6 +1033,16 @@
 }
 
 /**
+ * The engine sets `data-mo-asleep` on an instance that is off screen or in a
+ * hidden tab: every loop pauses where it stands and resumes from there. They
+ * drive registered custom properties, so they cost style and layout on the main
+ * thread every frame whether or not anyone can see them.
+ */
+[data-mo-asleep] * {
+  animation-play-state: paused;
+}
+
+/**
  * Slow motion, for reviewing timing. Put it on any ancestor — it is read
  * through `var(--mo-rate, 1)`, never declared on `.mo-root`, so a bolota's own
  * rules cannot shadow it.

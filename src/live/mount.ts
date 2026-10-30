@@ -146,7 +146,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   function build(): void {
     if (built) return;
     built = true;
-    snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-still", "data-mo-blink"]);
+    snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-still", "data-mo-blink", "data-mo-asleep"]);
     let found = svg.querySelector(".mo-breathe");
     if (!found) {
       const p = parts(name, { ...base, animate: base.animate ?? "always" });
@@ -365,6 +365,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
    */
   function sightChange(visible: boolean): void {
     sight = visible;
+    put(svg, "data-mo-asleep", visible ? null : "");
     if (!visible) return park();
     if (following) readNextFrame(view, measure);
     wake();
