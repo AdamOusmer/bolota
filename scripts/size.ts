@@ -13,6 +13,8 @@
  */
 
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import type { BunPlugin } from "bun";
+import { decorSharesEngine } from "./decor-shared";
 
 const DIR = "scripts/.fixtures";
 
@@ -23,6 +25,7 @@ const ENTRIES: {
   source: string;
   /** Entry file extension. Defaults to a TSX consumer. */
   ext?: string;
+  plugins?: BunPlugin[];
 }[] = [
   {
     // Expressions are passed in as values from `bolota/expression`, so a
@@ -231,21 +234,31 @@ const ENTRIES: {
     // engine by dropping `Timeline.loop` (unused here), the decor warm-up and
     // palette plumbing and the duplicated unknown-state throw. Budget is 16747
     // plus ~5%.
+    //
+    // Raised to 16999 (budget 17850) when the decor chunk started importing the
+    // helpers it shares with this module instead of bundling them again. The
+    // row now imports the whole module namespace: `engine.js` exports ten
+    // underscore names (`_contrast`, `_toHex`, `_edge`, ...) that a consumer's
+    // bundler cannot drop, because `decor.js` imports them. 16999 B against
+    // 16917 B for the same namespace import before (+82 B), and in exchange the
+    // decor row below loses 3.5 KB. Engine plus decor: 24284 -> 20851 B.
     name: "engine",
-    budget: 17580,
+    budget: 17850,
     external: ["*/decor.js"],
-    source: `import { mountEngine } from "../../src/engine";
-             globalThis.x = mountEngine;`,
+    source: `import * as engine from "../../src/engine";
+             globalThis.x = engine;`,
   },
   {
     // The chunk the engine loads on idle or on the first decor-bearing state.
-    // Measured 7367 B alone: more than the ~3.4 KB it took out of the engine
-    // row because it carries its own copies of the colour and outline helpers
-    // the engine also uses (no code splitting, see `scripts/build.ts`). Budget
-    // is 7367 plus ~5%.
+    // Measured 7367 B while it carried its own copies of the colour, outline,
+    // attribute-writer, `r3` and choreo helpers the engine also holds. It now
+    // imports them from `engine.js` (`scripts/decor-shared.ts`), which is always
+    // loaded first, and measures 3852 B: decor code only. Budget is that plus
+    // ~5%.
     name: "decor (lazy chunk)",
-    budget: 7750,
+    budget: 4050,
     external: [],
+    plugins: [decorSharesEngine],
     source: `import { createDecor } from "../../src/live/decor";
              globalThis.x = createDecor;`,
   },
@@ -277,6 +290,7 @@ for (const entry of ENTRIES) {
     target: "browser",
     minify: true,
     external: entry.external,
+    plugins: entry.plugins,
   });
 
   if (!build.success) {

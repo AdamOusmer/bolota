@@ -14,7 +14,11 @@ describe("engine entry", () => {
   });
 
   test("the public surface is mountEngine, engineStates and engineExpressions", () => {
-    expect(Object.keys(engine).sort()).toEqual(["engineExpressions", "engineStates", "mountEngine"]);
+    expect(
+      Object.keys(engine)
+        .filter((k) => !k.startsWith("_"))
+        .sort(),
+    ).toEqual(["engineExpressions", "engineStates", "mountEngine"]);
   });
 
   test("a handle carries the documented API and the same rosters as the helpers", () => {

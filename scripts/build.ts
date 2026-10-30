@@ -24,6 +24,7 @@
 
 import { rmSync } from "node:fs";
 import { $ } from "bun";
+import { decorSharesEngine } from "./decor-shared";
 
 // One per package.json `exports` subpath that resolves to `dist` (i.e. every
 // subpath except `./motion.css`, built separately below as CSS, and
@@ -59,6 +60,8 @@ if (!build.success) {
   process.exit(1);
 }
 
+// Helpers the chunk shares with the engine are imported from `./engine.js`
+// rather than bundled again; see `scripts/decor-shared.ts`.
 const decor = await Bun.build({
   entrypoints: ["src/live/decor.ts"],
   outdir: "dist",
@@ -67,6 +70,7 @@ const decor = await Bun.build({
   format: "esm",
   minify: true,
   sourcemap: "linked",
+  plugins: [decorSharesEngine],
 });
 
 if (!decor.success) {

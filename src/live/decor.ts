@@ -1,11 +1,10 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 // Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
-import { contrast, ensureContrast, fromHex, mixHex, toHex, type Oklch } from "../color";
-import { CHOREO, clamp, type StateId } from "./choreo";
-import { r3 } from "../morph";
-import { edge, type OutlineLayout } from "./outline";
-import { putter } from "./put";
+import type { Oklch } from "../color";
+import type { StateId } from "./choreo";
+import type { OutlineLayout } from "./outline";
+import { CHOREO, clamp, contrast, edge, ensureContrast, fromHex, mixHex, putter, r3, toHex } from "./shared";
 
 /**
  * What a state draws around the body rather than does to it: rings, the
