@@ -112,6 +112,16 @@ const ACCENT_TURNS = [180, 150, 210, 120, 240, 90, 270];
 const r2 = (v: number) => Math.round(v * 100) / 100;
 const mod360 = (h: number) => ((h % 360) + 360) % 360;
 
+const CENTS_SPAN = 20000;
+const centsText: (string | undefined)[] = [];
+
+/** `r2(v)` as text, from a table: a path is rewritten each frame from the same few thousand values. */
+function cents(v: number): string {
+  const i = Math.round(v * 100);
+  if (i < -CENTS_SPAN || i >= CENTS_SPAN) return String(i / 100);
+  return (centsText[i + CENTS_SPAN] ??= String(i / 100));
+}
+
 function createRng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -288,6 +298,7 @@ function colorsOf(palette: DecorPalette): Colors {
 class Lane<T extends Element> {
   private readonly nodes: T[] = [];
   private used = 0;
+  private shown = 0;
   private group: Element | null = null;
 
   constructor(
@@ -318,7 +329,8 @@ class Lane<T extends Element> {
   }
 
   end(): void {
-    for (let i = this.used; i < this.nodes.length; i++) put(this.nodes[i]!, "opacity", 0);
+    for (let i = this.used; i < this.shown; i++) put(this.nodes[i]!, "opacity", 0);
+    this.shown = this.used;
   }
 
   index(): number {
@@ -331,6 +343,7 @@ class Lane<T extends Element> {
     this.group = null;
     this.nodes.length = 0;
     this.used = 0;
+    this.shown = 0;
   }
 }
 
@@ -346,6 +359,8 @@ export function createDecor(
   const gradId: string[] = [];
   const gradRef: string[] = [];
   const gradStops: Element[][] = [];
+  const gradSeed: (ArcSeed | undefined)[] = [];
+  const gradOx: number[] = [];
   let colors: Colors | null = null;
   let mask: SVGMaskElement | null = null;
   let maskRect: SVGRectElement | null = null;
@@ -360,6 +375,7 @@ export function createDecor(
   const grads = new Lane<SVGLinearGradientElement>(doc, host.defs, "linearGradient", null, (node, i) => {
     gradId[i] = `${uid}-g${i}`;
     gradRef[i] = `url(#${gradId[i]})`;
+    gradSeed[i] = undefined;
     node.setAttribute("id", gradId[i]!);
     node.setAttribute("gradientUnits", "userSpaceOnUse");
     gradStops[i] = [0, 1, 2].map((s) => {
@@ -392,21 +408,25 @@ export function createDecor(
     const cu = Math.cos(seed.tilt);
     const su = Math.sin(seed.tilt);
     const kz = Math.sqrt(Math.max(0, 1 - seed.k * seed.k));
-    const span = seed.sweep * TAU;
+    const stride = (seed.sweep * TAU) / ARC_STEPS;
+    const cs = Math.cos(stride);
+    const sn = Math.sin(stride);
+    let ct = Math.cos(spin);
+    let st = Math.sin(spin);
     let front = "";
     let back = "";
     let prev: boolean | null = null;
     for (let i = 0; i <= ARC_STEPS; i++) {
-      const th = spin + (i / ARC_STEPS) * span;
-      const ct = Math.cos(th);
-      const st = Math.sin(th);
       const x = seed.a * (ct * cu - st * su * seed.k) + ox;
       const y = seed.a * (ct * su + st * cu * seed.k) + seed.cy;
       const behind = seed.a * st * kz < 0;
-      const cmd = behind !== prev ? "M" : "L";
-      if (behind) back += `${cmd}${X(x)} ${Y(y)}`;
-      else front += `${cmd}${X(x)} ${Y(y)}`;
+      const point = (behind !== prev ? "M" : "L") + cents(cx + x * R) + " " + cents(cy + y * R);
+      if (behind) back += point;
+      else front += point;
       prev = behind;
+      const next = ct * cs - st * sn;
+      st = st * cs + ct * sn;
+      ct = next;
     }
     pathFront = front;
     pathBack = back;
@@ -418,29 +438,34 @@ export function createDecor(
     trace(seed, ox, t);
     const grad = grads.next();
     const g = grads.index();
-    const gx = Math.cos(seed.tilt) * seed.a * R;
-    const gy = Math.sin(seed.tilt) * seed.a * R;
-    put(grad, "x1", r2(cx + ox * R - gx));
-    put(grad, "y1", r2(cy + seed.cy * R - gy));
-    put(grad, "x2", r2(cx + ox * R + gx));
-    put(grad, "y2", r2(cy + seed.cy * R + gy));
-    const stops = colors.stops(seed);
-    for (let s = 0; s < 3; s++) put(gradStops[g]![s]!, "stop-color", stops[s]!);
+    if (gradSeed[g] !== seed || gradOx[g] !== ox) {
+      gradSeed[g] = seed;
+      gradOx[g] = ox;
+      const gx = Math.cos(seed.tilt) * seed.a * R;
+      const gy = Math.sin(seed.tilt) * seed.a * R;
+      put(grad, "x1", r2(cx + ox * R - gx));
+      put(grad, "y1", r2(cy + seed.cy * R - gy));
+      put(grad, "x2", r2(cx + ox * R + gx));
+      put(grad, "y2", r2(cy + seed.cy * R + gy));
+      const stops = colors.stops(seed);
+      for (let s = 0; s < 3; s++) put(gradStops[g]![s]!, "stop-color", stops[s]!);
+    }
     const width = r3(seed.width * R);
     const op = r3(opacity);
-    const half = (lane: Lane<SVGPathElement>, d: string) => {
-      const path = lane.next();
-      if (d === "") {
-        put(path, "opacity", 0);
-        return;
-      }
-      put(path, "d", d);
-      put(path, "stroke", gradRef[g]!);
-      put(path, "stroke-width", width);
-      put(path, "opacity", op);
-    };
-    half(arcBack, pathBack);
-    half(arcFront, pathFront);
+    half(arcBack, pathBack, g, width, op);
+    half(arcFront, pathFront, g, width, op);
+  }
+
+  function half(lane: Lane<SVGPathElement>, d: string, g: number, width: string, opacity: string): void {
+    const path = lane.next();
+    if (d === "") {
+      put(path, "opacity", 0);
+      return;
+    }
+    put(path, "d", d);
+    put(path, "stroke", gradRef[g]!);
+    put(path, "stroke-width", width);
+    put(path, "opacity", opacity);
   }
 
   function disc(lane: Lane<SVGCircleElement>, x: number, y: number, r: number, fill: string, opacity: number): void {
