@@ -10,6 +10,20 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.2.2
+
+No face changes. Less main-thread work per animated frame.
+
+- Decor arcs come from a rotation recurrence and a coordinate text table, so
+  a frame does no trig and no number formatting. Unchanged gradient and
+  hidden-node writes are skipped.
+- `motion.css` stands the CSS idle loops down only on the animated elements
+  while the engine owns them, instead of on every descendant of the root.
+- With the CPU throttled 6x, animated bolotas use 20 to 35% less main-thread
+  time than 0.2.1. Ten orbiting bolotas hold 60 fps where 0.2.1 dropped
+  frames.
+- The lazy decor chunk grows to about 6.8 KB gzip.
+
 ## 0.2.1
 
 First published release of the 0.2 engine. The repository inherited a
