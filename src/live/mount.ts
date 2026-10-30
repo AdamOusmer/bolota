@@ -14,6 +14,7 @@ import { cancelRead, readNextFrame, startFrames, stopFrames } from "./frames";
 import { ALIASES, resolveExpression } from "./names";
 import { cueBlink, eyeRig, faceEyes, type EyeRig } from "./rig";
 import { Timeline, frameDt, type PlayOptions } from "./timeline";
+import { putter } from "./put";
 import { uprightTransform } from "./upright";
 
 export type LiveOptions = Omit<BolotaOptions, "expression"> & { expression?: string };
@@ -29,6 +30,8 @@ const TRAVEL = 3;
 const POSE_VARS = [
   "esx", "esy", "tilt", "edy", "edx", "esx2", "esy2", "tilt2", "edy2", "epx", "lock", "shake", "bdy",
 ].map((k) => `--mo-${k}`);
+
+const RIG_KEYS = ["x", "y", "width", "height", "rx", "ry", "transform"] as const;
 
 const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
@@ -68,7 +71,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
 
   const undo: (() => void)[] = [];
   const added: Element[] = [];
-  const written = new WeakMap<Element, Record<string, string | null>>();
+  const put = putter();
   let swaps: [Element, Element, Element][] = [];
   let built = false;
   let dead = false;
@@ -116,22 +119,10 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     undo.push(() => attrs.forEach((a, i) => (was[i] === null ? el.removeAttribute(a) : el.setAttribute(a, was[i]!))));
   }
 
-  function put(el: Element, key: string, value: string | null): boolean {
-    let seen = written.get(el);
-    if (!seen) written.set(el, (seen = Object.create(null) as Record<string, string | null>));
-    if (key in seen && seen[key] === value) return false;
-    seen[key] = value;
-    if (key.startsWith("--")) {
-      const style = (el as SVGElement).style;
-      if (value === null) style.removeProperty(key);
-      else style.setProperty(key, value);
-    } else if (value === null) el.removeAttribute(key);
-    else el.setAttribute(key, value);
-    return true;
-  }
-
-  function setRig(rect: Element, a: EyeRig): void {
-    for (const k of ["x", "y", "width", "height", "rx", "ry", "transform"] as const) put(rect, k, a[k]);
+  function setRig(rect: Element, a: EyeRig): boolean {
+    let changed = false;
+    for (const k of RIG_KEYS) changed = put(rect, k, a[k]) || changed;
+    return changed;
   }
 
   function build(): void {
@@ -232,8 +223,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     }
     fitEyes(L, boxes, turn, out);
     boxes.forEach((b, i) => {
-      const a = eyeRig(b);
-      for (const k of ["x", "y", "width", "height", "rx", "ry", "transform"] as const) changed = put(rects[i]!, k, a[k]) || changed;
+      changed = setRig(rects[i]!, eyeRig(b)) || changed;
       changed = put(eyeEls[i]!, "--mo-lean", String(Math.round(b.rot * 100) / 100)) || changed;
     });
     changed = put(eyesG, "--mo-track-x", kx ? kx.toFixed(3) : null) || changed;

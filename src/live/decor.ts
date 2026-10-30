@@ -3,7 +3,9 @@
 
 import { contrast, ensureContrast, fromHex, mixHex, toHex, type Oklch } from "../color";
 import { CHOREO, clamp, type StateId } from "./choreo";
+import { r3 } from "../morph";
 import { edge, type OutlineLayout } from "./outline";
+import { putter } from "./put";
 
 /**
  * What a state draws around the body rather than does to it: rings, the
@@ -108,7 +110,6 @@ const ACCENT_GAP = 0.1;
 const ACCENT_TURNS = [180, 150, 210, 120, 240, 90, 270];
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
-const r3 = (v: number) => Math.round(v * 1000) / 1000;
 const mod360 = (h: number) => ((h % 360) + 360) % 360;
 
 function createRng(seed: number): () => number {
@@ -219,15 +220,7 @@ function isOutline(l: DecorLayout): l is DecorLayout & OutlineLayout {
   return "petals" in l && "shape" in l;
 }
 
-const cells = new WeakMap<Element, Record<string, string | number>>();
-
-function put(node: Element, key: string, value: string | number): void {
-  let cache = cells.get(node);
-  if (!cache) cells.set(node, (cache = {}));
-  if (cache[key] === value) return;
-  cache[key] = value;
-  node.setAttribute(key, String(value));
-}
+const put = putter();
 
 interface Colors {
   head: string;
