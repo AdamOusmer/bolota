@@ -13,6 +13,8 @@
  */
 
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import type { BunPlugin } from "bun";
+import { decorSharesEngine } from "./decor-shared";
 
 const DIR = "scripts/.fixtures";
 
@@ -23,6 +25,7 @@ const ENTRIES: {
   source: string;
   /** Entry file extension. Defaults to a TSX consumer. */
   ext?: string;
+  plugins?: BunPlugin[];
 }[] = [
   {
     // Expressions are passed in as values from `bolota/expression`, so a
@@ -231,21 +234,34 @@ const ENTRIES: {
     // engine by dropping `Timeline.loop` (unused here), the decor warm-up and
     // palette plumbing and the duplicated unknown-state throw. Budget is 16747
     // plus ~5%.
+    //
+    // Re-measured as a consumer ships it: `mountEngine` plus the two private
+    // underscore exports (`_CHOREO`, `_r3`) that `decor.js` imports, which a
+    // bundler therefore cannot drop. 16766 B (16765 for `mountEngine` alone).
+    // Both are helpers the engine already holds for itself, so sharing them
+    // costs it +1 B and takes them out of the decor chunk. Adding `putter`
+    // measured 16770, `edge` and the colour helpers more (16999 with all ten),
+    // so those stay in the decor chunk. The budget is held under the old
+    // engine's 16770 on purpose: first-load size is the priority, so there is
+    // no 5% room here. Engine plus decor: 24132 -> 23176 B.
     name: "engine",
-    budget: 17580,
+    budget: 16769,
     external: ["*/decor.js"],
-    source: `import { mountEngine } from "../../src/engine";
-             globalThis.x = mountEngine;`,
+    source: `import { mountEngine, _CHOREO, _r3 } from "../../src/engine";
+             globalThis.x = [mountEngine, _CHOREO, _r3];`,
   },
   {
     // The chunk the engine loads on idle or on the first decor-bearing state.
-    // Measured 7367 B alone: more than the ~3.4 KB it took out of the engine
-    // row because it carries its own copies of the colour and outline helpers
-    // the engine also uses (no code splitting, see `scripts/build.ts`). Budget
-    // is 7367 plus ~5%.
+    // Measured 7367 B while it carried its own copies of `r3`, the attribute
+    // writer and the choreo table the engine also holds. It now imports
+    // `CHOREO` and `r3` from `engine.js` (`scripts/decor-shared.ts`), which is
+    // always loaded first, and measures 6410 B. The colour, outline and
+    // attribute-writer helpers stay here: sharing them would grow first load.
+    // Budget is that plus ~5%.
     name: "decor (lazy chunk)",
-    budget: 7750,
+    budget: 6730,
     external: [],
+    plugins: [decorSharesEngine],
     source: `import { createDecor } from "../../src/live/decor";
              globalThis.x = createDecor;`,
   },
@@ -277,6 +293,7 @@ for (const entry of ENTRIES) {
     target: "browser",
     minify: true,
     external: entry.external,
+    plugins: entry.plugins,
   });
 
   if (!build.success) {

@@ -71,3 +71,5 @@ export function engineExpressions(): string[] {
 export function mountEngine(svg: SVGSVGElement, name: string, opts?: EngineOptions): EngineHandle {
   return mountLive(svg, name, opts);
 }
+
+export { CHOREO as _CHOREO, r3 as _r3 } from "./live/shared";

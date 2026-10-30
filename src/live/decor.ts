@@ -2,10 +2,10 @@
 // Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
 import { contrast, ensureContrast, fromHex, mixHex, toHex, type Oklch } from "../color";
-import { CHOREO, clamp, type StateId } from "./choreo";
-import { r3 } from "../morph";
+import { clamp, type StateId } from "./choreo";
 import { edge, type OutlineLayout } from "./outline";
 import { putter } from "./put";
+import { CHOREO, r3 } from "./shared";
 
 /**
  * What a state draws around the body rather than does to it: rings, the
