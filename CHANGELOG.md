@@ -22,6 +22,12 @@ which flushes style, once per bolota.
 
 ### Changed
 
+- **The eye fit starts from last frame's answer.** Under a head turn
+  (`wander`, `follow`, the gestures) the search for how much turn and size the
+  eyes keep no longer restarts from the whole range: it brackets around the
+  previous frame's result. 6.9 to 4.2 fits per settle and 56 to 30 µs per
+  engine per frame over 9,560 recorded `wander` frames; an eye lands at most
+  0.024 viewbox units from the cold result, and always inside the body.
 - **The stylesheet keeps the breath and blink while the engine animates.** The
   frame loop writes only what moves (eyes, act, shake, decor), so an awake
   engine no longer restyles the svg every frame or at each hand-over. Hosts

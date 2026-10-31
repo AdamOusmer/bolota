@@ -1,12 +1,13 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { _layout } from "../src/bolota";
 import * as roster from "../src/expression";
 import { CHOREO, expressed } from "../src/live/choreo";
 import { CLEARANCE, MARGIN, eyeBox, settleEyes, type EyeBox } from "../src/live/fit";
 import { FOLLOW_MAX_YAW, FOLLOW_PITCH_DOWN, FOLLOW_PITCH_UP } from "../src/live/follow";
-import { MAX_PITCH_DRIFT, MAX_YAW_DRIFT } from "../src/live/head";
+import { MAX_PITCH_DRIFT, MAX_YAW_DRIFT, wander, type Gaze } from "../src/live/head";
+import * as outline from "../src/live/outline";
 import { edge } from "../src/live/outline";
 import { faceEyes } from "../src/live/rig";
 import type { Pose } from "../src/morph";
@@ -219,5 +220,43 @@ describe("eye constraint", () => {
     );
     expect(worstDepth).toBeGreaterThan(MARGIN - 0.1);
     expect(worstGap).toBeGreaterThan(CLEARANCE - 0.05);
+  }, 60_000);
+});
+
+describe("warm-started settle", () => {
+  test("follows the cold answer within 0.05 units for a quarter fewer outline probes on the frames that search", () => {
+    const spy = spyOn(outline, "depth");
+    const warmBoxes = [eyeBox(), eyeBox()];
+    const coldBoxes = [eyeBox(), eyeBox()];
+    const g: Gaze = { yaw: 0, pitch: 0, roll: 0 };
+    let warm = 0, cold = 0, worst = 0;
+    for (let seed = 0; seed < 200; seed++) {
+      const l = _layout(`warm-${seed}`);
+      const rest = l.eyes.map((e) => ({ ...e }));
+      const kept = { gaze: 1, shrink: 1 };
+      for (let f = 0; f < 60; f++) {
+        wander(f / 60, 1, g);
+        g.yaw += 30 * Math.sin(f / 40 + seed);
+        g.pitch += 25 * Math.sin(f / 55 + seed * 2);
+        spy.mockClear();
+        settleEyes(l, rest, g, 0, warmBoxes, kept);
+        const warmCalls = spy.mock.calls.length;
+        spy.mockClear();
+        const fresh = { gaze: 1, shrink: 1 };
+        settleEyes(l, rest, g, 0, coldBoxes, fresh);
+        if (fresh.gaze < 1 || fresh.shrink < 1) {
+          warm += warmCalls;
+          cold += spy.mock.calls.length;
+        }
+        for (let i = 0; i < 2; i++) {
+          const a = warmBoxes[i]!, b = coldBoxes[i]!;
+          worst = Math.max(worst, Math.abs(a.cx - b.cx), Math.abs(a.cy - b.cy), Math.abs(a.rx - b.rx), Math.abs(a.ry - b.ry));
+        }
+      }
+    }
+    spy.mockRestore();
+    console.log(`warm settle: ${warm} depth calls against ${cold} cold (${((100 * warm) / cold).toFixed(1)}%), worst difference ${worst.toFixed(4)}`);
+    expect(worst).toBeLessThan(0.05);
+    expect(warm).toBeLessThanOrEqual(0.75 * cold);
   }, 60_000);
 });
