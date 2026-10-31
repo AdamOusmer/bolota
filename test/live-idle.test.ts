@@ -237,30 +237,35 @@ describe("bloub's head", () => {
 });
 
 describe("the engine hands the breath and blink between the compositor and the frame clock", () => {
-  const proto = FakeElement.prototype as unknown as { getAnimations?: () => { currentTime: number }[] };
+  const proto = FakeElement.prototype as unknown as { getAnimations?: () => never[] };
 
-  test("CSS at rest, frame clock while animating, and back at the same phase", () => {
-    proto.getAnimations = () => [{ currentTime: 1234 }];
+  test("CSS at rest, frame clock while animating, and back at the same phase, without asking the animations", () => {
+    proto.getAnimations = () => {
+      throw new Error("the hand-over read the animations");
+    };
     try {
       const doc = new FakeDocument();
       const svg = makeSvg(doc);
       const handle = mountLive(svg as unknown as SVGSVGElement, "idle-seed");
+      const seeded = -parseFloat(svg.style.getPropertyValue("--mo-lag"));
       expect(doc.defaultView.queue.length).toBe(0);
       expect(svg.hasAttribute("data-mo-js")).toBe(false);
 
+      doc.timeline.currentTime = 1234;
       handle.play("wide");
       expect(svg.hasAttribute("data-mo-js")).toBe(true);
-      run(doc, 0, 0.5);
+      run(doc, 1234, 0.5);
       expect(svg.hasAttribute("data-mo-live")).toBe(true);
       expect(svg.querySelector(".mo-breathe")!.getAttribute("transform")).toMatch(/^scale\(1 /);
 
-      run(doc, 500, 12);
+      const parked = run(doc, 1734, 12);
       expect(doc.defaultView.queue.length).toBe(0);
       expect(svg.hasAttribute("data-mo-js")).toBe(false);
       expect(svg.querySelector(".mo-breathe")!.getAttribute("transform")).toBeNull();
       expect(svg.querySelectorAll(".mo-eye").every((e) => e.children[0]!.getAttribute("transform") === null)).toBe(true);
       const lag = -parseFloat(svg.style.getPropertyValue("--mo-lag"));
-      expect(lag).toBeGreaterThan(1234 + 1000);
+      expect(lag).toBeGreaterThan(seeded + 1234 + 1000);
+      expect(lag).toBeLessThanOrEqual(seeded + parked + 16);
       handle.destroy();
       expect(svg.getAttribute("style")).toBeNull();
     } finally {

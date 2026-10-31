@@ -207,6 +207,7 @@ export class FakeWindow extends Listenable {
 export class FakeDocument extends Listenable {
   defaultView = new FakeWindow();
   hidden = false;
+  timeline = { currentTime: 0 };
   rects = 0;
   log: Log | null = null;
   createElementNS(_ns: string, tag: string) {
@@ -223,6 +224,7 @@ export function makeSvg(doc: FakeDocument, html = "") {
 
 /** Runs one frame at `ms`; reads, then ticks, as the shared loop does. */
 export function frame(doc: FakeDocument, ms: number) {
+  doc.timeline.currentTime = ms;
   const due = doc.defaultView.queue;
   doc.defaultView.queue = [];
   for (const cb of due) cb(ms);

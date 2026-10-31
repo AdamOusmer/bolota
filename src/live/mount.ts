@@ -17,10 +17,12 @@ import { cancelRead, readNextFrame, startFrames, stopFrames, watchSight } from "
 import { BLINK_CYCLE, BREATH_MS, type Gaze } from "./head";
 import { ALIASES, resolveExpression } from "./names";
 import { idleDrift, idleFrame, idleLoops, idleShake } from "./idle";
+import { prepared } from "./outline";
 import { faceEyes } from "./rig";
 import { Timeline, frameDt, type PlayOptions } from "./timeline";
 import { putter, type Slot } from "./put";
 import { uprightTransform } from "./upright";
+import { warm } from "./warm";
 
 export type LiveOptions = Omit<BolotaOptions, "expression"> & { expression?: string };
 
@@ -55,6 +57,18 @@ const stamp = (sig: Float64Array, i: number, v: number): number => {
 const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
 const clamp1 = (v: number) => (v < -1 ? -1 : v > 1 ? 1 : v);
+
+const POSE_KEYS = Object.keys(IDENT) as (keyof Pose)[];
+
+/** The face of a seeded bolota at rest: the pose and every turn at identity, so the eyes sit where the static render drew them. */
+function atRest(e: Eyes, g: Gaze, turn: number): boolean {
+  if (e.alpha < 1 || e.own !== 0 || e.head.spread !== 0 || turn !== 0) return false;
+  if (g.yaw !== 0 || g.pitch !== 0 || g.roll !== 0) return false;
+  const p = e.pose;
+  if (p === IDENT) return true;
+  for (const k of POSE_KEYS) if (p[k] !== IDENT[k]) return false;
+  return true;
+}
 
 type DecorModule = typeof import("./decor.js");
 
@@ -162,6 +176,9 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let wraps: Element[] = [];
   let hybrid = false;
   let jsPhase = true;
+  let cssAt = 0;
+  let seated = false;
+  let unwarm: (() => void) | null = null;
   let baseBody = breathAt;
   let baseEye = blinkAt;
   let pendingWake = false;
@@ -207,6 +224,28 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let resized: ResizeObserver | null = null;
 
   const mk = <K extends keyof SVGElementTagNameMap>(tag: K) => doc.createElementNS(SVG_NS, tag);
+
+  /** The clock the stylesheet's animations run on. */
+  const nowMs = () => Number(doc.timeline?.currentTime) || Number(view.performance?.now()) || 0;
+
+  /** The seeded eyes as rig boxes, the rest frame the static render already shows. */
+  function seat(): void {
+    for (let i = 0; i < 2; i++) {
+      const b = boxes[i]!;
+      const s = L.eyes[i]!;
+      b.cx = s.cx;
+      b.cy = s.cy;
+      b.rx = s.rx;
+      b.ry = s.ry;
+      b.rot = s.rot;
+      b.a = 1;
+      b.b = 0;
+      b.c = 0;
+      b.d = 1;
+    }
+    corr.gaze = 1;
+    corr.shrink = 1;
+  }
 
   function snapshot(el: Element, attrs: string[]): void {
     const was = attrs.map((a) => el.getAttribute(a));
@@ -360,6 +399,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     if (!reduced && jsPhase) svg.setAttribute("data-mo-js", "");
     svg.style.setProperty("--mo-lag", `${-Math.round(baseBody)}ms`);
     svg.style.setProperty("--mo-elag", `${-Math.round(baseEye)}ms`);
+    cssAt = nowMs();
     for (const el of [host, breathe]) snapshot(el, ["transform"]);
 
     eyesG = breathe.querySelector(".mo-eyes")!;
@@ -493,12 +533,25 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       headNow.spread = e.head.spread;
       faceNow.pose = p;
       faceNow.own = e.own;
-      faceEyes(L, faceNow, turn, rest);
-      settleEyes(L, rest, g, turn, boxes, corr);
+      // Until the outline tables exist, a rest frame keeps the static render's
+      // own eyes; the fit that may trim them runs once the tables are warm.
+      seated = !prepared(L) && atRest(e, g, turn);
+      if (seated) seat();
+      else {
+        faceEyes(L, faceNow, turn, rest);
+        settleEyes(L, rest, g, turn, boxes, corr);
+      }
       changed = writeRig(rects[0]!, 0, boxes[0]!) || changed;
       changed = writeRig(rects[1]!, 1, boxes[1]!) || changed;
     }
     return changed;
+  }
+
+  function warmed(): void {
+    unwarm = null;
+    if (dead || !seated) return;
+    faceSig.fill(NaN);
+    if (!ticking) paint(actNow, eyesNow, gazeNow);
   }
 
   function still(): void {
@@ -609,12 +662,17 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     startFrames(view, tick);
   }
 
-  /** The compositor's breath and blink hand over to the frame clock, from the phase they have reached. */
+  /**
+   * The compositor's breath and blink hand over to the frame clock, from the
+   * phase they have reached: the time since the stylesheet took them, on the
+   * document timeline they run on. Asking the animations themselves
+   * (`getAnimations`) flushes style for every mount in a crowd.
+   */
   function takeOver(): void {
     if (jsPhase) return;
-    const elapsed = (el: Element) => Number(el.getAnimations()[0]?.currentTime) || 0;
-    bodyMs = baseBody + elapsed(breathe);
-    eyeMs = baseEye + elapsed(wraps[0]!);
+    const elapsed = nowMs() - cssAt;
+    bodyMs = baseBody + elapsed;
+    eyeMs = baseEye + elapsed;
     jsPhase = true;
     sigBreathe = NaN;
     svg.setAttribute("data-mo-js", "");
@@ -633,6 +691,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     rects.forEach((rect, i) => writeRig(rect, i, boxes[i]!));
     sigShakeX = sigShakeY = NaN;
     svg.removeAttribute("data-mo-js");
+    cssAt = nowMs();
     jsPhase = false;
   }
 
@@ -756,6 +815,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     idleEval();
     frame(0);
     idleWrite();
+    if (!prepared(L)) unwarm = warm(view, L, warmed);
   }
   if (initial) express(initial, true);
   if (!decorModule) {
@@ -816,6 +876,8 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       if (dead) return;
       dead = true;
       unwatch?.();
+      unwarm?.();
+      unwarm = null;
       halt();
       release();
       if (!built) return;

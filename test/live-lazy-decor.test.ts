@@ -91,7 +91,8 @@ describe("lazy decor", () => {
       const doc = new FakeDocument();
       mountLive(asSvg(makeSvg(doc)), `lazy-w${i}`);
     }
-    expect(timers).toBe(5);
+    // One decor warmup per mount, plus one outline warm queue per window.
+    expect(timers).toBe(10);
     await new Promise((r) => realSetTimeout(r, 300));
     const doc = new FakeDocument();
     const svg = makeSvg(doc);

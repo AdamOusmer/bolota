@@ -10,6 +10,33 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## Unreleased
+
+No face changes. Mounting does the work of a mount, not of the first turn.
+
+A crowd of 23 engines mounted together cost one 545 ms task on a phone-class
+budget (Chromium, CPU throttled 6x): the body outline tables (1440 rays over
+the traced path, per instance) were built inside the first frame, and the
+hand-over from the stylesheet's breath and blink asked `getAnimations()`,
+which flushes style, once per bolota.
+
+### Changed
+
+- **Outline tables are built in idle time.** A mount queues its layout on one
+  queue per window, drained in `requestIdleCallback` slices (one table per
+  timeout where the window has none, as on iOS). A frame at rest meanwhile
+  writes the seeded eyes the static render already shows, which is what the
+  exact fit returns at rest on every seed measured (6000 of 6000). The first
+  real turn before the tables exist builds them then, as before.
+- **The hand-over reads the document timeline**, not the animations: the
+  phase is the time since the stylesheet took the breath and blink, on the
+  clock they run on. No style flush per wake.
+- The same 23 mounts, same budget: 545 ms → 45 ms, in two tasks of 50 ms
+  instead of one of 560. The 0.1.7 engine took 270 ms. On the page, the
+  task after first paint went from 440 ms to 110 ms. Nothing moves
+  differently once the tables exist; `motion.css` and the frame loop are
+  untouched.
+
 ## 0.2.3
 
 No face changes. The live engine moves the way the 0.1 engine did again.
