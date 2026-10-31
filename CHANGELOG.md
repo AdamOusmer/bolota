@@ -26,6 +26,10 @@ which flushes style, once per bolota.
   frame loop writes only what moves (eyes, act, shake, decor), so an awake
   engine no longer restyles the svg every frame or at each hand-over. Hosts
   may take the breath with `data-mo-breath="host"` on the svg.
+- **The engine blinks on a timer.** At rest it is parked with no frame
+  registered and runs no stylesheet animation inside the svg: a timer wakes it
+  for each blink's 180 ms and it parks again. The breath is the one loop left
+  on the stylesheet, and a host can take it.
 - **Outline tables are built in idle time.** A mount queues its layout on one
   queue per window, drained in `requestIdleCallback` slices (one table per
   timeout where the window has none, as on iOS). A frame at rest meanwhile

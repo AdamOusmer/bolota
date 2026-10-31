@@ -14,7 +14,7 @@ import type { Decor, DecorFrame, DecorHost, DecorPalette } from "./decor.js";
 import { eyeBox, settleEyes, type Correction, type Eye, type EyeBox } from "./fit";
 import { Glide, NO_LOOK, followLook, type Look } from "./follow";
 import { cancelRead, readNextFrame, startFrames, stopFrames, watchSight } from "./frames";
-import { BLINK_CYCLE, BREATH_MS, type Gaze } from "./head";
+import { BLINK_CYCLE, BREATH_MS, lid, nextBlink, type Gaze } from "./head";
 import { ALIASES, resolveExpression } from "./names";
 import { idleDrift, idleFrame, idleLoops, idleShake } from "./idle";
 import { prepared } from "./outline";
@@ -202,6 +202,9 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let eyeBlink = 1000;
   let ticking = false;
   let awake = false;
+  let blinkTimer: ReturnType<typeof setTimeout> | undefined;
+  let blinkUntil = 0;
+  let parkedAt = 0;
 
   let clock = 0;
   let last = 0;
@@ -321,20 +324,29 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     return p >= 1 ? shakeTo : shakeFrom + (shakeTo - shakeFrom) * shakeCurve.ease(p < 0 ? 0 : p);
   }
 
+  const blinking = () => eyeMs < blinkUntil;
+
+  /**
+   * In hybrid mode the lid is computed only while a blink lasts: the one a
+   * timer woke the engine for, or one that comes up while it is awake anyway.
+   */
   function idleEval(): void {
     if (hoverMode) amp = ampNow();
-    if (!hybrid) idleLoops(bodyMs, eyeMs, amp, idle);
+    if (!hybrid) return idleLoops(bodyMs, eyeMs, amp, idle);
+    if (ticking && !blinking() && lid(eyeMs) < 1) blinkUntil = nextBlink(eyeMs).end;
+    if (blinking()) idleLoops(bodyMs, eyeMs, amp, idle);
+    else idle.blink = 1;
   }
 
   /**
    * Writes what the tremor moved, and in the modes without a compositor
-   * stylesheet, the breath and the blink too. The blink squashes the group
-   * under `.mo-eye`, about its box's centre, so it closes the drawn eye on
-   * screen's vertical, as bloub's did, whatever the head did to it. In hybrid
-   * mode the stylesheet keeps both and only the entrance cue folds the rects.
+   * stylesheet, the breath too. The blink squashes the group under `.mo-eye`,
+   * about its box's centre, so it closes the drawn eye on screen's vertical, as
+   * bloub's did, whatever the head did to it. Hybrid mode keeps the breath on
+   * the stylesheet and folds the blink and the entrance cue into the rects.
    */
   function idleWrite(): void {
-    if (!jsPhase) return;
+    if (!jsPhase && !blinking()) return;
     if (!hybrid) {
       const b = q(idle.breathe, 10000);
       if (b !== sigBreathe) {
@@ -353,7 +365,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
         sHost.set(hx || hy ? `translate(${hx / 1000} ${hy / 1000})` : null);
       }
     }
-    const k = q(hybrid ? entrance() : Math.min(idle.blink, entrance()), 1000);
+    const k = q(Math.min(idle.blink, entrance()), 1000);
     if (k !== eyeBlink) {
       eyeBlink = k;
       rects.forEach((rect, i) => writeRig(rect, i, boxes[i]!));
@@ -450,13 +462,12 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     if (!svg.hasAttribute("viewBox")) svg.setAttribute("viewBox", "0 0 100 100");
     svg.setAttribute("overflow", "visible");
     // The stylesheet's own idle (saccade, bob, its blink) stands down for good
-    // under the engine: what it runs at rest is the engine's breath and blink.
+    // under the engine: what it runs at rest is the engine's breath.
     if (!reduced) svg.setAttribute("data-mo-live", "");
     hybrid = !hoverMode && !reduced && typeof breathe.getAnimations === "function";
     jsPhase = !hybrid;
     if (!reduced && jsPhase) svg.setAttribute("data-mo-js", "");
     svg.style.setProperty("--mo-lag", `${-Math.round(breathAt)}ms`);
-    svg.style.setProperty("--mo-elag", `${-Math.round(blinkAt)}ms`);
     for (const el of [host, breathe]) snapshot(el, ["transform"]);
 
     eyesG = breathe.querySelector(".mo-eyes")!;
@@ -696,7 +707,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       else if (!quietAt) quietAt = ms;
       else if (ms - quietAt > QUIET * 1000) awake = false;
     }
-    if (!awake && hybrid && shakeTo === 0 && entrance() === 1) {
+    if (!awake && hybrid && shakeTo === 0 && entrance() === 1 && !blinking()) {
       giveBack();
       halt();
       return;
@@ -705,22 +716,50 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     if (!awake && hoverMode && ampTo === 0 && clock >= ampAt + AMP_RAMP && shakeTo === 0 && clock >= shakeAt + shakeCurve.ms / 1000 && entrance() === 1) halt();
   }
 
+  const wallNow = (): number => view.performance?.now?.() ?? Date.now();
+
+  function clearBlink(): void {
+    if (view.clearTimeout) view.clearTimeout(blinkTimer);
+    else clearTimeout(blinkTimer);
+  }
+
+  /** A parked hybrid engine sleeps to the next blink; the eye clock keeps wall time meanwhile. */
+  function armBlink(): void {
+    clearBlink();
+    if (!hybrid || dead || paused || reduced || !sight || ticking) return;
+    parkedAt = wallNow();
+    const delay = nextBlink(eyeMs).start - eyeMs;
+    blinkTimer = view.setTimeout ? view.setTimeout(blinkWake, delay) : setTimeout(blinkWake, delay);
+  }
+
+  /** Every way out of the parked state clears the timer, so a wake finds the engine as it was parked. */
+  function blinkWake(): void {
+    eyeMs += wallNow() - parkedAt;
+    const next = nextBlink(eyeMs);
+    if (next.start - eyeMs > 100) return armBlink();
+    blinkUntil = next.end;
+    start();
+  }
+
   function halt(): void {
     awake = false;
-    if (!ticking) return;
-    ticking = false;
-    last = 0;
-    stopFrames(view, tick);
+    if (ticking) {
+      ticking = false;
+      last = 0;
+      stopFrames(view, tick);
+    }
+    armBlink();
   }
 
   function start(): void {
     if (dead || paused || reduced || !sight || ticking) return;
+    clearBlink();
     ticking = true;
     last = 0;
     startFrames(view, tick);
   }
 
-  /** The frame loop starts writing the morphs; the stylesheet keeps the breath and the blink. */
+  /** The frame loop starts writing the morphs; the stylesheet keeps the breath. */
   function takeOver(): void {
     if (jsPhase) return;
     jsPhase = true;
@@ -729,10 +768,12 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
 
   /** And back: the loop's tremor and entrance fold are cleared, the stylesheet never stopped. */
   function giveBack(): void {
+    if (eyeBlink !== 1000) {
+      eyeBlink = 1000;
+      rects.forEach((rect, i) => writeRig(rect, i, boxes[i]!));
+    }
     if (!jsPhase) return;
     sHost.set(null);
-    eyeBlink = 1000;
-    rects.forEach((rect, i) => writeRig(rect, i, boxes[i]!));
     sigShakeX = sigShakeY = NaN;
     svg.removeAttribute("data-mo-js");
     jsPhase = false;
@@ -783,6 +824,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       pendingWake = false;
       wake();
     }
+    armBlink();
   }
 
   function release(): void {
@@ -868,6 +910,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   if (!reduced) {
     unwatch = watchSight(view, svg, sightChange);
     if (!hoverMode && !hybrid) start();
+    else armBlink();
   }
 
   const handle: EngineHandle = {

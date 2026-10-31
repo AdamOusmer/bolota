@@ -183,7 +183,19 @@ export class FakeElement extends Listenable {
 
 export class FakeWindow extends Listenable {
   queue: Array<(ms: number) => void> = [];
+  timers: { at: number; fn: () => void; id: number }[] = [];
+  now = 0;
+  nextTimer = 0;
+  performance = { now: () => this.now };
   reduced = false;
+  setTimeout(fn: () => void, ms: number) {
+    const id = ++this.nextTimer;
+    this.timers.push({ at: this.now + ms, fn, id });
+    return id;
+  }
+  clearTimeout(id: number) {
+    this.timers = this.timers.filter((t) => t.id !== id);
+  }
   ResizeObserver = class {
     constructor(public cb: () => void) {}
     observe() {}
@@ -224,16 +236,25 @@ export function makeSvg(doc: FakeDocument, html = "") {
 
 /** Runs one frame at `ms`; reads, then ticks, as the shared loop does. */
 export function frame(doc: FakeDocument, ms: number) {
+  const view = doc.defaultView;
   doc.timeline.currentTime = ms;
-  const due = doc.defaultView.queue;
-  doc.defaultView.queue = [];
-  for (const cb of due) cb(ms);
+  view.now = ms;
+  for (;;) {
+    const due = view.timers.filter((t) => t.at <= ms).sort((a, b) => a.at - b.at)[0];
+    if (!due) break;
+    view.timers = view.timers.filter((t) => t !== due);
+    due.fn();
+  }
+  const queued = view.queue;
+  view.queue = [];
+  for (const cb of queued) cb(ms);
 }
 
-/** Frames at 60 Hz from `from` ms for `seconds`, stopping early if the queue empties. */
+/** Frames at 60 Hz from `from` ms for `seconds`, stopping early if the queue and the timers empty. */
 export function run(doc: FakeDocument, from: number, seconds: number) {
   let ms = from;
   const end = from + seconds * 1000;
-  while (ms < end && doc.defaultView.queue.length) frame(doc, (ms += 16));
+  const view = doc.defaultView;
+  while (ms < end && (view.queue.length || view.timers.some((t) => t.at <= end))) frame(doc, (ms += 16));
   return ms;
 }

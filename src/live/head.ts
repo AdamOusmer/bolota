@@ -114,8 +114,7 @@ export function breath(ms: number, amp: number): number {
 /**
  * bloub's blink schedule, as one cycle that repeats: when each blink starts,
  * in seconds. Gaps of 1.9 to 4.6s and one double blink, the spread bloub drew
- * at random; a fixed cycle is what lets `motion.css` (`mo-live-blink`) carry it
- * at rest.
+ * at random; a fixed cycle is what lets the engine sleep to the next blink.
  */
 export const BLINKS = [1.4, 4.5, 4.74, 8.2, 10.4, 14.1] as const;
 export const BLINK_CYCLE = 16;
@@ -131,10 +130,19 @@ export function lid(ms: number): number {
   for (let i = BLINKS.length - 1; i >= 0; i--) {
     const k = (t - BLINKS[i]!) / BLINK_DUR;
     if (k < 0) continue;
-    if (k > 1) return 1;
+    if (k > 1 - 1e-9) return 1;
     return k < BLINK_SHUT ? 1 - k / BLINK_SHUT : (k - BLINK_SHUT) / (1 - BLINK_SHUT);
   }
   return 1;
+}
+
+/** The first blink not yet over at `ms`: where it starts and where `lid` is back to 1, in the ms of `lid`. */
+export function nextBlink(ms: number): { start: number; end: number } {
+  const cycle = BLINK_CYCLE * 1000;
+  const base = Math.floor(ms / cycle) * cycle;
+  const t = (ms - base) / 1000;
+  const start = base + [...BLINKS, BLINK_CYCLE + BLINKS[0]].find((s) => t < s + BLINK_DUR)! * 1000;
+  return { start, end: start + BLINK_DUR * 1000 };
 }
 
 /** The eye's height at lid `l`: a blink is a vertical squash on screen down to 6%. */

@@ -131,15 +131,10 @@ describe("the engine's rest loops match motion.css", () => {
     expect(f.breathe).toBe(1);
   });
 
-  test("blink: bloub's schedule, one cycle the stylesheet repeats, closing to 6%", () => {
-    const stops = stopsOf("mo-live-blink", ["scale"]);
-    expect(/svg\[data-mo-live\] \.mo-eye > \* \{[^}]*animation-duration: calc\(16000ms[^}]*linear/.test(css)).toBe(true);
+  test("blink: bloub's schedule, one 16s cycle the engine times itself on, closing to 6%", () => {
+    expect(css).not.toContain("mo-live-blink");
+    expect(css).not.toContain("--mo-elag");
     expect(BLINK_CYCLE).toBe(16);
-    for (let t = 0; t < 2 * BLINK_CYCLE * 1000; t += 3) {
-      idleLoops(0, t, 1, f);
-      const [, y] = sample(stops, ((t / 1000) % BLINK_CYCLE) / BLINK_CYCLE, { "mo-amp": 1 });
-      expect(f.blink).toBeCloseTo(y!, 3);
-    }
     const shut = BLINKS.map((b) => {
       idleLoops(0, (b + BLINK_DUR * BLINK_SHUT) * 1000, 1, f);
       return f.blink;
@@ -166,6 +161,20 @@ describe("the engine's rest loops match motion.css", () => {
   test("the stylesheet's own idle stands down under the engine", () => {
     const rule = /svg\[data-mo-live\] \.mo-bob,[^{]*\{\s*animation: none;\s*\}/.exec(css)![0];
     for (const sel of [".mo-bob", ".mo-eyes", ".mo-eye > * > *"]) expect(rule).toContain(sel);
+  });
+
+  test("under the engine every base animated selector is stood down; only the breath may run, and not for a host that takes it", () => {
+    const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const rules = [...stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ sels: m[1]!.split(",").map((s) => s.trim()), body: m[2]! }));
+    const stood = new Set<string>();
+    for (const r of rules) {
+      if (!/animation:\s*none;/.test(r.body)) continue;
+      for (const s of r.sels) if (s.startsWith("svg[data-mo-live] ")) stood.add(s.slice("svg[data-mo-live] ".length));
+    }
+    for (const sel of [".mo-root", ".mo-bob", ".mo-eyes", ".mo-eye > *", ".mo-eye > * > *"]) expect(stood.has(sel), sel).toBe(true);
+    expect(rules.some((r) => r.sels.includes('svg[data-mo-live][data-mo-breath="host"] .mo-breathe') && /animation:\s*none;/.test(r.body))).toBe(true);
+    const named = rules.filter((r) => /animation-name:/.test(r.body)).flatMap((r) => r.sels).filter((s) => s.startsWith("svg[data-mo-live]"));
+    expect(named).toEqual(['svg[data-mo-live]:not([data-mo-breath="host"]) .mo-breathe']);
   });
 });
 
@@ -246,7 +255,7 @@ describe("the stylesheet keeps the breath and blink; the frame loop writes only 
       const svg = makeSvg(doc);
       const handle = mountLive(svg as unknown as SVGSVGElement, "idle-seed");
       const lag = svg.style.getPropertyValue("--mo-lag");
-      const elag = svg.style.getPropertyValue("--mo-elag");
+      expect(svg.style.getPropertyValue("--mo-elag")).toBe("");
       expect(lag).not.toBe("");
       expect(doc.defaultView.queue.length).toBe(0);
       expect(svg.hasAttribute("data-mo-js")).toBe(false);
@@ -262,7 +271,6 @@ describe("the stylesheet keeps the breath and blink; the frame loop writes only 
         expect(breathe.getAttribute("transform")).toBeNull();
         expect(wrapsClean()).toBe(true);
         expect(svg.style.getPropertyValue("--mo-lag")).toBe(lag);
-        expect(svg.style.getPropertyValue("--mo-elag")).toBe(elag);
       }
       expect(svg.hasAttribute("data-mo-live")).toBe(true);
 
