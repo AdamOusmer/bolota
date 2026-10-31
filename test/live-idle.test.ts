@@ -161,6 +161,7 @@ describe("the engine's rest loops match motion.css", () => {
   test("the stylesheet's own idle stands down under the engine", () => {
     const rule = /svg\[data-mo-live\] \.mo-bob,[^{]*\{\s*animation: none;\s*\}/.exec(css)![0];
     for (const sel of [".mo-bob", ".mo-eyes", ".mo-eye > * > *"]) expect(rule).toContain(sel);
+    expect(rule).toContain("svg[data-mo-live]:not([data-mo-shake]) .mo-root");
   });
 
   test("under the engine every base animated selector is stood down; only the breath may run, and not for a host that takes it", () => {
@@ -171,7 +172,8 @@ describe("the engine's rest loops match motion.css", () => {
       if (!/animation:\s*none;/.test(r.body)) continue;
       for (const s of r.sels) if (s.startsWith("svg[data-mo-live] ")) stood.add(s.slice("svg[data-mo-live] ".length));
     }
-    for (const sel of [".mo-root", ".mo-bob", ".mo-eyes", ".mo-eye > *", ".mo-eye > * > *"]) expect(stood.has(sel), sel).toBe(true);
+    for (const sel of [".mo-bob", ".mo-eyes", ".mo-eye > *", ".mo-eye > * > *"]) expect(stood.has(sel), sel).toBe(true);
+    expect(rules.some((r) => r.sels.includes("svg[data-mo-live]:not([data-mo-shake]) .mo-root") && /animation:\s*none;/.test(r.body))).toBe(true);
     expect(rules.some((r) => r.sels.includes('svg[data-mo-live][data-mo-breath="host"] .mo-breathe') && /animation:\s*none;/.test(r.body))).toBe(true);
     const named = rules.filter((r) => /animation-name:/.test(r.body)).flatMap((r) => r.sels).filter((s) => s.startsWith("svg[data-mo-live]"));
     expect(named).toEqual(['svg[data-mo-live]:not([data-mo-breath="host"]) .mo-breathe']);

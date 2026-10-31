@@ -195,6 +195,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let shakeTo = 0;
   let shakeAt = 0;
   let shakeCurve = MORPH_OUT;
+  let shakeHeld = 0;
   let entranceAt = -1;
   let sigBreathe = NaN;
   let sigShakeX = NaN;
@@ -326,6 +327,18 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
 
   const blinking = () => eyeMs < blinkUntil;
 
+  const shakeSettled = () => shakeHeld > 0 || (shakeTo === 0 && clock >= shakeAt + shakeCurve.ms / 1000);
+
+  /** A settled tremor is the stylesheet's (`@keyframes mo-shake`, same stops), so the loop can park. */
+  function holdShake(): void {
+    if (shakeHeld || shakeTo === 0 || shakeNow() !== shakeTo) return;
+    shakeHeld = shakeTo;
+    sHost.set(null);
+    sigShakeX = sigShakeY = 0;
+    put(svg, "--mo-shake", String(shakeHeld));
+    svg.setAttribute("data-mo-shake", "");
+  }
+
   /**
    * In hybrid mode the lid is computed only while a blink lasts: the one a
    * timer woke the engine for, or one that comes up while it is awake anyway.
@@ -355,7 +368,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       }
     }
     const sh = shakeNow();
-    if (sh !== 0 || sigShakeX !== 0 || sigShakeY !== 0) {
+    if (!shakeHeld && (sh !== 0 || sigShakeX !== 0 || sigShakeY !== 0)) {
       idleShake(bodyMs, sh, idle);
       const hx = q(idle.shakeX, 1000);
       const hy = q(idle.shakeY, 1000);
@@ -424,7 +437,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   function build(): void {
     if (built) return;
     built = true;
-    snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-js", "data-mo-live", "data-mo-asleep"]);
+    snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-js", "data-mo-live", "data-mo-shake", "data-mo-asleep"]);
     let found = svg.querySelector(".mo-breathe") ?? wrapStatic();
     if (!found) {
       const statics = Array.from(svg.children);
@@ -707,13 +720,14 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       else if (!quietAt) quietAt = ms;
       else if (ms - quietAt > QUIET * 1000) awake = false;
     }
-    if (!awake && hybrid && shakeTo === 0 && entrance() === 1 && !blinking() && nextBlink(eyeMs).start - eyeMs > 400) {
+    holdShake();
+    if (!awake && hybrid && shakeSettled() && entrance() === 1 && !blinking() && nextBlink(eyeMs).start - eyeMs > 400) {
       giveBack();
       halt();
       return;
     }
     idleWrite();
-    if (!awake && hoverMode && ampTo === 0 && clock >= ampAt + AMP_RAMP && shakeTo === 0 && clock >= shakeAt + shakeCurve.ms / 1000 && entrance() === 1) halt();
+    if (!awake && hoverMode && ampTo === 0 && clock >= ampAt + AMP_RAMP && shakeSettled() && entrance() === 1) halt();
   }
 
   const wallNow = (): number => view.performance?.now?.() ?? Date.now();
@@ -877,6 +891,11 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     build();
     put(svg, "--mo-bdy", e && e.p.bdy ? String(e.p.bdy) : null);
     shakeFrom = instant ? (e?.p.shake ?? 0) : shakeNow();
+    if (shakeHeld) {
+      shakeHeld = 0;
+      svg.removeAttribute("data-mo-shake");
+      put(svg, "--mo-shake", null);
+    }
     shakeTo = e?.p.shake ?? 0;
     shakeAt = clock;
     shakeCurve = e ? MORPH_IN : MORPH_OUT;
@@ -888,6 +907,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     else if (instant) {
       tl.express(exprPose, -1);
       frame(0);
+      holdShake();
     } else {
       tl.release(clock);
       tl.express(exprPose, clock);

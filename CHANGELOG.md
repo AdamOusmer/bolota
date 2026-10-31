@@ -22,6 +22,9 @@ which flushes style, once per bolota.
 
 ### Changed
 
+- **A held tremor runs on the stylesheet.** An engine wearing `excited` parks
+  like any other; the frame loop runs the tremor only while its amplitude
+  changes.
 - **Blinks on one page gather into shared windows.** They fire on 1.6 s
   boundaries with a per-seed spread of up to 0.32 s, so between windows no
   engine runs and the frame loop sleeps; a blink is delayed by under a window

@@ -273,8 +273,13 @@ const ENTRIES: {
     // (+145 over 21687); budget is that plus 100 B. Size accepted for 46% fewer
     // fits per settle under a head turn (6.9 to 4.2 over 9,560 recorded `wander`
     // frames, 56 to 30 us), which matters most for a crowd of engines.
+    //
+    // Raised from 21932 to 22066 for handing a settled tremor to the
+    // stylesheet (`holdShake` and its take-back in `mount.ts`). Measured
+    // 21966 B (+84 over 21882); budget is that plus 100 B. Size accepted so an
+    // engine wearing `excited` parks instead of holding the page at vsync.
     name: "engine",
-    budget: 21932,
+    budget: 22066,
     external: ["*/decor.js"],
     source: `import { mountEngine, _CHOREO, _r3 } from "../../src/engine";
              globalThis.x = [mountEngine, _CHOREO, _r3];`,

@@ -783,10 +783,12 @@ svg[data-mo-js] .mo-eye rect {
  * and the breath is the stylesheet's on `.mo-breathe` (`--mo-lag`) unless the
  * host takes it (`data-mo-breath="host"`). While the engine animates it drives
  * the morphs from its frame clock (`data-mo-js`, above) and runs the tremor
- * itself, so `.mo-root`'s `mo-shake` has nothing to do at rest.
+ * itself, so `.mo-root`'s `mo-shake` has nothing to do at rest. A held tremor
+ * (`data-mo-shake`, `--mo-shake` at its amplitude) is the stylesheet's again,
+ * so an engine wearing it can park.
  */
 svg[data-mo-live] .mo-bob,
-svg[data-mo-live] .mo-root,
+svg[data-mo-live]:not([data-mo-shake]) .mo-root,
 svg[data-mo-live] .mo-eyes,
 svg[data-mo-live] .mo-eye > *,
 svg[data-mo-live] .mo-eye > * > * {
