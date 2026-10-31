@@ -42,11 +42,13 @@ which flushes style, once per bolota.
   animates. At rest with 17 engines on a phone-class budget it alone was
   about a fifth of the main-thread time. `svg[data-mo-live] .mo-root` now
   has no animation.
-- **The static render under a mount is hidden, not painted twice.** When a
-  mount builds the engine's figure beside markup the `<svg>` already holds
-  (`parts()` output), that markup stays in place with `display="none"` and
-  returns untouched at `destroy()`. Before, every bolota painted its body
-  and eyes twice.
+- **The engine upgrades a plain static render in place.** A mount over
+  `parts()` output without `animate` wraps the server's body and eyes groups
+  into the motion structure (root, breath, bob, eye wrappers) instead of
+  drawing a second figure, so a page sends the small markup once and nothing
+  is drawn twice. `destroy()` puts the groups back where they were. Animated
+  markup is still adopted as it is, and markup the engine does not recognise
+  still gets its own figure beside it, the static copy hidden.
 - **The quiet period is wall time.** The seconds before an engine hands back
   to the stylesheet were counted on the frame clock, which clamps each slow
   frame to `MAX_FRAME`, so at 6x throttle the quiet second measured 2 s and

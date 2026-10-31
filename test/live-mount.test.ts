@@ -86,15 +86,37 @@ describe("mountLive markup", () => {
     expect(svg.outerHTML).toBe('<svg viewBox="0 0 100 100"/>');
   });
 
-  test("a static render under the engine is hidden at mount and comes back at destroy", () => {
+  test("a static render is upgraded in place to the animated structure and restored at destroy", () => {
     const doc = new FakeDocument();
     const svg = makeSvg(doc, parts(NAME).inner);
     const before = svg.outerHTML;
-    const statics = [...svg.children];
     const handle = mountLive(asSvg(svg), NAME, { animate: "hover" });
-    expect(statics.length).toBeGreaterThan(0);
-    for (const el of statics) expect(el.getAttribute("display")).toBe("none");
-    expect(svg.querySelector(".mo-root")!.hasAttribute("display")).toBe(false);
+
+    const a = parts(NAME, { animate: "always" });
+    const twin = makeSvg(new FakeDocument(), `<g class="${a.cls}">${a.inner}</g>`);
+    for (const k in a.vars) twin.style.setProperty(k, a.vars[k]!);
+    mountLive(asSvg(twin), NAME, { animate: "hover" });
+
+    const sorted = (el: FakeElement): string => {
+      const at = [...el.attrs].sort(([x], [y]) => (x < y ? -1 : 1)).map(([k, v]) => ` ${k}="${v}"`).join("");
+      return `<${el.tagName}${at}>${el.children.map(sorted).join("")}</${el.tagName}>`;
+    };
+    expect(sorted(svg)).toBe(sorted(twin));
+    const every: FakeElement[] = [];
+    svg.walk((e) => every.push(e));
+    expect(every.some((e) => e.hasAttribute("display"))).toBe(false);
+    expect(svg.querySelectorAll(".mo-root").length).toBe(1);
+    handle.destroy();
+    expect(svg.outerHTML).toBe(before);
+  });
+
+  test("a static render with a backdrop keeps it first, outside the root", () => {
+    const doc = new FakeDocument();
+    const svg = makeSvg(doc, `<path d="M0 0h100v100H0z" fill="#222"/>${parts(NAME).inner}`);
+    const before = svg.outerHTML;
+    const handle = mountLive(asSvg(svg), NAME, { animate: "hover" });
+    expect(svg.children.map((c) => c.tagName)).toEqual(["path", "g"]);
+    expect(svg.querySelectorAll(".mo-root").length).toBe(1);
     handle.destroy();
     expect(svg.outerHTML).toBe(before);
   });

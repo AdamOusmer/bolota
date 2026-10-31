@@ -2,7 +2,7 @@
 // Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
 import type { EngineHandle } from "../engine";
-import { motionSeeds } from "../animate";
+import { motionSeeds, motionVars, rootClass } from "../animate";
 import { _layout, parts, type BolotaOptions } from "../bolota";
 import { EASE_OUT, MORPH_IN, MORPH_OUT } from "../ease";
 import type { Expression } from "../expression";
@@ -362,11 +362,60 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     }
   }
 
+  /**
+   * Upgrades a plain `parts()` render in place: the server's body and eyes
+   * groups move under the wrappers `animate: "always"` would have emitted, so
+   * the page ships the small markup once and nothing is drawn twice. Returns
+   * null for any other shape.
+   */
+  function wrapStatic(): Element | null {
+    const all = Array.from(svg.children);
+    const [body, eyes, ...rest] = all.slice(all[0]?.tagName === "path" ? 1 : 0);
+    if (!eyes || rest.length || body!.tagName !== "g" || eyes.tagName !== "g" || eyes.children.length !== 2) return null;
+    const g = (cls: string) => {
+      const el = mk("g");
+      el.setAttribute("class", cls);
+      return el;
+    };
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    const root = g(rootClass("always"));
+    const breathe = g("mo-breathe");
+    const bob = g("mo-bob");
+    const anchor = all[all.indexOf(eyes) + 1] ?? null;
+    const paths = Array.from(eyes.children);
+    const wrappers = paths.map((path, i) => {
+      const e = L.eyes[i]!;
+      const eye = g("mo-eye");
+      eye.setAttribute("style", `--mo-wrap:${i ? 1 : -1};--mo-lean:${r2(e.rot)};transform-origin:${r2(e.cx)}px ${r2(e.cy)}px`);
+      eye.appendChild(mk("g")).appendChild(path);
+      return eye;
+    });
+    snapshot(eyes, ["class"]);
+    eyes.setAttribute("class", "mo-eyes");
+    wrappers.forEach((eye) => eyes.appendChild(eye));
+    bob.append(body!, eyes);
+    breathe.appendChild(bob);
+    root.appendChild(breathe);
+    svg.insertBefore(root, anchor);
+    undo.push(() => {
+      paths.forEach((path, i) => {
+        eyes.appendChild(path);
+        wrappers[i]!.remove();
+      });
+      root.remove();
+      svg.insertBefore(body!, anchor);
+      svg.insertBefore(eyes, anchor);
+    });
+    const vars = motionVars(resolve(name, base).t);
+    for (const k in vars) svg.style.setProperty(k, vars[k]!);
+    return breathe;
+  }
+
   function build(): void {
     if (built) return;
     built = true;
     snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-js", "data-mo-live", "data-mo-asleep"]);
-    let found = svg.querySelector(".mo-breathe");
+    let found = svg.querySelector(".mo-breathe") ?? wrapStatic();
     if (!found) {
       const statics = Array.from(svg.children);
       for (const el of statics) {
