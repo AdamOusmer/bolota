@@ -221,7 +221,14 @@ viewBox stays `0 0 100 100` with `overflow: visible`, and decor (rings, trails,
 particles) is drawn in the seed's palette and may extend past the box.
 
 It needs one stylesheet, `@luzir/bolota/motion.css`, for the poses and for
-the breath and blink a resting bolota keeps while the engine is idle.
+the breath and blink a bolota keeps while the engine animates it.
+
+The stylesheet owns the breath and the blink at all times; the engine only
+writes what a pose or a state moves. A host that runs the breath itself on an
+HTML wrapper, where it composites, sets `data-mo-breath="host"` on the `<svg>`
+to switch the stylesheet's breath off. It then owns a `scaleY` breath of ±0.5%
+over 1.7 s, alternate, ease-in-out, on an HTML ancestor if it wants the breath
+back. The engine never sets or clears that attribute.
 
 ```ts
 import "@luzir/bolota/motion.css";

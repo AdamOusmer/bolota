@@ -117,7 +117,7 @@ describe("the engine's rest loops match motion.css", () => {
     const kf = block("mo-live-breathe");
     expect(/from\s*\{\s*transform: scale\(1, calc\(1 - 0\.005 \* var\(--mo-amp\)\)\)/.test(kf)).toBe(true);
     expect(/to\s*\{\s*transform: scale\(1, calc\(1 \+ 0\.005 \* var\(--mo-amp\)\)\)/.test(kf)).toBe(true);
-    expect(/svg\[data-mo-live\] \.mo-breathe \{[^}]*animation-duration: calc\(1700ms[^}]*alternate[^}]*ease-in-out/.test(css)).toBe(true);
+    expect(/svg\[data-mo-live\]:not\(\[data-mo-breath="host"\]\) \.mo-breathe \{[^}]*animation-duration: calc\(1700ms[^}]*alternate[^}]*ease-in-out/.test(css)).toBe(true);
     expect(BREATH_MS).toBe(3400);
     expect(BREATH).toBe(0.005);
     for (let t = 0; t < 8000; t += 37) {
@@ -236,40 +236,56 @@ describe("bloub's head", () => {
   });
 });
 
-describe("the engine hands the breath and blink between the compositor and the frame clock", () => {
+describe("the stylesheet keeps the breath and blink; the frame loop writes only what moves", () => {
   const proto = FakeElement.prototype as unknown as { getAnimations?: () => never[] };
 
-  test("CSS at rest, frame clock while animating, and back at the same phase, without asking the animations", () => {
-    proto.getAnimations = () => {
-      throw new Error("the hand-over read the animations");
-    };
+  test("hybrid: no breath or blink write while awake, the seeded phase stays, data-mo-js marks the loop", () => {
+    proto.getAnimations = () => [];
     try {
       const doc = new FakeDocument();
       const svg = makeSvg(doc);
       const handle = mountLive(svg as unknown as SVGSVGElement, "idle-seed");
-      const seeded = -parseFloat(svg.style.getPropertyValue("--mo-lag"));
+      const lag = svg.style.getPropertyValue("--mo-lag");
+      const elag = svg.style.getPropertyValue("--mo-elag");
+      expect(lag).not.toBe("");
       expect(doc.defaultView.queue.length).toBe(0);
       expect(svg.hasAttribute("data-mo-js")).toBe(false);
 
       doc.timeline.currentTime = 1234;
       handle.play("wide");
       expect(svg.hasAttribute("data-mo-js")).toBe(true);
-      run(doc, 1234, 0.5);
+      const breathe = svg.querySelector(".mo-breathe")!;
+      const wrapsClean = () => svg.querySelectorAll(".mo-eye").every((e) => e.children[0]!.getAttribute("transform") === null);
+      let t = 1234;
+      for (let i = 0; i < 30; i++) {
+        t = run(doc, t, 0.1);
+        expect(breathe.getAttribute("transform")).toBeNull();
+        expect(wrapsClean()).toBe(true);
+        expect(svg.style.getPropertyValue("--mo-lag")).toBe(lag);
+        expect(svg.style.getPropertyValue("--mo-elag")).toBe(elag);
+      }
       expect(svg.hasAttribute("data-mo-live")).toBe(true);
-      expect(svg.querySelector(".mo-breathe")!.getAttribute("transform")).toMatch(/^scale\(1 /);
 
-      const parked = run(doc, 1734, 12);
+      run(doc, t, 12);
       expect(doc.defaultView.queue.length).toBe(0);
       expect(svg.hasAttribute("data-mo-js")).toBe(false);
-      expect(svg.querySelector(".mo-breathe")!.getAttribute("transform")).toBeNull();
-      expect(svg.querySelectorAll(".mo-eye").every((e) => e.children[0]!.getAttribute("transform") === null)).toBe(true);
-      const lag = -parseFloat(svg.style.getPropertyValue("--mo-lag"));
-      expect(lag).toBeGreaterThan(seeded + 1234 + 1000);
-      expect(lag).toBeLessThanOrEqual(seeded + parked + 16);
+      expect(breathe.getAttribute("transform")).toBeNull();
+      expect(wrapsClean()).toBe(true);
+      expect(svg.style.getPropertyValue("--mo-lag")).toBe(lag);
       handle.destroy();
       expect(svg.getAttribute("style")).toBeNull();
     } finally {
       delete proto.getAnimations;
     }
+  });
+
+  test("without getAnimations the frame loop still writes the breath", () => {
+    const doc = new FakeDocument();
+    const svg = makeSvg(doc);
+    const handle = mountLive(svg as unknown as SVGSVGElement, "idle-seed");
+    expect(svg.hasAttribute("data-mo-js")).toBe(true);
+    run(doc, 0, 0.5);
+    expect(svg.querySelector(".mo-breathe")!.getAttribute("transform")).toMatch(/^scale\(1 /);
+    handle.destroy();
   });
 });

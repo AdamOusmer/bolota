@@ -182,11 +182,8 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let wraps: Element[] = [];
   let hybrid = false;
   let jsPhase = true;
-  let cssAt = 0;
   let seated = false;
   let unwarm: (() => void) | null = null;
-  let baseBody = breathAt;
-  let baseEye = blinkAt;
   let pendingWake = false;
   let bodyMs = breathAt;
   let eyeMs = blinkAt;
@@ -230,9 +227,6 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let resized: ResizeObserver | null = null;
 
   const mk = <K extends keyof SVGElementTagNameMap>(tag: K) => doc.createElementNS(SVG_NS, tag);
-
-  /** The clock the stylesheet's animations run on. */
-  const nowMs = () => Number(doc.timeline?.currentTime) || Number(view.performance?.now()) || 0;
 
   /** The seeded eyes as rig boxes, the rest frame the static render already shows. */
   function seat(): void {
@@ -329,20 +323,24 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
 
   function idleEval(): void {
     if (hoverMode) amp = ampNow();
-    idleLoops(bodyMs, eyeMs, amp, idle);
+    if (!hybrid) idleLoops(bodyMs, eyeMs, amp, idle);
   }
 
   /**
-   * Writes what the breath, the blink and the tremor moved. The blink squashes
-   * the group under `.mo-eye`, about its box's centre, so it closes the drawn
-   * eye on screen's vertical, as bloub's did, whatever the head did to it.
+   * Writes what the tremor moved, and in the modes without a compositor
+   * stylesheet, the breath and the blink too. The blink squashes the group
+   * under `.mo-eye`, about its box's centre, so it closes the drawn eye on
+   * screen's vertical, as bloub's did, whatever the head did to it. In hybrid
+   * mode the stylesheet keeps both and only the entrance cue folds the rects.
    */
   function idleWrite(): void {
     if (!jsPhase) return;
-    const b = q(idle.breathe, 10000);
-    if (b !== sigBreathe) {
-      sigBreathe = b;
-      sBreathe.set(b === 10000 ? null : `scale(1 ${b / 10000})`);
+    if (!hybrid) {
+      const b = q(idle.breathe, 10000);
+      if (b !== sigBreathe) {
+        sigBreathe = b;
+        sBreathe.set(b === 10000 ? null : `scale(1 ${b / 10000})`);
+      }
     }
     const sh = shakeNow();
     if (sh !== 0 || sigShakeX !== 0 || sigShakeY !== 0) {
@@ -355,7 +353,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
         sHost.set(hx || hy ? `translate(${hx / 1000} ${hy / 1000})` : null);
       }
     }
-    const k = q(Math.min(idle.blink, entrance()), 1000);
+    const k = q(hybrid ? entrance() : Math.min(idle.blink, entrance()), 1000);
     if (k !== eyeBlink) {
       eyeBlink = k;
       rects.forEach((rect, i) => writeRig(rect, i, boxes[i]!));
@@ -457,9 +455,8 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     hybrid = !hoverMode && !reduced && typeof breathe.getAnimations === "function";
     jsPhase = !hybrid;
     if (!reduced && jsPhase) svg.setAttribute("data-mo-js", "");
-    svg.style.setProperty("--mo-lag", `${-Math.round(baseBody)}ms`);
-    svg.style.setProperty("--mo-elag", `${-Math.round(baseEye)}ms`);
-    cssAt = nowMs();
+    svg.style.setProperty("--mo-lag", `${-Math.round(breathAt)}ms`);
+    svg.style.setProperty("--mo-elag", `${-Math.round(blinkAt)}ms`);
     for (const el of [host, breathe]) snapshot(el, ["transform"]);
 
     eyesG = breathe.querySelector(".mo-eyes")!;
@@ -723,36 +720,21 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     startFrames(view, tick);
   }
 
-  /**
-   * The compositor's breath and blink hand over to the frame clock, from the
-   * phase they have reached: the time since the stylesheet took them, on the
-   * document timeline they run on. Asking the animations themselves
-   * (`getAnimations`) flushes style for every mount in a crowd.
-   */
+  /** The frame loop starts writing the morphs; the stylesheet keeps the breath and the blink. */
   function takeOver(): void {
     if (jsPhase) return;
-    const elapsed = nowMs() - cssAt;
-    bodyMs = baseBody + elapsed;
-    eyeMs = baseEye + elapsed;
     jsPhase = true;
-    sigBreathe = NaN;
     svg.setAttribute("data-mo-js", "");
-    idleEval();
   }
 
-  /** And back: the stylesheet restarts the breath and blink at the phase the frame clock stopped on. */
+  /** And back: the loop's tremor and entrance fold are cleared, the stylesheet never stopped. */
   function giveBack(): void {
     if (!jsPhase) return;
-    baseBody = bodyMs;
-    baseEye = eyeMs;
-    svg.style.setProperty("--mo-lag", `${-Math.round(bodyMs)}ms`);
-    svg.style.setProperty("--mo-elag", `${-Math.round(eyeMs)}ms`);
-    for (const slot of [sHost, sBreathe]) slot.set(null);
+    sHost.set(null);
     eyeBlink = 1000;
     rects.forEach((rect, i) => writeRig(rect, i, boxes[i]!));
     sigShakeX = sigShakeY = NaN;
     svg.removeAttribute("data-mo-js");
-    cssAt = nowMs();
     jsPhase = false;
   }
 

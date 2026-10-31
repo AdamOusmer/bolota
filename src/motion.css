@@ -757,19 +757,16 @@
 }
 
 /**
- * A mounted engine drives these loops itself while it is animating
- * (`src/live/idle.ts`, the same arithmetic) and marks its root `data-mo-js`, so
- * the stylesheet's copy stands down there; the pose and hover declarations
- * stay. At rest it takes the mark off and the compositor runs the loops again,
- * from the phase the engine hands back in `--mo-lag` (breathe, bob, saccade)
- * and `--mo-elag` (blink, wrap).
+ * A mounted engine marks its root `data-mo-js` while its frame loop runs. The
+ * loop writes the morphs (eyes, act, shake), so the stylesheet's copy of those
+ * loops stands down there; the pose and hover declarations stay. The breath
+ * and the blink stay the stylesheet's at all times, from `--mo-lag` and
+ * `--mo-elag`: the loop never writes them.
  */
 svg[data-mo-js] .mo-root,
-svg[data-mo-js] .mo-breathe,
 svg[data-mo-js] .mo-bob,
 svg[data-mo-js] .mo-eyes,
 svg[data-mo-js] .mo-eye,
-svg[data-mo-js] .mo-eye > *,
 svg[data-mo-js] .mo-eye > * > path,
 svg[data-mo-js] .mo-eye rect {
   animation: none !important;
@@ -781,11 +778,11 @@ svg[data-mo-js] .mo-eye rect {
  * A mounted engine marks its root `data-mo-live` (never under reduced motion,
  * which keeps the reset below) and owns the idle life from then on, as
  * bloub's engine did: none of the loops above runs under it, not
- * the saccade, the bob or their blink. While it animates it drives everything
- * from its frame clock (`data-mo-js`, above); at rest it hands the stylesheet
- * the two loops a resting face still has, the breath and the blink, from the
- * phase it reached (`--mo-lag`, `--mo-elag`). The engine runs the tremor
- * itself while it animates, so `.mo-root`'s `mo-shake` has nothing to do at rest.
+ * the saccade, the bob or their blink. While it animates it drives the morphs
+ * from its frame clock (`data-mo-js`, above); the two loops a face always has,
+ * the breath and the blink, stay the stylesheet's (`--mo-lag`, `--mo-elag`).
+ * The engine runs the tremor itself while it animates, so `.mo-root`'s
+ * `mo-shake` has nothing to do at rest.
  */
 svg[data-mo-live] .mo-bob,
 svg[data-mo-live] .mo-root,
@@ -794,8 +791,12 @@ svg[data-mo-live] .mo-eye > * > * {
   animation: none;
 }
 
-/** bloub's breath: the height alone, half a percent each way over 3.4s. */
-svg[data-mo-live] .mo-breathe {
+/**
+ * bloub's breath: the height alone, half a percent each way over 3.4s. A host
+ * that animates it on an HTML wrapper (where it composites; on an SVG child it
+ * costs a style recalc per frame) sets `data-mo-breath="host"` on the svg.
+ */
+svg[data-mo-live]:not([data-mo-breath="host"]) .mo-breathe {
   animation-name: mo-live-breathe;
   animation-duration: calc(1700ms * var(--mo-rate, 1));
   animation-delay: calc(var(--mo-lag, 0ms) * var(--mo-rate, 1));
