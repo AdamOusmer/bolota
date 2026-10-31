@@ -794,14 +794,8 @@ svg[data-mo-live] .mo-eye > * > * {
   animation: none;
 }
 
-/**
- * bloub's breath: the height alone, half a percent each way over 3.4s. On the
- * `<svg>` itself: a transform animation on an SVG child runs on the main
- * thread, on the `<svg>` box it composites, and the box's centre is the
- * view-box centre.
- */
-svg[data-mo-live]:not([data-mo-js]) {
-  transform-origin: center;
+/** bloub's breath: the height alone, half a percent each way over 3.4s. */
+svg[data-mo-live] .mo-breathe {
   animation-name: mo-live-breathe;
   animation-duration: calc(1700ms * var(--mo-rate, 1));
   animation-delay: calc(var(--mo-lag, 0ms) * var(--mo-rate, 1));

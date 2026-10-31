@@ -117,7 +117,7 @@ describe("the engine's rest loops match motion.css", () => {
     const kf = block("mo-live-breathe");
     expect(/from\s*\{\s*transform: scale\(1, calc\(1 - 0\.005 \* var\(--mo-amp\)\)\)/.test(kf)).toBe(true);
     expect(/to\s*\{\s*transform: scale\(1, calc\(1 \+ 0\.005 \* var\(--mo-amp\)\)\)/.test(kf)).toBe(true);
-    expect(/svg\[data-mo-live\]:not\(\[data-mo-js\]\) \{[^}]*animation-duration: calc\(1700ms[^}]*alternate[^}]*ease-in-out/.test(css)).toBe(true);
+    expect(/svg\[data-mo-live\] \.mo-breathe \{[^}]*animation-duration: calc\(1700ms[^}]*alternate[^}]*ease-in-out/.test(css)).toBe(true);
     expect(BREATH_MS).toBe(3400);
     expect(BREATH).toBe(0.005);
     for (let t = 0; t < 8000; t += 37) {

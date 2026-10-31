@@ -32,9 +32,10 @@ const SVG_NS = "http://www.w3.org/2000/svg";
  * Seconds a woken engine stays registered after the last thing that moved,
  * as wall time from the frame timestamps: the clock clamps slow frames
  * (`MAX_FRAME` in `timeline.ts`), and the quiet period stretched to 2s and
- * more on throttled phones.
+ * more on throttled phones. At a quarter second the window after a 300ms morph
+ * is about 0.55s there, not 2.5s.
  */
-const QUIET = 1;
+const QUIET = 0.25;
 
 /** The `--mo-track-travel` a follow's reach is measured against: set larger to look further, smaller to look less. */
 const TRAVEL = 3;
