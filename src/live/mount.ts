@@ -13,7 +13,7 @@ import { CHOREO, expressed, newEyes, type Eyes, type Head, type StateId } from "
 import type { Decor, DecorFrame, DecorHost, DecorPalette } from "./decor.js";
 import { eyeBox, settleEyes, type Correction, type Eye, type EyeBox } from "./fit";
 import { Glide, NO_LOOK, followLook, type Look } from "./follow";
-import { cancelRead, readNextFrame, startFrames, stopFrames, watchSight } from "./frames";
+import { JITTER_MS, blinkSlot, cancelRead, readNextFrame, startFrames, stopFrames, watchSight } from "./frames";
 import { BLINK_CYCLE, BREATH_MS, lid, nextBlink, type Gaze } from "./head";
 import { ALIASES, resolveExpression } from "./names";
 import { idleDrift, idleFrame, idleLoops, idleShake } from "./idle";
@@ -204,7 +204,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let awake = false;
   let blinkTimer: ReturnType<typeof setTimeout> | undefined;
   let blinkUntil = 0;
-  let parkedAt = 0;
+  let blinkDue = 0;
 
   let clock = 0;
   let last = 0;
@@ -707,7 +707,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       else if (!quietAt) quietAt = ms;
       else if (ms - quietAt > QUIET * 1000) awake = false;
     }
-    if (!awake && hybrid && shakeTo === 0 && entrance() === 1 && !blinking()) {
+    if (!awake && hybrid && shakeTo === 0 && entrance() === 1 && !blinking() && nextBlink(eyeMs).start - eyeMs > 400) {
       giveBack();
       halt();
       return;
@@ -723,21 +723,21 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     else clearTimeout(blinkTimer);
   }
 
-  /** A parked hybrid engine sleeps to the next blink; the eye clock keeps wall time meanwhile. */
+  /** A parked hybrid engine sleeps to the next blink's shared window, which delays the blink and never advances it. */
   function armBlink(): void {
     clearBlink();
     if (!hybrid || dead || paused || reduced || !sight || ticking) return;
-    parkedAt = wallNow();
-    const delay = nextBlink(eyeMs).start - eyeMs;
+    const now = wallNow();
+    blinkDue = nextBlink(eyeMs).start;
+    const fire = blinkSlot(view, now + (blinkDue - eyeMs), (seeds.blinkPhase / seeds.blink) * JITTER_MS);
+    const delay = fire - now;
     blinkTimer = view.setTimeout ? view.setTimeout(blinkWake, delay) : setTimeout(blinkWake, delay);
   }
 
-  /** Every way out of the parked state clears the timer, so a wake finds the engine as it was parked. */
+  /** Every way out of the parked state clears the timer; the eye clock lands on the due blink, whatever the window delayed it by. */
   function blinkWake(): void {
-    eyeMs += wallNow() - parkedAt;
-    const next = nextBlink(eyeMs);
-    if (next.start - eyeMs > 100) return armBlink();
-    blinkUntil = next.end;
+    eyeMs = blinkDue;
+    blinkUntil = nextBlink(eyeMs).end;
     start();
   }
 

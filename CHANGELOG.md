@@ -22,6 +22,10 @@ which flushes style, once per bolota.
 
 ### Changed
 
+- **Blinks on one page gather into shared windows.** They fire on 1.6 s
+  boundaries with a per-seed spread of up to 0.32 s, so between windows no
+  engine runs and the frame loop sleeps; a blink is delayed by under a window
+  and never advanced.
 - **The eye fit starts from last frame's answer.** Under a head turn
   (`wander`, `follow`, the gestures) the search for how much turn and size the
   eyes keep no longer restarts from the whole range: it brackets around the

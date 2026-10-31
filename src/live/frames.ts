@@ -19,10 +19,17 @@ interface Registry {
   sight: Set<Watch>;
   io: IntersectionObserver | null;
   hide: () => void;
+  origin: number;
 }
 
 /** Shape version of the registry stored on the window; bump it when the fields change. */
-const VERSION = 1;
+const VERSION = 2;
+
+/** Blinks gather on boundaries this far apart; a blink gap is 1.9 s at least, so a window never makes a bolota blink early. */
+export const WINDOW_MS = 1600;
+
+/** Bolotas in one window spread over a fifth of it, so a crowd never blinks in unison. */
+export const JITTER_MS = 320;
 
 /**
  * The registry lives on the window under a global symbol, so two bundled
@@ -50,6 +57,7 @@ function frameLoop(view: Window): Registry {
     sight: new Set(),
     io: null,
     hide: () => mine.sight.forEach((w) => refresh(mine, w)),
+    origin: NaN,
   };
   if (slot) privates.set(view, mine);
   else slots[KEY] = mine;
@@ -137,6 +145,13 @@ export function readNextFrame(view: Window, read: FrameRead): void {
 /** Drops a read queued by `readNextFrame` that has not run yet. */
 export function cancelRead(view: Window, read: FrameRead): void {
   frameLoop(view).reads.delete(read);
+}
+
+/** The wall time a blink due at `at` fires: the first window boundary at or after it, plus `jitter`. */
+export function blinkSlot(view: Window, at: number, jitter: number): number {
+  const loop = frameLoop(view);
+  if (loop.origin !== loop.origin) loop.origin = at;
+  return loop.origin + Math.ceil((at - loop.origin) / WINDOW_MS) * WINDOW_MS + jitter;
 }
 
 function refresh(loop: Registry, w: Watch): void {

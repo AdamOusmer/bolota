@@ -1,10 +1,9 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
 import { describe, expect, test } from "bun:test";
-import { motionSeeds } from "../src/animate";
 import { BLINK_CYCLE, BLINKS, lid, nextBlink } from "../src/live/head";
+import { JITTER_MS, WINDOW_MS, blinkSlot } from "../src/live/frames";
 import { mountLive } from "../src/live/mount";
-import { resolve } from "../src/render";
 import { FakeDocument, FakeElement, frame, makeSvg } from "./live-dom";
 
 const CYCLE_MS = BLINK_CYCLE * 1000;
@@ -39,8 +38,6 @@ describe("a parked engine blinks on a timer", () => {
     proto.getAnimations = () => [];
     try {
       const name = "blink-seed";
-      const s = motionSeeds(resolve(name, {}).t);
-      const blinkAt = (s.blinkPhase / s.blink) * CYCLE_MS;
       const doc = new FakeDocument();
       const svg = makeSvg(doc);
       const handle = mountLive(svg as unknown as SVGSVGElement, name);
@@ -50,40 +47,75 @@ describe("a parked engine blinks on a timer", () => {
       const m3 = () => Number(/matrix\(\S+ \S+ \S+ (\S+)/.exec(rects[0]!.getAttribute("transform")!)![1]);
 
       const STEP = 16;
-      const LAG = STEP;
-      const eyeAt = (ms: number) => blinkAt + ms - LAG;
       const seen: number[] = [];
-      let ticks = 0;
-      let rested = 0;
+      const queued: number[] = [];
       for (let ms = STEP; ms <= 20000; ms += STEP) {
-        if (view.queue.length) ticks++;
+        if (view.queue.length) queued.push(ms);
         frame(doc, ms);
         seen.push(m3());
-        const e = eyeAt(ms);
-        if (ms > 2000 && nextBlink(e - 100).start > e + 100) {
-          rested++;
-          expect(view.queue.length, `frame queued at ${ms} ms between blinks`).toBe(0);
-        }
       }
-      expect(rested).toBeGreaterThan(500);
-      expect(ticks).toBeLessThan(0.25 * 60 * 20);
-
       const open = Math.max(...seen);
-      const at = (ms: number) => seen[Math.round(ms / STEP) - 1]!;
-      let checked = 0;
-      for (let k = Math.floor((blinkAt + 3000) / CYCLE_MS); k < 3; k++) {
-        for (const b of BLINKS) {
-          const start = k * CYCLE_MS + b * 1000;
-          const ms = start - blinkAt + LAG;
-          if (ms < 3000 || ms > 19000) continue;
-          const dipped = [0, 1, 2, 3].some((i) => at(ms + i * STEP) < open);
-          expect(dipped, `blink at eye time ${start} (frame ${ms})`).toBe(true);
-          expect(at(ms + 0.18 * 1000 + 3 * STEP)).toBe(open);
-          checked++;
+      const dips = seen.flatMap((v, i) => (v < open ? [(i + 1) * STEP] : []));
+      const near = (ms: number) => dips.some((d) => Math.abs(d - ms) <= 400);
+      expect(dips.length).toBeGreaterThan(8);
+      expect(queued.filter((ms) => ms > 2000 && !near(ms)).length).toBe(0);
+      expect(queued.length).toBeLessThan(0.25 * 60 * 20);
+      expect(seen.at(-1)).toBe(open);
+      handle.destroy();
+      expect(view.timers.length).toBe(0);
+    } finally {
+      delete proto.getAnimations;
+    }
+  });
+
+  test("twelve engines on one page blink in shared windows and the loop sleeps between them", () => {
+    proto.getAnimations = () => [];
+    try {
+      const doc = new FakeDocument();
+      const view = doc.defaultView;
+      const handles: { destroy(): void }[] = [];
+      const reads = Array.from({ length: 12 }, (_, i) => {
+        const svg = makeSvg(doc);
+        const handle = mountLive(svg as unknown as SVGSVGElement, `crowd-${i}`);
+        handle.loop("idle");
+        handles.push(handle);
+        const rect = svg.querySelectorAll(".mo-eye").map((e) => e.children[0]!.children[0]!)[0]!;
+        return () => Number(/matrix\(\S+ \S+ \S+ (\S+)/.exec(rect.getAttribute("transform")!)![1]);
+      });
+      const FRAMES = 2400;
+      const STEP = 40000 / FRAMES;
+      const seen = reads.map(() => [] as number[]);
+      let busy = 0;
+      for (let i = 1; i <= FRAMES; i++) {
+        if (view.queue.length) busy++;
+        frame(doc, i * STEP);
+        reads.forEach((m3, e) => seen[e]!.push(m3()));
+      }
+      expect(busy).toBeLessThan(0.4 * FRAMES);
+      const origin = blinkSlot(view as unknown as Window, 0, 0);
+
+      const MIN_GAP = 1900;
+      let doubles = 0;
+      for (const rows of seen) {
+        const open = Math.max(...rows);
+        const starts = rows.flatMap((v, i) => (v < open && (i === 0 || rows[i - 1]! >= open) ? [(i + 1) * STEP] : []));
+        expect(starts.length).toBeGreaterThan(3);
+        let lead = -Infinity;
+        for (const at of starts) {
+          if (at - lead < 500) {
+            doubles++;
+            continue;
+          }
+          if (at > 2500) {
+            const into = (((at - origin) % WINDOW_MS) + WINDOW_MS) % WINDOW_MS;
+            expect(into, `blink at ${at} is ${into} ms into a window`).toBeLessThanOrEqual(JITTER_MS + 16);
+          }
+          if (lead > 0) expect(at - lead).toBeGreaterThanOrEqual(MIN_GAP - 16);
+          lead = at;
         }
       }
-      expect(checked).toBeGreaterThan(3);
-      handle.destroy();
+      expect(doubles).toBeGreaterThan(0);
+      handles.forEach((h) => h.destroy());
       expect(view.timers.length).toBe(0);
     } finally {
       delete proto.getAnimations;
