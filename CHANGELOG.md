@@ -36,6 +36,27 @@ which flushes style, once per bolota.
   task after first paint went from 440 ms to 110 ms. Nothing moves
   differently once the tables exist; `motion.css` and the frame loop are
   untouched.
+- **The rest-phase tremor loop stands down under the engine.** `mo-shake`,
+  a 112 ms infinite transform loop on `.mo-root`, kept running at rest on
+  every live bolota although the engine runs the tremor itself while it
+  animates. At rest with 17 engines on a phone-class budget it alone was
+  about a fifth of the main-thread time. `svg[data-mo-live] .mo-root` now
+  has no animation.
+- **The rest breath runs on the `<svg>`, not on `.mo-breathe`.** A transform
+  animation on an SVG child runs on the main thread; on the `<svg>` box it
+  composites, with the same visual (the box's centre is the view-box
+  centre). 17 engines at rest no longer run 17 main-thread animations. It
+  costs a few bytes of CSS.
+- **The static render under a mount is hidden, not painted twice.** When a
+  mount builds the engine's figure beside markup the `<svg>` already holds
+  (`parts()` output), that markup stays in place with `display="none"` and
+  returns untouched at `destroy()`. Before, every bolota painted its body
+  and eyes twice.
+- **The quiet period is wall time.** The seconds before an engine hands back
+  to the stylesheet were counted on the frame clock, which clamps each slow
+  frame to `MAX_FRAME`, so at 6x throttle the quiet second measured 2 s and
+  more. It now counts the frame timestamps. On a fast display nothing
+  changes.
 
 ## 0.2.3
 

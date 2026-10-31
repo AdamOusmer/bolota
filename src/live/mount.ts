@@ -28,7 +28,12 @@ export type LiveOptions = Omit<BolotaOptions, "expression"> & { expression?: str
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** Seconds a woken engine stays registered after the last thing that moved. */
+/**
+ * Seconds a woken engine stays registered after the last thing that moved,
+ * as wall time from the frame timestamps: the clock clamps slow frames
+ * (`MAX_FRAME` in `timeline.ts`), and the quiet period stretched to 2s and
+ * more on throttled phones.
+ */
 const QUIET = 1;
 
 /** The `--mo-track-travel` a follow's reach is measured against: set larger to look further, smaller to look less. */
@@ -203,7 +208,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let clock = 0;
   let last = 0;
   let cuedTo = -1e-6;
-  let liveAt = 0;
+  let quietAt = 0;
   let restId: StateId = "idle";
   let restLoop = false;
   let exprPose: Pose | null = null;
@@ -362,6 +367,11 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-js", "data-mo-live", "data-mo-asleep"]);
     let found = svg.querySelector(".mo-breathe");
     if (!found) {
+      const statics = Array.from(svg.children);
+      for (const el of statics) {
+        snapshot(el, ["display"]);
+        el.setAttribute("display", "none");
+      }
       const p = parts(name, { ...base, animate: base.animate ?? "always" });
       if (p.bg) {
         const plate = mk("path");
@@ -635,8 +645,9 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     bodyMs += dt * 1000;
     idleEval();
     if (awake) {
-      if (frame(clock)) liveAt = clock;
-      else if (clock - liveAt > QUIET) awake = false;
+      if (frame(clock)) quietAt = 0;
+      else if (!quietAt) quietAt = ms;
+      else if (ms - quietAt > QUIET * 1000) awake = false;
     }
     if (!awake && hybrid && shakeTo === 0 && entrance() === 1) {
       giveBack();
@@ -702,7 +713,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       return;
     }
     if (hybrid) takeOver();
-    liveAt = clock;
+    quietAt = 0;
     awake = true;
     start();
   }

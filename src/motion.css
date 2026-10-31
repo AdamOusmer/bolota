@@ -784,16 +784,24 @@ svg[data-mo-js] .mo-eye rect {
  * the saccade, the bob or their blink. While it animates it drives everything
  * from its frame clock (`data-mo-js`, above); at rest it hands the stylesheet
  * the two loops a resting face still has, the breath and the blink, from the
- * phase it reached (`--mo-lag`, `--mo-elag`).
+ * phase it reached (`--mo-lag`, `--mo-elag`). The engine runs the tremor
+ * itself while it animates, so `.mo-root`'s `mo-shake` has nothing to do at rest.
  */
 svg[data-mo-live] .mo-bob,
+svg[data-mo-live] .mo-root,
 svg[data-mo-live] .mo-eyes,
 svg[data-mo-live] .mo-eye > * > * {
   animation: none;
 }
 
-/** bloub's breath: the height alone, half a percent each way over 3.4s. */
-svg[data-mo-live] .mo-breathe {
+/**
+ * bloub's breath: the height alone, half a percent each way over 3.4s. On the
+ * `<svg>` itself: a transform animation on an SVG child runs on the main
+ * thread, on the `<svg>` box it composites, and the box's centre is the
+ * view-box centre.
+ */
+svg[data-mo-live]:not([data-mo-js]) {
+  transform-origin: center;
   animation-name: mo-live-breathe;
   animation-duration: calc(1700ms * var(--mo-rate, 1));
   animation-delay: calc(var(--mo-lag, 0ms) * var(--mo-rate, 1));

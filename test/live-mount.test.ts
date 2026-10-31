@@ -86,6 +86,19 @@ describe("mountLive markup", () => {
     expect(svg.outerHTML).toBe('<svg viewBox="0 0 100 100"/>');
   });
 
+  test("a static render under the engine is hidden at mount and comes back at destroy", () => {
+    const doc = new FakeDocument();
+    const svg = makeSvg(doc, parts(NAME).inner);
+    const before = svg.outerHTML;
+    const statics = [...svg.children];
+    const handle = mountLive(asSvg(svg), NAME, { animate: "hover" });
+    expect(statics.length).toBeGreaterThan(0);
+    for (const el of statics) expect(el.getAttribute("display")).toBe("none");
+    expect(svg.querySelector(".mo-root")!.hasAttribute("display")).toBe(false);
+    handle.destroy();
+    expect(svg.outerHTML).toBe(before);
+  });
+
   test("expression vars and mo-expr are cleared at mount and restored at destroy", () => {
     const doc = new FakeDocument();
     const svg = makeSvg(doc, `<g class="mo-root mo-expr" style="--mo-tilt:4">${inner}</g>`);
