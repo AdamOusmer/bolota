@@ -10,6 +10,74 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.2.4
+
+No face changes. Mounting does the work of a mount, not of the first turn.
+
+A crowd of 23 engines mounted together cost one 545 ms task on a phone-class
+budget (Chromium, CPU throttled 6x): the body outline tables (1440 rays over
+the traced path, per instance) were built inside the first frame, and the
+hand-over from the stylesheet's breath and blink asked `getAnimations()`,
+which flushes style, once per bolota.
+
+### Changed
+
+- **A held tremor runs on the stylesheet.** An engine wearing `excited` parks
+  like any other; the frame loop runs the tremor only while its amplitude
+  changes.
+- **Blinks on one page gather into shared windows.** They fire on 1.6 s
+  boundaries with a per-seed spread of up to 0.32 s, so between windows no
+  engine runs and the frame loop sleeps; a blink is delayed by under a window
+  and never advanced.
+- **The eye fit starts from last frame's answer.** Under a head turn
+  (`wander`, `follow`, the gestures) the search for how much turn and size the
+  eyes keep no longer restarts from the whole range: it brackets around the
+  previous frame's result. 6.9 to 4.2 fits per settle and 56 to 30 µs per
+  engine per frame over 9,560 recorded `wander` frames; an eye lands at most
+  0.024 viewbox units from the cold result, and always inside the body.
+- **The stylesheet keeps the breath and blink while the engine animates.** The
+  frame loop writes only what moves (eyes, act, shake, decor), so an awake
+  engine no longer restyles the svg every frame or at each hand-over. Hosts
+  may take the breath with `data-mo-breath="host"` on the svg.
+- **The engine blinks on a timer.** At rest it is parked with no frame
+  registered and runs no stylesheet animation inside the svg: a timer wakes it
+  for each blink's 180 ms and it parks again. The breath is the one loop left
+  on the stylesheet, and a host can take it.
+- **Outline tables are built in idle time.** A mount queues its layout on one
+  queue per window, drained in `requestIdleCallback` slices (one table per
+  timeout where the window has none, as on iOS). A frame at rest meanwhile
+  writes the seeded eyes the static render already shows, which is what the
+  exact fit returns at rest on every seed measured (6000 of 6000). The first
+  real turn before the tables exist builds them then, as before.
+- **The hand-over reads the document timeline**, not the animations: the
+  phase is the time since the stylesheet took the breath and blink, on the
+  clock they run on. No style flush per wake.
+- The same 23 mounts, same budget: 545 ms → 45 ms, in two tasks of 50 ms
+  instead of one of 560. The 0.1.7 engine took 270 ms. On the page, the
+  task after first paint went from 440 ms to 110 ms. Nothing moves
+  differently once the tables exist; `motion.css` and the frame loop are
+  untouched.
+- **The rest-phase tremor loop stands down under the engine.** `mo-shake`,
+  a 112 ms infinite transform loop on `.mo-root`, kept running at rest on
+  every live bolota although the engine runs the tremor itself while it
+  animates. At rest with 17 engines on a phone-class budget it alone was
+  about a fifth of the main-thread time. `svg[data-mo-live] .mo-root` now
+  has no animation.
+- **The engine upgrades a plain static render in place.** A mount over
+  `parts()` output without `animate` wraps the server's body and eyes groups
+  into the motion structure (root, breath, bob, eye wrappers) instead of
+  drawing a second figure, so a page sends the small markup once and nothing
+  is drawn twice. `destroy()` puts the groups back where they were. Animated
+  markup is still adopted as it is, and markup the engine does not recognise
+  still gets its own figure beside it, the static copy hidden.
+- **The quiet period is wall time.** The seconds before an engine hands back
+  to the stylesheet were counted on the frame clock, which clamps each slow
+  frame to `MAX_FRAME`, so at 6x throttle the quiet second measured 2 s and
+  more. It now counts the frame timestamps, and the quiet period is a
+  quarter second (was one). After a 300 ms morph an engine stays awake
+  about 0.55 s instead of 2.5 s at 6x throttle, which keeps a crowd silent
+  between morphs. On a fast display the engine hands back 0.75 s sooner.
+
 ## 0.2.3
 
 No face changes. The live engine moves the way the 0.1 engine did again.

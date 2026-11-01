@@ -117,7 +117,7 @@ describe("the engine's rest loops match motion.css", () => {
     const kf = block("mo-live-breathe");
     expect(/from\s*\{\s*transform: scale\(1, calc\(1 - 0\.005 \* var\(--mo-amp\)\)\)/.test(kf)).toBe(true);
     expect(/to\s*\{\s*transform: scale\(1, calc\(1 \+ 0\.005 \* var\(--mo-amp\)\)\)/.test(kf)).toBe(true);
-    expect(/svg\[data-mo-live\] \.mo-breathe \{[^}]*animation-duration: calc\(1700ms[^}]*alternate[^}]*ease-in-out/.test(css)).toBe(true);
+    expect(/svg\[data-mo-live\]:not\(\[data-mo-breath="host"\]\) \.mo-breathe \{[^}]*animation-duration: calc\(1700ms[^}]*alternate[^}]*ease-in-out/.test(css)).toBe(true);
     expect(BREATH_MS).toBe(3400);
     expect(BREATH).toBe(0.005);
     for (let t = 0; t < 8000; t += 37) {
@@ -131,15 +131,10 @@ describe("the engine's rest loops match motion.css", () => {
     expect(f.breathe).toBe(1);
   });
 
-  test("blink: bloub's schedule, one cycle the stylesheet repeats, closing to 6%", () => {
-    const stops = stopsOf("mo-live-blink", ["scale"]);
-    expect(/svg\[data-mo-live\] \.mo-eye > \* \{[^}]*animation-duration: calc\(16000ms[^}]*linear/.test(css)).toBe(true);
+  test("blink: bloub's schedule, one 16s cycle the engine times itself on, closing to 6%", () => {
+    expect(css).not.toContain("mo-live-blink");
+    expect(css).not.toContain("--mo-elag");
     expect(BLINK_CYCLE).toBe(16);
-    for (let t = 0; t < 2 * BLINK_CYCLE * 1000; t += 3) {
-      idleLoops(0, t, 1, f);
-      const [, y] = sample(stops, ((t / 1000) % BLINK_CYCLE) / BLINK_CYCLE, { "mo-amp": 1 });
-      expect(f.blink).toBeCloseTo(y!, 3);
-    }
     const shut = BLINKS.map((b) => {
       idleLoops(0, (b + BLINK_DUR * BLINK_SHUT) * 1000, 1, f);
       return f.blink;
@@ -166,6 +161,22 @@ describe("the engine's rest loops match motion.css", () => {
   test("the stylesheet's own idle stands down under the engine", () => {
     const rule = /svg\[data-mo-live\] \.mo-bob,[^{]*\{\s*animation: none;\s*\}/.exec(css)![0];
     for (const sel of [".mo-bob", ".mo-eyes", ".mo-eye > * > *"]) expect(rule).toContain(sel);
+    expect(rule).toContain("svg[data-mo-live]:not([data-mo-shake]) .mo-root");
+  });
+
+  test("under the engine every base animated selector is stood down; only the breath may run, and not for a host that takes it", () => {
+    const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const rules = [...stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ sels: m[1]!.split(",").map((s) => s.trim()), body: m[2]! }));
+    const stood = new Set<string>();
+    for (const r of rules) {
+      if (!/animation:\s*none;/.test(r.body)) continue;
+      for (const s of r.sels) if (s.startsWith("svg[data-mo-live] ")) stood.add(s.slice("svg[data-mo-live] ".length));
+    }
+    for (const sel of [".mo-bob", ".mo-eyes", ".mo-eye > *", ".mo-eye > * > *"]) expect(stood.has(sel), sel).toBe(true);
+    expect(rules.some((r) => r.sels.includes("svg[data-mo-live]:not([data-mo-shake]) .mo-root") && /animation:\s*none;/.test(r.body))).toBe(true);
+    expect(rules.some((r) => r.sels.includes('svg[data-mo-live][data-mo-breath="host"] .mo-breathe') && /animation:\s*none;/.test(r.body))).toBe(true);
+    const named = rules.filter((r) => /animation-name:/.test(r.body)).flatMap((r) => r.sels).filter((s) => s.startsWith("svg[data-mo-live]"));
+    expect(named).toEqual(['svg[data-mo-live]:not([data-mo-breath="host"]) .mo-breathe']);
   });
 });
 
@@ -236,35 +247,55 @@ describe("bloub's head", () => {
   });
 });
 
-describe("the engine hands the breath and blink between the compositor and the frame clock", () => {
-  const proto = FakeElement.prototype as unknown as { getAnimations?: () => { currentTime: number }[] };
+describe("the stylesheet keeps the breath and blink; the frame loop writes only what moves", () => {
+  const proto = FakeElement.prototype as unknown as { getAnimations?: () => never[] };
 
-  test("CSS at rest, frame clock while animating, and back at the same phase", () => {
-    proto.getAnimations = () => [{ currentTime: 1234 }];
+  test("hybrid: no breath or blink write while awake, the seeded phase stays, data-mo-js marks the loop", () => {
+    proto.getAnimations = () => [];
     try {
       const doc = new FakeDocument();
       const svg = makeSvg(doc);
       const handle = mountLive(svg as unknown as SVGSVGElement, "idle-seed");
+      const lag = svg.style.getPropertyValue("--mo-lag");
+      expect(svg.style.getPropertyValue("--mo-elag")).toBe("");
+      expect(lag).not.toBe("");
       expect(doc.defaultView.queue.length).toBe(0);
       expect(svg.hasAttribute("data-mo-js")).toBe(false);
 
+      doc.timeline.currentTime = 1234;
       handle.play("wide");
       expect(svg.hasAttribute("data-mo-js")).toBe(true);
-      run(doc, 0, 0.5);
+      const breathe = svg.querySelector(".mo-breathe")!;
+      const wrapsClean = () => svg.querySelectorAll(".mo-eye").every((e) => e.children[0]!.getAttribute("transform") === null);
+      let t = 1234;
+      for (let i = 0; i < 30; i++) {
+        t = run(doc, t, 0.1);
+        expect(breathe.getAttribute("transform")).toBeNull();
+        expect(wrapsClean()).toBe(true);
+        expect(svg.style.getPropertyValue("--mo-lag")).toBe(lag);
+      }
       expect(svg.hasAttribute("data-mo-live")).toBe(true);
-      expect(svg.querySelector(".mo-breathe")!.getAttribute("transform")).toMatch(/^scale\(1 /);
 
-      run(doc, 500, 12);
+      run(doc, t, 12);
       expect(doc.defaultView.queue.length).toBe(0);
       expect(svg.hasAttribute("data-mo-js")).toBe(false);
-      expect(svg.querySelector(".mo-breathe")!.getAttribute("transform")).toBeNull();
-      expect(svg.querySelectorAll(".mo-eye").every((e) => e.children[0]!.getAttribute("transform") === null)).toBe(true);
-      const lag = -parseFloat(svg.style.getPropertyValue("--mo-lag"));
-      expect(lag).toBeGreaterThan(1234 + 1000);
+      expect(breathe.getAttribute("transform")).toBeNull();
+      expect(wrapsClean()).toBe(true);
+      expect(svg.style.getPropertyValue("--mo-lag")).toBe(lag);
       handle.destroy();
       expect(svg.getAttribute("style")).toBeNull();
     } finally {
       delete proto.getAnimations;
     }
+  });
+
+  test("without getAnimations the frame loop still writes the breath", () => {
+    const doc = new FakeDocument();
+    const svg = makeSvg(doc);
+    const handle = mountLive(svg as unknown as SVGSVGElement, "idle-seed");
+    expect(svg.hasAttribute("data-mo-js")).toBe(true);
+    run(doc, 0, 0.5);
+    expect(svg.querySelector(".mo-breathe")!.getAttribute("transform")).toMatch(/^scale\(1 /);
+    handle.destroy();
   });
 });

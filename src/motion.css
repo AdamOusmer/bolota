@@ -692,14 +692,14 @@
 .mo-eye > * {
   animation-name: mo-wrap;
   animation-duration: calc(var(--mo-saccade, 5600ms) * var(--mo-rate, 1));
-  animation-delay: calc((var(--mo-saccade-phase, 0ms) + var(--mo-elag, 0ms)) * var(--mo-rate, 1));
+  animation-delay: calc(var(--mo-saccade-phase, 0ms) * var(--mo-rate, 1));
 }
 
 .mo-eye > * > path,
 .mo-eye rect {
   animation-name: mo-blink;
   animation-duration: calc(var(--mo-blink, 4800ms) * var(--mo-rate, 1));
-  animation-delay: calc((var(--mo-blink-phase, 0ms) + var(--mo-elag, 0ms)) * var(--mo-rate, 1));
+  animation-delay: calc(var(--mo-blink-phase, 0ms) * var(--mo-rate, 1));
 }
 
 /**
@@ -757,19 +757,16 @@
 }
 
 /**
- * A mounted engine drives these loops itself while it is animating
- * (`src/live/idle.ts`, the same arithmetic) and marks its root `data-mo-js`, so
- * the stylesheet's copy stands down there; the pose and hover declarations
- * stay. At rest it takes the mark off and the compositor runs the loops again,
- * from the phase the engine hands back in `--mo-lag` (breathe, bob, saccade)
- * and `--mo-elag` (blink, wrap).
+ * A mounted engine marks its root `data-mo-js` while its frame loop runs. The
+ * loop writes the morphs (eyes, act, shake), so the stylesheet's copy of those
+ * loops stands down there; the pose and hover declarations stay. The breath
+ * stays the stylesheet's at all times, from `--mo-lag`: the loop never writes
+ * it.
  */
 svg[data-mo-js] .mo-root,
-svg[data-mo-js] .mo-breathe,
 svg[data-mo-js] .mo-bob,
 svg[data-mo-js] .mo-eyes,
 svg[data-mo-js] .mo-eye,
-svg[data-mo-js] .mo-eye > *,
 svg[data-mo-js] .mo-eye > * > path,
 svg[data-mo-js] .mo-eye rect {
   animation: none !important;
@@ -781,19 +778,35 @@ svg[data-mo-js] .mo-eye rect {
  * A mounted engine marks its root `data-mo-live` (never under reduced motion,
  * which keeps the reset below) and owns the idle life from then on, as
  * bloub's engine did: none of the loops above runs under it, not
- * the saccade, the bob or their blink. While it animates it drives everything
- * from its frame clock (`data-mo-js`, above); at rest it hands the stylesheet
- * the two loops a resting face still has, the breath and the blink, from the
- * phase it reached (`--mo-lag`, `--mo-elag`).
+ * the saccade, the bob or their blink. At rest nothing animates inside the
+ * svg: the engine blinks on a timer, writing the blink itself for its 180ms,
+ * and the breath is the stylesheet's on `.mo-breathe` (`--mo-lag`) unless the
+ * host takes it (`data-mo-breath="host"`). While the engine animates it drives
+ * the morphs from its frame clock (`data-mo-js`, above) and runs the tremor
+ * itself, so `.mo-root`'s `mo-shake` has nothing to do at rest. A held tremor
+ * (`data-mo-shake`, `--mo-shake` at its amplitude) is the stylesheet's again,
+ * so an engine wearing it can park.
  */
 svg[data-mo-live] .mo-bob,
+svg[data-mo-live]:not([data-mo-shake]) .mo-root,
 svg[data-mo-live] .mo-eyes,
+svg[data-mo-live] .mo-eye > *,
 svg[data-mo-live] .mo-eye > * > * {
   animation: none;
 }
 
-/** bloub's breath: the height alone, half a percent each way over 3.4s. */
-svg[data-mo-live] .mo-breathe {
+/**
+ * bloub's breath: the height alone, half a percent each way over 3.4s. A host
+ * that animates it on an HTML wrapper (where it composites; on an SVG child it
+ * costs a style recalc per frame) sets `data-mo-breath="host"` on the svg. Under
+ * the engine the base `.mo-breathe` loop must never run, so taking the breath
+ * away from the engine stands it down explicitly.
+ */
+svg[data-mo-live][data-mo-breath="host"] .mo-breathe {
+  animation: none;
+}
+
+svg[data-mo-live]:not([data-mo-breath="host"]) .mo-breathe {
   animation-name: mo-live-breathe;
   animation-duration: calc(1700ms * var(--mo-rate, 1));
   animation-delay: calc(var(--mo-lag, 0ms) * var(--mo-rate, 1));
@@ -807,45 +820,6 @@ svg[data-mo-live] .mo-breathe {
   }
   to {
     transform: scale(1, calc(1 + 0.005 * var(--mo-amp)));
-  }
-}
-
-/**
- * bloub's blink schedule, one 16s cycle of it: gaps of 1.9 to 4.6s and a
- * double blink, each a fast close to 6% and a slower open over 180ms. On the
- * group under `.mo-eye`, so it closes the drawn eye on the screen's vertical.
- */
-svg[data-mo-live] .mo-eye > * {
-  animation-name: mo-live-blink;
-  animation-duration: calc(16000ms * var(--mo-rate, 1));
-  animation-delay: calc(var(--mo-elag, 0ms) * var(--mo-rate, 1));
-  animation-timing-function: linear;
-}
-
-@keyframes mo-live-blink {
-  0%,
-  8.75%,
-  9.875%,
-  28.125%,
-  29.25%,
-  29.625%,
-  30.75%,
-  51.25%,
-  52.375%,
-  65%,
-  66.125%,
-  88.125%,
-  89.25%,
-  100% {
-    transform: scale(1, 1);
-  }
-  9.2562%,
-  28.6313%,
-  30.1313%,
-  51.7562%,
-  65.5062%,
-  88.6312% {
-    transform: scale(1, calc(1 - 0.94 * var(--mo-amp)));
   }
 }
 

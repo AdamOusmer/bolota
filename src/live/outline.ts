@@ -163,6 +163,17 @@ export function ballRadius(l: OutlineLayout): number {
   return ball(l).mean;
 }
 
+/** Whether the tables the eye fit reads exist for `l`. */
+export function prepared(l: OutlineLayout): boolean {
+  return floors.has(l) && balls.has(l);
+}
+
+/** Builds the tables the eye fit reads, so a later fit does no ray work. */
+export function prepare(l: OutlineLayout): void {
+  floor(l);
+  ball(l);
+}
+
 /** The core body's radius in direction `theta`, between the two nearest rays. */
 export function ballEdge(l: OutlineLayout, theta: number): number {
   const t = ball(l).table;

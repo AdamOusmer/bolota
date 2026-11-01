@@ -267,8 +267,19 @@ const ENTRIES: {
     // the outline's shortest radius for `fit.ts`, and `putter`'s slots. Measured
     // 21052 B (+1562 over the previous budget); budget is that plus ~3%. Size
     // accepted for the script time of a frame, which falls several-fold.
+    //
+    // Raised from 21690 to 21932 for the warm-started eye fit in `live/fit.ts`
+    // (`backAlong`, the probe around last frame's answer). Measured 21832 B
+    // (+145 over 21687); budget is that plus 100 B. Size accepted for 46% fewer
+    // fits per settle under a head turn (6.9 to 4.2 over 9,560 recorded `wander`
+    // frames, 56 to 30 us), which matters most for a crowd of engines.
+    //
+    // Raised from 21932 to 22066 for handing a settled tremor to the
+    // stylesheet (`holdShake` and its take-back in `mount.ts`). Measured
+    // 21966 B (+84 over 21882); budget is that plus 100 B. Size accepted so an
+    // engine wearing `excited` parks instead of holding the page at vsync.
     name: "engine",
-    budget: 21690,
+    budget: 22066,
     external: ["*/decor.js"],
     source: `import { mountEngine, _CHOREO, _r3 } from "../../src/engine";
              globalThis.x = [mountEngine, _CHOREO, _r3];`,

@@ -2,7 +2,7 @@
 // Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
 import type { EngineHandle } from "../engine";
-import { motionSeeds } from "../animate";
+import { motionSeeds, motionVars, rootClass } from "../animate";
 import { _layout, parts, type BolotaOptions } from "../bolota";
 import { EASE_OUT, MORPH_IN, MORPH_OUT } from "../ease";
 import type { Expression } from "../expression";
@@ -13,21 +13,29 @@ import { CHOREO, expressed, newEyes, type Eyes, type Head, type StateId } from "
 import type { Decor, DecorFrame, DecorHost, DecorPalette } from "./decor.js";
 import { eyeBox, settleEyes, type Correction, type Eye, type EyeBox } from "./fit";
 import { Glide, NO_LOOK, followLook, type Look } from "./follow";
-import { cancelRead, readNextFrame, startFrames, stopFrames, watchSight } from "./frames";
-import { BLINK_CYCLE, BREATH_MS, type Gaze } from "./head";
+import { JITTER_MS, blinkSlot, cancelRead, readNextFrame, startFrames, stopFrames, watchSight } from "./frames";
+import { BLINK_CYCLE, BREATH_MS, lid, nextBlink, type Gaze } from "./head";
 import { ALIASES, resolveExpression } from "./names";
 import { idleDrift, idleFrame, idleLoops, idleShake } from "./idle";
+import { prepared } from "./outline";
 import { faceEyes } from "./rig";
 import { Timeline, frameDt, type PlayOptions } from "./timeline";
 import { putter, type Slot } from "./put";
 import { uprightTransform } from "./upright";
+import { warm } from "./warm";
 
 export type LiveOptions = Omit<BolotaOptions, "expression"> & { expression?: string };
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** Seconds a woken engine stays registered after the last thing that moved. */
-const QUIET = 1;
+/**
+ * Seconds a woken engine stays registered after the last thing that moved,
+ * as wall time from the frame timestamps: the clock clamps slow frames
+ * (`MAX_FRAME` in `timeline.ts`), and the quiet period stretched to 2s and
+ * more on throttled phones. At a quarter second the window after a 300ms morph
+ * is about 0.55s there, not 2.5s.
+ */
+const QUIET = 0.25;
 
 /** The `--mo-track-travel` a follow's reach is measured against: set larger to look further, smaller to look less. */
 const TRAVEL = 3;
@@ -55,6 +63,18 @@ const stamp = (sig: Float64Array, i: number, v: number): number => {
 const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
 const clamp1 = (v: number) => (v < -1 ? -1 : v > 1 ? 1 : v);
+
+const POSE_KEYS = Object.keys(IDENT) as (keyof Pose)[];
+
+/** The face of a seeded bolota at rest: the pose and every turn at identity, so the eyes sit where the static render drew them. */
+function atRest(e: Eyes, g: Gaze, turn: number): boolean {
+  if (e.alpha < 1 || e.own !== 0 || e.head.spread !== 0 || turn !== 0) return false;
+  if (g.yaw !== 0 || g.pitch !== 0 || g.roll !== 0) return false;
+  const p = e.pose;
+  if (p === IDENT) return true;
+  for (const k of POSE_KEYS) if (p[k] !== IDENT[k]) return false;
+  return true;
+}
 
 type DecorModule = typeof import("./decor.js");
 
@@ -162,8 +182,8 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let wraps: Element[] = [];
   let hybrid = false;
   let jsPhase = true;
-  let baseBody = breathAt;
-  let baseEye = blinkAt;
+  let seated = false;
+  let unwarm: (() => void) | null = null;
   let pendingWake = false;
   let bodyMs = breathAt;
   let eyeMs = blinkAt;
@@ -175,6 +195,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let shakeTo = 0;
   let shakeAt = 0;
   let shakeCurve = MORPH_OUT;
+  let shakeHeld = 0;
   let entranceAt = -1;
   let sigBreathe = NaN;
   let sigShakeX = NaN;
@@ -182,11 +203,14 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let eyeBlink = 1000;
   let ticking = false;
   let awake = false;
+  let blinkTimer: ReturnType<typeof setTimeout> | undefined;
+  let blinkUntil = 0;
+  let blinkDue = 0;
 
   let clock = 0;
   let last = 0;
   let cuedTo = -1e-6;
-  let liveAt = 0;
+  let quietAt = 0;
   let restId: StateId = "idle";
   let restLoop = false;
   let exprPose: Pose | null = null;
@@ -207,6 +231,25 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let resized: ResizeObserver | null = null;
 
   const mk = <K extends keyof SVGElementTagNameMap>(tag: K) => doc.createElementNS(SVG_NS, tag);
+
+  /** The seeded eyes as rig boxes, the rest frame the static render already shows. */
+  function seat(): void {
+    for (let i = 0; i < 2; i++) {
+      const b = boxes[i]!;
+      const s = L.eyes[i]!;
+      b.cx = s.cx;
+      b.cy = s.cy;
+      b.rx = s.rx;
+      b.ry = s.ry;
+      b.rot = s.rot;
+      b.a = 1;
+      b.b = 0;
+      b.c = 0;
+      b.d = 1;
+    }
+    corr.gaze = 1;
+    corr.shrink = 1;
+  }
 
   function snapshot(el: Element, attrs: string[]): void {
     const was = attrs.map((a) => el.getAttribute(a));
@@ -282,25 +325,50 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     return p >= 1 ? shakeTo : shakeFrom + (shakeTo - shakeFrom) * shakeCurve.ease(p < 0 ? 0 : p);
   }
 
-  function idleEval(): void {
-    if (hoverMode) amp = ampNow();
-    idleLoops(bodyMs, eyeMs, amp, idle);
+  const blinking = () => eyeMs < blinkUntil;
+
+  const shakeSettled = () => shakeHeld > 0 || (shakeTo === 0 && clock >= shakeAt + shakeCurve.ms / 1000);
+
+  /** A settled tremor is the stylesheet's (`@keyframes mo-shake`, same stops), so the loop can park. */
+  function holdShake(): void {
+    if (shakeHeld || shakeTo === 0 || shakeNow() !== shakeTo) return;
+    shakeHeld = shakeTo;
+    sHost.set(null);
+    sigShakeX = sigShakeY = 0;
+    put(svg, "--mo-shake", String(shakeHeld));
+    svg.setAttribute("data-mo-shake", "");
   }
 
   /**
-   * Writes what the breath, the blink and the tremor moved. The blink squashes
-   * the group under `.mo-eye`, about its box's centre, so it closes the drawn
-   * eye on screen's vertical, as bloub's did, whatever the head did to it.
+   * In hybrid mode the lid is computed only while a blink lasts: the one a
+   * timer woke the engine for, or one that comes up while it is awake anyway.
+   */
+  function idleEval(): void {
+    if (hoverMode) amp = ampNow();
+    if (!hybrid) return idleLoops(bodyMs, eyeMs, amp, idle);
+    if (ticking && !blinking() && lid(eyeMs) < 1) blinkUntil = nextBlink(eyeMs).end;
+    if (blinking()) idleLoops(bodyMs, eyeMs, amp, idle);
+    else idle.blink = 1;
+  }
+
+  /**
+   * Writes what the tremor moved, and in the modes without a compositor
+   * stylesheet, the breath too. The blink squashes the group under `.mo-eye`,
+   * about its box's centre, so it closes the drawn eye on screen's vertical, as
+   * bloub's did, whatever the head did to it. Hybrid mode keeps the breath on
+   * the stylesheet and folds the blink and the entrance cue into the rects.
    */
   function idleWrite(): void {
-    if (!jsPhase) return;
-    const b = q(idle.breathe, 10000);
-    if (b !== sigBreathe) {
-      sigBreathe = b;
-      sBreathe.set(b === 10000 ? null : `scale(1 ${b / 10000})`);
+    if (!jsPhase && !blinking()) return;
+    if (!hybrid) {
+      const b = q(idle.breathe, 10000);
+      if (b !== sigBreathe) {
+        sigBreathe = b;
+        sBreathe.set(b === 10000 ? null : `scale(1 ${b / 10000})`);
+      }
     }
     const sh = shakeNow();
-    if (sh !== 0 || sigShakeX !== 0 || sigShakeY !== 0) {
+    if (!shakeHeld && (sh !== 0 || sigShakeX !== 0 || sigShakeY !== 0)) {
       idleShake(bodyMs, sh, idle);
       const hx = q(idle.shakeX, 1000);
       const hy = q(idle.shakeY, 1000);
@@ -317,12 +385,66 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     }
   }
 
+  /**
+   * Upgrades a plain `parts()` render in place: the server's body and eyes
+   * groups move under the wrappers `animate: "always"` would have emitted, so
+   * the page ships the small markup once and nothing is drawn twice. Returns
+   * null for any other shape.
+   */
+  function wrapStatic(): Element | null {
+    const all = Array.from(svg.children);
+    const [body, eyes, ...rest] = all.slice(all[0]?.tagName === "path" ? 1 : 0);
+    if (!eyes || rest.length || body!.tagName !== "g" || eyes.tagName !== "g" || eyes.children.length !== 2) return null;
+    const g = (cls: string) => {
+      const el = mk("g");
+      el.setAttribute("class", cls);
+      return el;
+    };
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    const root = g(rootClass("always"));
+    const breathe = g("mo-breathe");
+    const bob = g("mo-bob");
+    const anchor = all[all.indexOf(eyes) + 1] ?? null;
+    const paths = Array.from(eyes.children);
+    const wrappers = paths.map((path, i) => {
+      const e = L.eyes[i]!;
+      const eye = g("mo-eye");
+      eye.setAttribute("style", `--mo-wrap:${i ? 1 : -1};--mo-lean:${r2(e.rot)};transform-origin:${r2(e.cx)}px ${r2(e.cy)}px`);
+      eye.appendChild(mk("g")).appendChild(path);
+      return eye;
+    });
+    snapshot(eyes, ["class"]);
+    eyes.setAttribute("class", "mo-eyes");
+    wrappers.forEach((eye) => eyes.appendChild(eye));
+    bob.append(body!, eyes);
+    breathe.appendChild(bob);
+    root.appendChild(breathe);
+    svg.insertBefore(root, anchor);
+    undo.push(() => {
+      paths.forEach((path, i) => {
+        eyes.appendChild(path);
+        wrappers[i]!.remove();
+      });
+      root.remove();
+      svg.insertBefore(body!, anchor);
+      svg.insertBefore(eyes, anchor);
+    });
+    const vars = motionVars(resolve(name, base).t);
+    for (const k in vars) svg.style.setProperty(k, vars[k]!);
+    return breathe;
+  }
+
   function build(): void {
     if (built) return;
     built = true;
-    snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-js", "data-mo-live", "data-mo-asleep"]);
-    let found = svg.querySelector(".mo-breathe");
+    snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-js", "data-mo-live", "data-mo-shake", "data-mo-asleep"]);
+    let found = svg.querySelector(".mo-breathe") ?? wrapStatic();
     if (!found) {
+      const statics = Array.from(svg.children);
+      for (const el of statics) {
+        snapshot(el, ["display"]);
+        el.setAttribute("display", "none");
+      }
       const p = parts(name, { ...base, animate: base.animate ?? "always" });
       if (p.bg) {
         const plate = mk("path");
@@ -353,13 +475,12 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     if (!svg.hasAttribute("viewBox")) svg.setAttribute("viewBox", "0 0 100 100");
     svg.setAttribute("overflow", "visible");
     // The stylesheet's own idle (saccade, bob, its blink) stands down for good
-    // under the engine: what it runs at rest is the engine's breath and blink.
+    // under the engine: what it runs at rest is the engine's breath.
     if (!reduced) svg.setAttribute("data-mo-live", "");
     hybrid = !hoverMode && !reduced && typeof breathe.getAnimations === "function";
     jsPhase = !hybrid;
     if (!reduced && jsPhase) svg.setAttribute("data-mo-js", "");
-    svg.style.setProperty("--mo-lag", `${-Math.round(baseBody)}ms`);
-    svg.style.setProperty("--mo-elag", `${-Math.round(baseEye)}ms`);
+    svg.style.setProperty("--mo-lag", `${-Math.round(breathAt)}ms`);
     for (const el of [host, breathe]) snapshot(el, ["transform"]);
 
     eyesG = breathe.querySelector(".mo-eyes")!;
@@ -493,12 +614,25 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       headNow.spread = e.head.spread;
       faceNow.pose = p;
       faceNow.own = e.own;
-      faceEyes(L, faceNow, turn, rest);
-      settleEyes(L, rest, g, turn, boxes, corr);
+      // Until the outline tables exist, a rest frame keeps the static render's
+      // own eyes; the fit that may trim them runs once the tables are warm.
+      seated = !prepared(L) && atRest(e, g, turn);
+      if (seated) seat();
+      else {
+        faceEyes(L, faceNow, turn, rest);
+        settleEyes(L, rest, g, turn, boxes, corr);
+      }
       changed = writeRig(rects[0]!, 0, boxes[0]!) || changed;
       changed = writeRig(rects[1]!, 1, boxes[1]!) || changed;
     }
     return changed;
+  }
+
+  function warmed(): void {
+    unwarm = null;
+    if (dead || !seated) return;
+    faceSig.fill(NaN);
+    if (!ticking) paint(actNow, eyesNow, gazeNow);
   }
 
   function still(): void {
@@ -582,55 +716,78 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     bodyMs += dt * 1000;
     idleEval();
     if (awake) {
-      if (frame(clock)) liveAt = clock;
-      else if (clock - liveAt > QUIET) awake = false;
+      if (frame(clock)) quietAt = 0;
+      else if (!quietAt) quietAt = ms;
+      else if (ms - quietAt > QUIET * 1000) awake = false;
     }
-    if (!awake && hybrid && shakeTo === 0 && entrance() === 1) {
+    holdShake();
+    if (!awake && hybrid && shakeSettled() && entrance() === 1 && !blinking() && nextBlink(eyeMs).start - eyeMs > 400) {
       giveBack();
       halt();
       return;
     }
     idleWrite();
-    if (!awake && hoverMode && ampTo === 0 && clock >= ampAt + AMP_RAMP && shakeTo === 0 && clock >= shakeAt + shakeCurve.ms / 1000 && entrance() === 1) halt();
+    if (!awake && hoverMode && ampTo === 0 && clock >= ampAt + AMP_RAMP && shakeSettled() && entrance() === 1) halt();
+  }
+
+  const wallNow = (): number => view.performance?.now?.() ?? Date.now();
+
+  function clearBlink(): void {
+    if (view.clearTimeout) view.clearTimeout(blinkTimer);
+    else clearTimeout(blinkTimer);
+  }
+
+  /** A parked hybrid engine sleeps to the next blink's shared window, which delays the blink and never advances it. */
+  function armBlink(): void {
+    clearBlink();
+    if (!hybrid || dead || paused || reduced || !sight || ticking) return;
+    const now = wallNow();
+    blinkDue = nextBlink(eyeMs).start;
+    const fire = blinkSlot(view, now + (blinkDue - eyeMs), (seeds.blinkPhase / seeds.blink) * JITTER_MS);
+    const delay = fire - now;
+    blinkTimer = (view.setTimeout ? view.setTimeout(blinkWake, delay) : setTimeout(blinkWake, delay)) as ReturnType<typeof setTimeout>;
+  }
+
+  /** Every way out of the parked state clears the timer; the eye clock lands on the due blink, whatever the window delayed it by. */
+  function blinkWake(): void {
+    eyeMs = blinkDue;
+    blinkUntil = nextBlink(eyeMs).end;
+    start();
   }
 
   function halt(): void {
     awake = false;
-    if (!ticking) return;
-    ticking = false;
-    last = 0;
-    stopFrames(view, tick);
+    if (ticking) {
+      ticking = false;
+      last = 0;
+      stopFrames(view, tick);
+    }
+    armBlink();
   }
 
   function start(): void {
     if (dead || paused || reduced || !sight || ticking) return;
+    clearBlink();
     ticking = true;
     last = 0;
     startFrames(view, tick);
   }
 
-  /** The compositor's breath and blink hand over to the frame clock, from the phase they have reached. */
+  /** The frame loop starts writing the morphs; the stylesheet keeps the breath. */
   function takeOver(): void {
     if (jsPhase) return;
-    const elapsed = (el: Element) => Number(el.getAnimations()[0]?.currentTime) || 0;
-    bodyMs = baseBody + elapsed(breathe);
-    eyeMs = baseEye + elapsed(wraps[0]!);
     jsPhase = true;
-    sigBreathe = NaN;
     svg.setAttribute("data-mo-js", "");
-    idleEval();
   }
 
-  /** And back: the stylesheet restarts the breath and blink at the phase the frame clock stopped on. */
+  /** And back: the loop's tremor and entrance fold are cleared, the stylesheet never stopped. */
   function giveBack(): void {
+    if (eyeBlink !== 1000) {
+      eyeBlink = 1000;
+      rects.forEach((rect, i) => writeRig(rect, i, boxes[i]!));
+    }
     if (!jsPhase) return;
-    baseBody = bodyMs;
-    baseEye = eyeMs;
-    svg.style.setProperty("--mo-lag", `${-Math.round(bodyMs)}ms`);
-    svg.style.setProperty("--mo-elag", `${-Math.round(eyeMs)}ms`);
-    for (const slot of [sHost, sBreathe]) slot.set(null);
-    eyeBlink = 1000;
-    rects.forEach((rect, i) => writeRig(rect, i, boxes[i]!));
+    sHost.set(null);
     sigShakeX = sigShakeY = NaN;
     svg.removeAttribute("data-mo-js");
     jsPhase = false;
@@ -643,7 +800,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       return;
     }
     if (hybrid) takeOver();
-    liveAt = clock;
+    quietAt = 0;
     awake = true;
     start();
   }
@@ -681,6 +838,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       pendingWake = false;
       wake();
     }
+    armBlink();
   }
 
   function release(): void {
@@ -733,6 +891,11 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     build();
     put(svg, "--mo-bdy", e && e.p.bdy ? String(e.p.bdy) : null);
     shakeFrom = instant ? (e?.p.shake ?? 0) : shakeNow();
+    if (shakeHeld) {
+      shakeHeld = 0;
+      svg.removeAttribute("data-mo-shake");
+      put(svg, "--mo-shake", null);
+    }
     shakeTo = e?.p.shake ?? 0;
     shakeAt = clock;
     shakeCurve = e ? MORPH_IN : MORPH_OUT;
@@ -744,6 +907,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     else if (instant) {
       tl.express(exprPose, -1);
       frame(0);
+      holdShake();
     } else {
       tl.release(clock);
       tl.express(exprPose, clock);
@@ -756,6 +920,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     idleEval();
     frame(0);
     idleWrite();
+    if (!prepared(L)) unwarm = warm(view, L, warmed);
   }
   if (initial) express(initial, true);
   if (!decorModule) {
@@ -765,6 +930,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   if (!reduced) {
     unwatch = watchSight(view, svg, sightChange);
     if (!hoverMode && !hybrid) start();
+    else armBlink();
   }
 
   const handle: EngineHandle = {
@@ -816,6 +982,8 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       if (dead) return;
       dead = true;
       unwatch?.();
+      unwarm?.();
+      unwarm = null;
       halt();
       release();
       if (!built) return;
