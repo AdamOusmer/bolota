@@ -10,6 +10,31 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.2.7
+
+No face changes. Live bolotas stop repainting on WebKit's main thread at rest.
+
+WebKit composites a transform animation on the outer `<svg>` but not on an
+element inside it, where it repaints the whole image on the main thread every
+frame. 24 live bolotas in the iOS 27.2 simulator: 15% of the page process's
+CPU at rest before, 4% after (static svgs: 2%); on a landing page with a
+crowd, scroll hitches per flick went from 15 to 2.
+
+### Changed
+
+- **The live breath runs on the `<svg>` itself.** The engine marks the root
+  `data-mo-breath="root"` and the stylesheet animates it there instead of on
+  `.mo-breathe`; same 0.5% height, same pivot, same phase. The rule is
+  `:where()`-scoped, so a page that animates the svg element itself keeps its
+  own animation (and loses the breath). Hover mode is unchanged: its frame
+  loop writes the breath, scaled by the hover amplitude. A host that already
+  takes the breath (`data-mo-breath="host"`) is left alone.
+- **The expression's body offset eases on `.mo-bob`.** `--mo-bdy` is no longer
+  a transitioned channel on `.mo-root`; `.mo-bob` transitions the `translate`
+  it computes. The inherited channel restyled every node of the bolota on
+  every frame of every expression: two thirds of a live crowd's expression
+  style time in Chrome.
+
 ## 0.2.6
 
 No face changes. Mounting does the work of a mount, not of the first turn.

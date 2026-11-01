@@ -278,8 +278,15 @@ const ENTRIES: {
     // stylesheet (`holdShake` and its take-back in `mount.ts`). Measured
     // 21966 B (+84 over 21882); budget is that plus 100 B. Size accepted so an
     // engine wearing `excited` parks instead of holding the page at vsync.
+    //
+    // Raised from 22066 to 22411. CI's bun 1.3.10 measured main at 22285 B
+    // from the 0.2.6 timer fix on (bun 1.4.2 locally: 22011, which is how it
+    // passed before merge), and the root breath mark for WebKit measures
+    // 22311 B (+26). Budget is that plus 100 B. Size accepted for a crowd that
+    // no longer repaints on WebKit's main thread at rest (15% to 4% of the page
+    // process for 24 live bolotas, iOS 27.2 simulator).
     name: "engine",
-    budget: 22066,
+    budget: 22411,
     external: ["*/decor.js"],
     source: `import { mountEngine, _CHOREO, _r3 } from "../../src/engine";
              globalThis.x = [mountEngine, _CHOREO, _r3];`,

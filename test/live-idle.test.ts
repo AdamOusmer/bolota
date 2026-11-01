@@ -115,9 +115,9 @@ describe("the engine's rest loops match motion.css", () => {
 
   test("breath: bloub's height, half a percent each way over 3.4s, eased as the stylesheet eases it", () => {
     const kf = block("mo-live-breathe");
-    expect(/from\s*\{\s*transform: scale\(1, calc\(1 - 0\.005 \* var\(--mo-amp\)\)\)/.test(kf)).toBe(true);
-    expect(/to\s*\{\s*transform: scale\(1, calc\(1 \+ 0\.005 \* var\(--mo-amp\)\)\)/.test(kf)).toBe(true);
-    expect(/svg\[data-mo-live\]:not\(\[data-mo-breath="host"\]\) \.mo-breathe \{[^}]*animation-duration: calc\(1700ms[^}]*alternate[^}]*ease-in-out/.test(css)).toBe(true);
+    expect(/from\s*\{\s*transform: scale\(1, 0\.995\)/.test(kf)).toBe(true);
+    expect(/to\s*\{\s*transform: scale\(1, 1\.005\)/.test(kf)).toBe(true);
+    expect(/:where\(svg\[data-mo-live\]\[data-mo-breath="root"\]\) \{[^}]*transform-origin: 50% 50%[^}]*animation-duration: calc\(1700ms[^}]*infinite[^}]*alternate[^}]*ease-in-out/.test(css)).toBe(true);
     expect(BREATH_MS).toBe(3400);
     expect(BREATH).toBe(0.005);
     for (let t = 0; t < 8000; t += 37) {
@@ -164,7 +164,7 @@ describe("the engine's rest loops match motion.css", () => {
     expect(rule).toContain("svg[data-mo-live]:not([data-mo-shake]) .mo-root");
   });
 
-  test("under the engine every base animated selector is stood down; only the breath may run, and not for a host that takes it", () => {
+  test("under the engine every base animated selector is stood down; only the root's breath may run, and only where the engine marks it", () => {
     const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
     const rules = [...stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ sels: m[1]!.split(",").map((s) => s.trim()), body: m[2]! }));
     const stood = new Set<string>();
@@ -172,11 +172,11 @@ describe("the engine's rest loops match motion.css", () => {
       if (!/animation:\s*none;/.test(r.body)) continue;
       for (const s of r.sels) if (s.startsWith("svg[data-mo-live] ")) stood.add(s.slice("svg[data-mo-live] ".length));
     }
-    for (const sel of [".mo-bob", ".mo-eyes", ".mo-eye > *", ".mo-eye > * > *"]) expect(stood.has(sel), sel).toBe(true);
+    for (const sel of [".mo-breathe", ".mo-bob", ".mo-eyes", ".mo-eye > *", ".mo-eye > * > *"]) expect(stood.has(sel), sel).toBe(true);
     expect(rules.some((r) => r.sels.includes("svg[data-mo-live]:not([data-mo-shake]) .mo-root") && /animation:\s*none;/.test(r.body))).toBe(true);
-    expect(rules.some((r) => r.sels.includes('svg[data-mo-live][data-mo-breath="host"] .mo-breathe') && /animation:\s*none;/.test(r.body))).toBe(true);
-    const named = rules.filter((r) => /animation-name:/.test(r.body)).flatMap((r) => r.sels).filter((s) => s.startsWith("svg[data-mo-live]"));
-    expect(named).toEqual(['svg[data-mo-live]:not([data-mo-breath="host"]) .mo-breathe']);
+    const named = rules.filter((r) => /animation-name:/.test(r.body)).flatMap((r) => r.sels).filter((s) => s.includes("svg[data-mo-live]"));
+    expect(named).toEqual([':where(svg[data-mo-live][data-mo-breath="root"])']);
+    expect(rules.some((r) => r.sels.includes(':where(svg[data-mo-breath="root"][data-mo-asleep])') && /animation-play-state:\s*paused;/.test(r.body))).toBe(true);
   });
 });
 
@@ -261,6 +261,7 @@ describe("the stylesheet keeps the breath and blink; the frame loop writes only 
       expect(lag).not.toBe("");
       expect(doc.defaultView.queue.length).toBe(0);
       expect(svg.hasAttribute("data-mo-js")).toBe(false);
+      expect(svg.getAttribute("data-mo-breath")).toBe("root");
 
       doc.timeline.currentTime = 1234;
       handle.play("wide");
@@ -282,18 +283,36 @@ describe("the stylesheet keeps the breath and blink; the frame loop writes only 
       expect(breathe.getAttribute("transform")).toBeNull();
       expect(wrapsClean()).toBe(true);
       expect(svg.style.getPropertyValue("--mo-lag")).toBe(lag);
+      expect(svg.getAttribute("data-mo-breath")).toBe("root");
       handle.destroy();
       expect(svg.getAttribute("style")).toBeNull();
+      expect(svg.hasAttribute("data-mo-breath")).toBe(false);
     } finally {
       delete proto.getAnimations;
     }
   });
 
-  test("without getAnimations the frame loop still writes the breath", () => {
+  test("a host that takes the breath keeps it", () => {
+    proto.getAnimations = () => [];
+    try {
+      const doc = new FakeDocument();
+      const svg = makeSvg(doc);
+      svg.setAttribute("data-mo-breath", "host");
+      const handle = mountLive(svg as unknown as SVGSVGElement, "idle-seed");
+      expect(svg.getAttribute("data-mo-breath")).toBe("host");
+      handle.destroy();
+      expect(svg.getAttribute("data-mo-breath")).toBe("host");
+    } finally {
+      delete proto.getAnimations;
+    }
+  });
+
+  test("without getAnimations the frame loop still writes the breath, and the root is not marked", () => {
     const doc = new FakeDocument();
     const svg = makeSvg(doc);
     const handle = mountLive(svg as unknown as SVGSVGElement, "idle-seed");
     expect(svg.hasAttribute("data-mo-js")).toBe(true);
+    expect(svg.hasAttribute("data-mo-breath")).toBe(false);
     run(doc, 0, 0.5);
     expect(svg.querySelector(".mo-breathe")!.getAttribute("transform")).toMatch(/^scale\(1 /);
     handle.destroy();

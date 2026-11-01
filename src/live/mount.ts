@@ -437,7 +437,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   function build(): void {
     if (built) return;
     built = true;
-    snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-js", "data-mo-live", "data-mo-shake", "data-mo-asleep"]);
+    snapshot(svg, ["style", "class", "viewBox", "overflow", "data-mo-js", "data-mo-live", "data-mo-shake", "data-mo-asleep", "data-mo-breath"]);
     let found = svg.querySelector(".mo-breathe") ?? wrapStatic();
     if (!found) {
       const statics = Array.from(svg.children);
@@ -480,6 +480,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     hybrid = !hoverMode && !reduced && typeof breathe.getAnimations === "function";
     jsPhase = !hybrid;
     if (!reduced && jsPhase) svg.setAttribute("data-mo-js", "");
+    if (hybrid && svg.getAttribute("data-mo-breath") !== "host") svg.setAttribute("data-mo-breath", "root");
     svg.style.setProperty("--mo-lag", `${-Math.round(breathAt)}ms`);
     for (const el of [host, breathe]) snapshot(el, ["transform"]);
 
