@@ -745,7 +745,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     blinkDue = nextBlink(eyeMs).start;
     const fire = blinkSlot(view, now + (blinkDue - eyeMs), (seeds.blinkPhase / seeds.blink) * JITTER_MS);
     const delay = fire - now;
-    blinkTimer = view.setTimeout ? view.setTimeout(blinkWake, delay) : setTimeout(blinkWake, delay);
+    blinkTimer = (view.setTimeout ? view.setTimeout(blinkWake, delay) : setTimeout(blinkWake, delay)) as ReturnType<typeof setTimeout>;
   }
 
   /** Every way out of the parked state clears the timer; the eye clock lands on the due blink, whatever the window delayed it by. */
