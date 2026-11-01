@@ -227,6 +227,8 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let halfH = 1;
   let gain = 1;
   let measured = false;
+  let stale = true;
+  let gainStale = true;
   let detach: (() => void) | null = null;
   let resized: ResizeObserver | null = null;
 
@@ -814,13 +816,27 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     const radius = Math.max(1, Math.min(r.width, r.height) / 2);
     halfW = Math.max(1, (view.innerWidth || 8 * radius) / 2);
     halfH = Math.max(1, (view.innerHeight || 8 * radius) / 2);
-    gain = (parseFloat(view.getComputedStyle(eyesG).getPropertyValue("--mo-track-travel")) || TRAVEL) / TRAVEL;
+    if (gainStale) gain = (parseFloat(view.getComputedStyle(eyesG).getPropertyValue("--mo-track-travel")) || TRAVEL) / TRAVEL;
+    stale = gainStale = false;
   }
 
-  const onGeom = () => {
-    if (!sight) return;
+  /**
+   * Geometry only matters while a pointer is there to aim at. A scroll with no
+   * pointer (every touch screen, which never reports one) marks it stale and
+   * nothing else: no layout read, no wake. The next pointer move measures.
+   */
+  const remeasure = () => {
+    if (!sight || !pointer) return;
     readNextFrame(view, measure);
     wake();
+  };
+  const onScroll = () => {
+    stale = true;
+    remeasure();
+  };
+  const onGeom = () => {
+    stale = gainStale = true;
+    remeasure();
   };
 
   /**
@@ -834,8 +850,9 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     sight = visible;
     put(svg, "data-mo-asleep", visible ? null : "");
     if (!visible) return halt();
-    if (following) readNextFrame(view, measure);
-    if (!hybrid || jsPhase || following || pendingWake) {
+    if (following) stale = true;
+    if (following && pointer) readNextFrame(view, measure);
+    if (!hybrid || jsPhase || (following && pointer) || pendingWake) {
       pendingWake = false;
       wake();
     }
@@ -849,6 +866,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     following = false;
     pointer = null;
     measured = false;
+    stale = gainStale = true;
   }
 
   function attach(target: Element | "window"): void {
@@ -859,6 +877,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       const p = ev as PointerEvent;
       if (p.pointerType === "touch") return;
       pointer = { x: p.clientX, y: p.clientY };
+      if (stale) readNextFrame(view, measure);
       wake();
     };
     const onLeave = () => {
@@ -868,14 +887,14 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     const geom = { passive: true, capture: true } as const;
     moves.addEventListener("pointermove", onMove, { passive: true });
     leaves.addEventListener("pointerleave", onLeave, { passive: true });
-    view.addEventListener("scroll", onGeom, geom);
+    view.addEventListener("scroll", onScroll, geom);
     view.addEventListener("resize", onGeom, { passive: true });
     resized = view.ResizeObserver ? new view.ResizeObserver(onGeom) : null;
     resized?.observe(svg);
     detach = () => {
       moves.removeEventListener("pointermove", onMove);
       leaves.removeEventListener("pointerleave", onLeave);
-      view.removeEventListener("scroll", onGeom, geom);
+      view.removeEventListener("scroll", onScroll, geom);
       view.removeEventListener("resize", onGeom);
       resized?.disconnect();
       resized = null;

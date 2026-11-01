@@ -284,14 +284,13 @@ describe("mountLive expressions", () => {
 });
 
 describe("mountLive gaze", () => {
-  test("rects are read on mount, scroll and resize only, and before the frame writes", () => {
+  test("rects are read on the first pointer move, then on scroll and resize only, and before the frame writes", () => {
     const { doc, svg, handle } = mounted();
     const win = doc.defaultView;
     doc.log = { events: [] };
     handle.follow();
-    expect(doc.rects).toBe(0);
     frame(doc, 16);
-    expect(doc.rects).toBe(1);
+    expect(doc.rects).toBe(0);
     for (let i = 0; i < 40; i++) {
       win.fire("pointermove", { clientX: 200 + i * 5, clientY: 40, pointerType: "mouse" });
       frame(doc, 32 + i * 16);
@@ -309,6 +308,25 @@ describe("mountLive gaze", () => {
     expect(read).toBe(0);
     expect(events.slice(read).filter((e) => e === "read rect").length).toBe(1);
     void svg;
+  });
+
+  test("with no pointer, a scroll reads no rect and wakes nothing", () => {
+    const { doc, handle } = mounted();
+    const win = doc.defaultView;
+    handle.follow();
+    run(doc, 16, 2);
+    const queued = win.queue.length;
+    for (let i = 0; i < 30; i++) {
+      win.fire("scroll");
+      frame(doc, 3000 + i * 16);
+    }
+    expect(doc.rects).toBe(0);
+    expect(win.queue.length).toBe(queued);
+
+    win.fire("pointermove", { clientX: 200, clientY: 40, pointerType: "mouse" });
+    frame(doc, 4000);
+    expect(doc.rects).toBe(1);
+    handle.destroy();
   });
 
   test("the eyes follow the pointer on the resting face, then return, and the loop parks", () => {
