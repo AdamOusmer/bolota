@@ -247,27 +247,26 @@
    * The pose channels and their two parallel lists, hoisted into properties of
    * their own.
    *
-   * Transition lists match up by index, so thirteen channels means thirteen
-   * durations and thirteen easings — stated once here and referenced from the `:hover` rule, which
+   * Transition lists match up by index, so twelve channels means twelve
+   * durations and twelve easings — stated once here and referenced from the `:hover` rule, which
    * used to restate the whole duration list to change one entry. Substitution
    * happens on this element, so `.mo-expr`'s shorter `--mo-morph` still reaches
    * them.
    *
    * `--mo-heat` is deliberately absent: colour is resolved in TypeScript and
    * arrives as a finished `--mo-head`/`--mo-eye`, transitioned by `fill` on the
-   * two groups below rather than composed here.
+   * two groups below rather than composed here. `--mo-bdy` is absent too: it
+   * transitions as the `translate` it becomes on `.mo-bob`, see there.
    */
   --mo-tp: --mo-esx, --mo-esy, --mo-tilt, --mo-edy, --mo-edx, --mo-esx2,
-    --mo-esy2, --mo-tilt2, --mo-edy2, --mo-epx, --mo-lock, --mo-shake, --mo-bdy;
+    --mo-esy2, --mo-tilt2, --mo-edy2, --mo-epx, --mo-lock, --mo-shake;
   --mo-md: var(--mo-morph), var(--mo-morph), var(--mo-morph), var(--mo-morph),
     var(--mo-morph), var(--mo-morph), var(--mo-morph), var(--mo-morph),
-    var(--mo-morph), var(--mo-morph), var(--mo-morph), var(--mo-morph),
-    var(--mo-morph);
+    var(--mo-morph), var(--mo-morph), var(--mo-morph), var(--mo-morph);
   --mo-me: var(--mo-morph-ease), var(--mo-morph-ease), var(--mo-morph-ease),
     var(--mo-morph-ease), var(--mo-morph-ease), var(--mo-morph-ease),
     var(--mo-morph-ease), var(--mo-morph-ease), var(--mo-morph-ease),
-    var(--mo-morph-ease), var(--mo-morph-ease), var(--mo-morph-ease),
-    var(--mo-morph-ease);
+    var(--mo-morph-ease), var(--mo-morph-ease), var(--mo-morph-ease);
 
   transition-property: --mo-amp, translate, scale, var(--mo-tp);
   transition-duration:
@@ -486,8 +485,16 @@
    * multiplying. Getting that operator backwards is silent and severe: an offset
    * scaled by `--mo-amp` would vanish on every unhovered bolota, which is most
    * of a grid.
+   *
+   * The morph is a transition of this `translate`, not of `--mo-bdy` on
+   * `.mo-root`. `--mo-bdy` is inherited, so transitioning it there restyled
+   * every node of the bolota on every frame of every expression: two thirds of
+   * the style time a crowd of 24 live bolotas spent on its expressions in
+   * Chrome. The offset is linear in `--mo-bdy`, so easing the one is easing the
+   * other.
    */
   translate: 0 calc(var(--mo-bdy) * 1px);
+  transition: translate var(--mo-morph) var(--mo-morph-ease);
   animation-name: mo-bob;
   animation-duration: calc(3400ms * var(--mo-rate, 1));
   animation-delay: calc((var(--mo-bob-phase, 0ms) + var(--mo-lag, 0ms)) * var(--mo-rate, 1));
@@ -780,13 +787,14 @@ svg[data-mo-js] .mo-eye rect {
  * bloub's engine did: none of the loops above runs under it, not
  * the saccade, the bob or their blink. At rest nothing animates inside the
  * svg: the engine blinks on a timer, writing the blink itself for its 180ms,
- * and the breath is the stylesheet's on `.mo-breathe` (`--mo-lag`) unless the
- * host takes it (`data-mo-breath="host"`). While the engine animates it drives
+ * and the breath is the stylesheet's on the `<svg>` itself (`--mo-lag`) unless
+ * the host takes it (`data-mo-breath="host"`). While the engine animates it drives
  * the morphs from its frame clock (`data-mo-js`, above) and runs the tremor
  * itself, so `.mo-root`'s `mo-shake` has nothing to do at rest. A held tremor
  * (`data-mo-shake`, `--mo-shake` at its amplitude) is the stylesheet's again,
  * so an engine wearing it can park.
  */
+svg[data-mo-live] .mo-breathe,
 svg[data-mo-live] .mo-bob,
 svg[data-mo-live]:not([data-mo-shake]) .mo-root,
 svg[data-mo-live] .mo-eyes,
@@ -796,30 +804,41 @@ svg[data-mo-live] .mo-eye > * > * {
 }
 
 /**
- * bloub's breath: the height alone, half a percent each way over 3.4s. A host
- * that animates it on an HTML wrapper (where it composites; on an SVG child it
- * costs a style recalc per frame) sets `data-mo-breath="host"` on the svg. Under
- * the engine the base `.mo-breathe` loop must never run, so taking the breath
- * away from the engine stands it down explicitly.
+ * bloub's breath: the height alone, half a percent each way over 3.4s, on the
+ * `<svg>` itself, which the engine marks `data-mo-breath="root"` when the
+ * stylesheet owns the breath.
+ *
+ * **On the root, not on `.mo-breathe`, because of WebKit.** Chrome composites a
+ * transform animation on an SVG child; WebKit's SVG renderer does not, and
+ * repaints the whole image on the main thread every frame instead. The outer
+ * `<svg>` is a CSS box, so WebKit composites it like any HTML element. 24
+ * bolotas in the iOS 27.2 simulator: 15% of the page process's CPU breathing on
+ * `.mo-breathe`, 3% on the root, the same as not breathing at all. The pivot is
+ * the same point either way: the box centre is the viewBox centre.
+ *
+ * `:where` keeps this at zero specificity, so a page that animates the svg
+ * element itself keeps its own animation. A host that runs the breath on a
+ * wrapper of its own sets `data-mo-breath="host"`, and the engine leaves it.
+ * Hover mode writes the breath from the frame loop, scaled by the hover
+ * amplitude, so the engine never marks it.
  */
-svg[data-mo-live][data-mo-breath="host"] .mo-breathe {
-  animation: none;
-}
-
-svg[data-mo-live]:not([data-mo-breath="host"]) .mo-breathe {
+:where(svg[data-mo-live][data-mo-breath="root"]) {
+  transform-box: border-box;
+  transform-origin: 50% 50%;
   animation-name: mo-live-breathe;
   animation-duration: calc(1700ms * var(--mo-rate, 1));
   animation-delay: calc(var(--mo-lag, 0ms) * var(--mo-rate, 1));
+  animation-iteration-count: infinite;
   animation-direction: alternate;
   animation-timing-function: ease-in-out;
 }
 
 @keyframes mo-live-breathe {
   from {
-    transform: scale(1, calc(1 - 0.005 * var(--mo-amp)));
+    transform: scale(1, 0.995);
   }
   to {
-    transform: scale(1, calc(1 + 0.005 * var(--mo-amp)));
+    transform: scale(1, 1.005);
   }
 }
 
@@ -1120,7 +1139,8 @@ svg[data-mo-live]:not([data-mo-breath="host"]) .mo-breathe {
  * drive registered custom properties, so they cost style and layout on the main
  * thread every frame whether or not anyone can see them.
  */
-[data-mo-asleep] * {
+[data-mo-asleep] *,
+:where(svg[data-mo-breath="root"][data-mo-asleep]) {
   animation-play-state: paused;
 }
 
@@ -1165,7 +1185,8 @@ svg[data-mo-live]:not([data-mo-breath="host"]) .mo-breathe {
   .mo-eye > *,
   .mo-eye > * > path,
   .mo-eye rect,
-  .mo-bob g[fill] {
+  .mo-bob g[fill],
+  :where(svg[data-mo-breath="root"]) {
     animation: none;
     transition: none;
   }
