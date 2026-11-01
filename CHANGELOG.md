@@ -10,7 +10,7 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
-## 0.2.4
+## 0.2.6
 
 No face changes. Mounting does the work of a mount, not of the first turn.
 
@@ -45,7 +45,7 @@ which flushes style, once per bolota.
   on the stylesheet, and a host can take it.
 - **Outline tables are built in idle time.** A mount queues its layout on one
   queue per window, drained in `requestIdleCallback` slices (one table per
-  timeout where the window has none, as on iOS). A frame at rest meanwhile
+  timeout on the window's own timer where it has none, as on iOS). A frame at rest meanwhile
   writes the seeded eyes the static render already shows, which is what the
   exact fit returns at rest on every seed measured (6000 of 6000). The first
   real turn before the tables exist builds them then, as before.
