@@ -10,6 +10,26 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.2.8
+
+No face changes. A live bolota does nothing on scroll unless a pointer is
+present.
+
+`follow()` re-measured the bolota (`getBoundingClientRect` plus the
+`--mo-track-travel` style read) and woke its frame loop on every scroll event,
+pointer or not. Touch screens never report a pointer, so a phone scrolling
+past followers paid a layout read and a frame per bolota for nothing. 24
+followers during a 2 s scroll with no pointer: 351 rect reads before, 0 after
+(rAF callbacks 19 to 6).
+
+### Changed
+
+- **A scroll only marks geometry stale.** The follower measures and wakes its
+  frame loop on scroll only when a pointer is present; otherwise it waits for
+  the next pointer move.
+- **The first measure happens on the first pointer move,** not at `follow()`.
+  `--mo-track-travel` is read on resize and attach only.
+
 ## 0.2.7
 
 No face changes. Live bolotas stop repainting on WebKit's main thread at rest.

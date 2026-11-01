@@ -119,11 +119,14 @@ describe("follow moves the eyes", () => {
 });
 
 describe("follow layout reads", () => {
-  test("pointer moves read no rect; scroll and resize read once per frame", () => {
+  test("after the first, pointer moves read no rect; scroll and resize read once per frame", () => {
     const { doc, handle } = mounted();
     handle.follow();
     frame(doc, 16);
+    move(doc, 195, 40);
+    frame(doc, 24);
     const base = doc.rects;
+    expect(base).toBe(1);
     for (let i = 0; i < 60; i++) {
       move(doc, 200 + i * 5, 40);
       frame(doc, 32 + i * 16);
