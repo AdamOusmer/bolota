@@ -50,6 +50,7 @@ function arm(view: IdleWindow, q: Queue): void {
     arm(view, q);
   };
   if (view.requestIdleCallback) view.requestIdleCallback(step, { timeout: TIMEOUT_MS });
+  else if (view.setTimeout) view.setTimeout(() => step(), STEP_MS);
   else setTimeout(step, STEP_MS);
 }
 
