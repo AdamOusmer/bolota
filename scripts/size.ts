@@ -286,15 +286,17 @@ const ENTRIES: {
     // no longer repaints on WebKit's main thread at rest (15% to 4% of the page
     // process for 24 live bolotas, iOS 27.2 simulator).
     //
-    // Raised from 22411 to 23850 for open-bot-avatar's motion: the
+    // Raised from 22411 to 24000 for open-bot-avatar's motion: the
     // `working`, `waiting`, `blocked` and `done` states, the per-frame gaze
     // pursuit with its attention fade and eye-origin aim, pen and finger
-    // tracking, and the ribbon timing helpers the decor chunk now imports from
-    // here instead of bundling choreo a second time. Measured 23277 B on bun 1.4.4,
+    // tracking, the ribbon timing helpers the decor chunk now imports from
+    // here instead of bundling choreo a second time, and one shared set of
+    // window pointer listeners and one ResizeObserver for every follower
+    // (`watchPointer` in `live/frames.ts`, +319 B). Measured 23596 B on bun 1.4.4,
     // as `import *` because every underscore export is held by decor.js. Budget
     // is that plus the ~270 B CI's bun 1.3.10 has measured over local, plus 100 B.
     name: "engine",
-    budget: 23850,
+    budget: 24000,
     external: ["*/decor.js"],
     source: `import * as engine from "../../src/engine";
              globalThis.x = engine;`,

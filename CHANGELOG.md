@@ -30,6 +30,11 @@ agent states. `orbit` and `working` are retired.
   starts at the eyes, not the box centre, and saturates softly about one
   avatar away. A pointer now holds the gaze on every state, not only the
   resting ones; `done` adds it to its own turn.
+- **Followers share one set of window listeners.** Every `follow()` on a
+  window used to add its own pointer, scroll and resize listeners and its own
+  ResizeObserver; now one set and one observer serve them all, attached with
+  the first follower and released with the last, on the same shared registry
+  as the frame loop.
 - **Pen and finger are followed while down** and released on lift, cancel,
   window blur or leaving the window. A touch scroll cancels the pointer, so
   0.2.8's scroll saving holds.

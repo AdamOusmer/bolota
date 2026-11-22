@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
 import { describe, expect, test } from "bun:test";
-import { drain, eyeAttrs, eyeCentre, frame, mounted, rectsOf, type FakeDocument } from "./engine-dom";
+import { FakeDocument, drain, eyeAttrs, eyeCentre, frame, mountOn, mounted, rectsOf } from "./engine-dom";
 
 const move = (doc: FakeDocument, clientX: number, clientY: number, pointerType = "mouse") =>
   doc.defaultView.fire("pointermove", { clientX, clientY, pointerType });
@@ -32,6 +32,23 @@ describe("follow attach and detach", () => {
     expect(listeners(doc)).toBeGreaterThan(0);
     handle.follow(false);
     expect(listeners(doc)).toBe(1);
+  });
+
+  test("every follower of a window shares one set of listeners, and one move reaches them all", () => {
+    const doc = new FakeDocument();
+    const all = ["a", "b", "c", "d"].map((n) => mountOn(doc, n));
+    const base = listeners(doc);
+    all[0]!.handle.follow();
+    const one = listeners(doc) - base;
+    for (const m of all.slice(1)) m.handle.follow();
+    expect(listeners(doc) - base).toBe(one);
+    frame(doc, 16);
+    const rest = all.map((m) => eyeAttrs(m.svg));
+    move(doc, 900, 50);
+    drain(doc, 16, 5);
+    all.forEach((m, i) => expect(eyeAttrs(m.svg)).not.toEqual(rest[i]));
+    for (const m of all) m.handle.follow(false);
+    expect(listeners(doc)).toBe(base);
   });
 
   test("destroy detaches too", () => {

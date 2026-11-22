@@ -13,7 +13,7 @@ import { CHOREO, RETIRED, expressed, newEyes, type Eyes, type Head, type StateId
 import type { Decor, DecorFrame, DecorHost, DecorPalette } from "./decor.js";
 import { eyeBox, settleEyes, type Correction, type Eye, type EyeBox } from "./fit";
 import { Glide, NO_LOOK, followLook, pointerAim, type Look, type Origin, type Point } from "./follow";
-import { JITTER_MS, blinkSlot, cancelRead, readNextFrame, startFrames, stopFrames, watchSight } from "./frames";
+import { JITTER_MS, blinkSlot, cancelRead, readNextFrame, startFrames, stopFrames, watchPointer, watchSight } from "./frames";
 import { BLINK_CYCLE, BREATH_MS, lid, nextBlink, type Gaze } from "./head";
 import { ALIASES, resolveExpression } from "./names";
 import { idleDrift, idleFrame, idleLoops, idleShake } from "./idle";
@@ -230,7 +230,6 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let stale = true;
   let gainStale = true;
   let detach: (() => void) | null = null;
-  let resized: ResizeObserver | null = null;
 
   const mk = <K extends keyof SVGElementTagNameMap>(tag: K) => doc.createElementNS(SVG_NS, tag);
 
@@ -883,47 +882,50 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     stale = gainStale = true;
   }
 
+  const at = { x: 0, y: 0 };
+
+  function moveTo(x: number, y: number): void {
+    at.x = x;
+    at.y = y;
+    pointer = at;
+    if (stale) readNextFrame(view, measure);
+    wake();
+  }
+
+  function leave(): void {
+    pointer = null;
+    wake();
+  }
+
+  /** A follower of one element: its own pointer listeners, the window's shared geometry. */
+  function attachTo(target: Element): () => void {
+    const onMove = (ev: Event) => moveTo((ev as PointerEvent).clientX, (ev as PointerEvent).clientY);
+    const onLift = (ev: Event) => {
+      if ((ev as PointerEvent).pointerType !== "mouse") leave();
+    };
+    const quiet = { passive: true } as const;
+    target.addEventListener("pointermove", onMove, quiet);
+    target.addEventListener("pointerdown", onMove, quiet);
+    target.addEventListener("pointerup", onLift, quiet);
+    target.addEventListener("pointercancel", onLift, quiet);
+    target.addEventListener("pointerleave", leave, quiet);
+    const geometry = watchPointer(view, { el: svg, move() {}, leave() {}, scroll: onScroll, resize: onGeom });
+    return () => {
+      target.removeEventListener("pointermove", onMove);
+      target.removeEventListener("pointerdown", onMove);
+      target.removeEventListener("pointerup", onLift);
+      target.removeEventListener("pointercancel", onLift);
+      target.removeEventListener("pointerleave", leave);
+      geometry();
+    };
+  }
+
   function attach(target: Element | "window"): void {
     release();
-    const moves: EventTarget = target === "window" ? view : target;
-    const leaves: EventTarget = target === "window" ? doc : target;
-    const onMove = (ev: Event) => {
-      const p = ev as PointerEvent;
-      pointer = { x: p.clientX, y: p.clientY };
-      if (stale) readNextFrame(view, measure);
-      wake();
-    };
-    const onLeave = () => {
-      pointer = null;
-      wake();
-    };
-    const onLift = (ev: Event) => {
-      if ((ev as PointerEvent).pointerType !== "mouse") onLeave();
-    };
-    const geom = { passive: true, capture: true } as const;
-    const quiet = { passive: true } as const;
-    moves.addEventListener("pointermove", onMove, quiet);
-    moves.addEventListener("pointerdown", onMove, quiet);
-    moves.addEventListener("pointerup", onLift, quiet);
-    moves.addEventListener("pointercancel", onLift, quiet);
-    leaves.addEventListener("pointerleave", onLeave, quiet);
-    if (target === "window") view.addEventListener("blur", onLeave, quiet);
-    view.addEventListener("scroll", onScroll, geom);
-    view.addEventListener("resize", onGeom, { passive: true });
-    resized = view.ResizeObserver ? new view.ResizeObserver(onGeom) : null;
-    resized?.observe(svg);
-    detach = () => {
-      moves.removeEventListener("pointermove", onMove);
-      moves.removeEventListener("pointerdown", onMove);
-      moves.removeEventListener("pointerup", onLift);
-      moves.removeEventListener("pointercancel", onLift);
-      leaves.removeEventListener("pointerleave", onLeave);
-      view.removeEventListener("blur", onLeave);
-      view.removeEventListener("scroll", onScroll, geom);
-      view.removeEventListener("resize", onGeom);
-      resized?.disconnect();
-      resized = null;
-    };
+    detach =
+      target === "window"
+        ? watchPointer(view, { el: svg, move: moveTo, leave, scroll: onScroll, resize: onGeom })
+        : attachTo(target);
     following = true;
     onGeom();
   }
