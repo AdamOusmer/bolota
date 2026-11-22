@@ -213,6 +213,18 @@ describe("mountLive clock", () => {
     expect(doc.defaultView.queue.length).toBe(0);
   });
 
+  test("stop leaves the breath to sleep and play wakes it", () => {
+    const { doc, svg, handle } = mounted();
+    handle.loop("done");
+    frame(doc, 16);
+    expect(svg.hasAttribute("data-mo-asleep")).toBe(false);
+    handle.stop();
+    expect(svg.hasAttribute("data-mo-asleep")).toBe(true);
+    handle.play("wide");
+    expect(svg.hasAttribute("data-mo-asleep")).toBe(false);
+    handle.destroy();
+  });
+
   test("wander drifts the head and floats the body without end; the resting face holds still", () => {
     const doc = new FakeDocument();
     const svg = makeSvg(doc);
@@ -225,7 +237,8 @@ describe("mountLive clock", () => {
       frame(doc, (ms += 16));
       seen.add(`${act()}|${attrs(svg).join()}`);
     }
-    expect(seen.size).toBe(30);
+    expect(seen.size).toBeGreaterThanOrEqual(9);
+    expect(seen.size).toBeLessThan(30);
     expect(doc.defaultView.queue.length).toBe(1);
     handle.loop("idle");
     ms = run(doc, ms, 2);

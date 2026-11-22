@@ -103,22 +103,33 @@ function exitAlong(l: OutlineLayout, traces: Trace[], theta: number, hits: numbe
   return end;
 }
 
-const tables = new WeakMap<object, Float64Array>();
-const faces = new WeakMap<object, Float64Array>();
+/** An exit table whose rays are traced the first time they are read. */
+type Rays = { at(i: number): number };
+
+function rays(l: OutlineLayout, traces: Trace[], petals: OutlineLayout["petals"]): Rays {
+  const r = new Float64Array(RAYS).fill(NaN);
+  const hits: number[] = [];
+  const at = (i: number) => {
+    let v = r[i]!;
+    if (v !== v) v = r[i] = exitAlong(l, traces, (i / RAYS) * Math.PI * 2, hits, petals);
+    return v;
+  };
+  return { at };
+}
+
+const tables = new WeakMap<object, Rays>();
+const faces = new WeakMap<object, Rays>();
 
 /**
  * The exit table of the whole drawn outline, or with `face` of the part a face
  * may sit on: the core and its petals, without the `extra` ornaments (a
  * droplet's taper, a nub's bumps) that stand off it.
  */
-function table(l: OutlineLayout, face = false): Float64Array {
+function table(l: OutlineLayout, face = false): Rays {
   const memo = face ? faces : tables;
   let t = memo.get(l);
   if (t) return t;
-  const traces = face ? [core(l)] : [core(l), ...l.extra.map(trace)];
-  const hits: number[] = [];
-  t = new Float64Array(RAYS);
-  for (let i = 0; i < RAYS; i++) t[i] = exitAlong(l, traces, (i / RAYS) * Math.PI * 2, hits);
+  t = rays(l, face ? [core(l)] : [core(l), ...l.extra.map(trace)], l.petals);
   memo.set(l, t);
   return t;
 }
@@ -131,12 +142,16 @@ export function floor(l: OutlineLayout): number {
   if (f !== undefined) return f;
   const t = table(l, true);
   f = Infinity;
-  for (let i = 0; i < RAYS; i++) if (t[i]! < f) f = t[i]!;
+  for (let i = 0; i < RAYS; i++) {
+    const v = t.at(i);
+    if (v < f) f = v;
+  }
   floors.set(l, f);
   return f;
 }
 
-const balls = new WeakMap<object, { table: Float64Array; mean: number }>();
+const balls = new WeakMap<object, Rays>();
+const means = new WeakMap<object, number>();
 
 /**
  * The head without its ornaments: the ball bloub's face sits on. Its radii,
@@ -145,44 +160,45 @@ const balls = new WeakMap<object, { table: Float64Array; mean: number }>();
  * sun's rays, a cloud's lobes, a nub's bumps and a droplet's taper stand off
  * it and are left out.
  */
-function ball(l: OutlineLayout) {
+function ball(l: OutlineLayout): Rays {
+  if (l.shape === "capsule" || l.petals.length === 0) return table(l, true);
   let b = balls.get(l);
   if (b) return b;
-  const traces = [core(l)];
-  const petals = l.shape === "capsule" ? l.petals : [];
-  const hits: number[] = [];
-  const t = new Float64Array(RAYS);
-  let sum = 0;
-  for (let i = 0; i < RAYS; i++) sum += t[i] = exitAlong(l, traces, (i / RAYS) * Math.PI * 2, hits, petals);
-  balls.set(l, (b = { table: t, mean: sum / RAYS }));
+  balls.set(l, (b = rays(l, [core(l)], [])));
   return b;
 }
 
 /** The core body's mean radius about the body centre: the ball of the same size. */
 export function ballRadius(l: OutlineLayout): number {
-  return ball(l).mean;
+  let m = means.get(l);
+  if (m !== undefined) return m;
+  const b = ball(l);
+  let sum = 0;
+  for (let i = 0; i < RAYS; i++) sum += b.at(i);
+  means.set(l, (m = sum / RAYS));
+  return m;
 }
 
 /** Whether the tables the eye fit reads exist for `l`. */
 export function prepared(l: OutlineLayout): boolean {
-  return floors.has(l) && balls.has(l);
+  return floors.has(l) && means.has(l);
 }
 
 /** Builds the tables the eye fit reads, so a later fit does no ray work. */
 export function prepare(l: OutlineLayout): void {
   floor(l);
-  ball(l);
+  ballRadius(l);
 }
 
 /** The core body's radius in direction `theta`, between the two nearest rays. */
 export function ballEdge(l: OutlineLayout, theta: number): number {
-  const t = ball(l).table;
+  const t = ball(l);
   let u = (theta / (Math.PI * 2)) % 1;
   if (u < 0) u += 1;
   const f = u * RAYS;
   const i = Math.floor(f) % RAYS;
   const w = f - Math.floor(f);
-  return t[i]! * (1 - w) + t[(i + 1) % RAYS]! * w;
+  return t.at(i) * (1 - w) + t.at((i + 1) % RAYS) * w;
 }
 
 /**
@@ -195,8 +211,8 @@ export function edge(l: OutlineLayout, theta: number, face = false): number {
   let u = (theta / (Math.PI * 2)) % 1;
   if (u < 0) u += 1;
   const i = Math.floor(u * RAYS) % RAYS;
-  const a = t[i]!;
-  const b = t[(i + 1) % RAYS]!;
+  const a = t.at(i);
+  const b = t.at((i + 1) % RAYS);
   return a < b ? a : b;
 }
 

@@ -51,7 +51,7 @@ const queued = (doc: FakeDocument) => doc.defaultView.queue.length;
 
 function drawn(svg: FakeElement): string {
   const figure = svg.querySelector(".mo-bob")!.children[0]!;
-  return figure.outerHTML.replace(/[0-9a-z]+-g(\d+)/g, "G$1");
+  return figure.outerHTML.replace(/[0-9a-z]+-([gbf]\d+)/g, "G$1");
 }
 
 function steps(doc: FakeDocument, from: number, n: number): number {

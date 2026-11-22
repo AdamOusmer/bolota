@@ -9,12 +9,12 @@ import type { Expression } from "../expression";
 import { IDENT, r3, type Pose } from "../morph";
 import { resolve } from "../render";
 import { IDLE_ACT, actTransform, type Act } from "./act";
-import { CHOREO, RETIRED, expressed, newEyes, type Eyes, type Head, type StateId } from "./choreo";
+import { CHOREO, EXPRESSION_MORPH, RETIRED, expressed, newEyes, type Eyes, type Head, type StateId } from "./choreo";
 import type { Decor, DecorFrame, DecorHost, DecorPalette } from "./decor.js";
 import { eyeBox, settleEyes, type Correction, type Eye, type EyeBox } from "./fit";
 import { Glide, NO_LOOK, followLook, pointerAim, type Look, type Origin, type Point } from "./follow";
 import { JITTER_MS, blinkSlot, cancelRead, readNextFrame, startFrames, stopFrames, watchPointer, watchSight } from "./frames";
-import { BLINK_CYCLE, BREATH_MS, lid, nextBlink, type Gaze } from "./head";
+import { BLINK_CYCLE, BREATH_MS, FIXATION, SACCADE, lid, nextBlink, type Gaze } from "./head";
 import { ALIASES, resolveExpression } from "./names";
 import { idleDrift, idleFrame, idleLoops, idleShake } from "./idle";
 import { prepared } from "./outline";
@@ -45,6 +45,9 @@ const ENTRANCE = 0.2;
 
 /** `.mo-root`'s `--mo-amp` transition on hover, in seconds. */
 const AMP_RAMP = 0.4;
+
+/** A frame that only drifts (a held wander, the float) is drawn on every this-many refreshes; the rest are skipped whole. */
+const DRIFT_EVERY = 3;
 
 const q = (v: number, k: number) => Math.round(v * k);
 
@@ -215,6 +218,9 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let quietAt = 0;
   let restId: StateId = "idle";
   let restLoop = false;
+  let driftOnly = false;
+  let skipped = 0;
+  let exprUntil = 0;
   let exprPose: Pose | null = null;
   let stillId: StateId = "idle";
 
@@ -567,7 +573,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     void loadDecor().then(() => {
       if (dead || !decorModule) return;
       if (reduced) still();
-      else wake();
+      else if (drawDecor(tl.decorFrames(clock, decorNow)) || awake || ticking) wake();
     });
   }
 
@@ -613,6 +619,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       stamp(f, 17, turn)
     ) {
       changed = sAlpha.set(e.alpha >= 1 ? null : r3(e.alpha)) || changed;
+      if (e.alpha <= 0) return changed;
       headNow.spread = e.head.spread;
       faceNow.pose = p;
       faceNow.own = e.own;
@@ -705,10 +712,30 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     if (cue !== null) entranceAt = now;
 
     const drawn = drawDecor(frames);
+    driftOnly = !busy && !drawn && frames.length === 1 && isStatic(id) && settledOn(id, now);
 
     const moving = !isStatic(id) || (lively > 0 && amp > 0);
     const animating = tl.next(now) < Infinity ? moving || id !== restId : moving && restLoop;
     return changed || busy || drawn || animating;
+  }
+
+  /** No hand-off is coming, or the next is a looped static state restarting on its own pose. */
+  const settledOn = (id: StateId, now: number): boolean => tl.next(now) === Infinity || (restLoop && id === restId);
+
+  const holding = (): boolean => (((eyeMs + wanderAt) / 1000) % FIXATION) >= SACCADE;
+
+  /** Nothing but the idle drift would change on this refresh, so it can be left undrawn: the motion is a function of the clock alone. */
+  function drifting(): boolean {
+    return (
+      driftOnly &&
+      idle.blink === 1 &&
+      !blinking() &&
+      shakeSettled() &&
+      entrance() === 1 &&
+      clock >= exprUntil &&
+      clock >= ampAt + AMP_RAMP &&
+      holding()
+    );
   }
 
   function tick(ms: number): void {
@@ -718,6 +745,8 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     eyeMs += dt * 1000;
     bodyMs += dt * 1000;
     idleEval();
+    if (awake && drifting() && ++skipped < DRIFT_EVERY) return;
+    skipped = 0;
     if (awake) {
       if (frame(clock)) quietAt = 0;
       else if (!quietAt) quietAt = ms;
@@ -797,6 +826,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   }
 
   function wake(): void {
+    driftOnly = false;
     if (dead || paused || reduced) return;
     if (!sight) {
       pendingWake = true;
@@ -852,6 +882,16 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     remeasure();
   };
 
+  /** The stylesheet's breath stops with the loop: stopped, or out of sight. */
+  function sleepSync(): void {
+    if (built) put(svg, "data-mo-asleep", paused || !sight ? "" : null);
+  }
+
+  function resume(): void {
+    paused = false;
+    sleepSync();
+  }
+
   /**
    * Off screen, or in a hidden tab, the instance leaves the frame loop and its
    * clock stops with it: the timeline resumes from the frame it froze on, with
@@ -861,7 +901,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
    */
   function sightChange(visible: boolean): void {
     sight = visible;
-    put(svg, "data-mo-asleep", visible ? null : "");
+    sleepSync();
     if (!visible) return halt();
     if (following) stale = true;
     if (following && pointer) readNextFrame(view, measure);
@@ -945,6 +985,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     }
     shakeTo = e?.p.shake ?? 0;
     shakeAt = clock;
+    exprUntil = instant ? 0 : clock + EXPRESSION_MORPH;
     shakeCurve = e ? MORPH_IN : MORPH_OUT;
     put(svg, "--mo-head", tint.head!);
     put(svg, "--mo-eye", tint.eye!);
@@ -995,7 +1036,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
         still();
         return;
       }
-      paused = false;
+      resume();
       const looped = !!o?.loop;
       const next = (o?.rest as StateId | undefined) ?? (looped ? id : restId);
       restLoop = looped ? true : next === restId && restLoop;
@@ -1010,11 +1051,12 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     },
     setExpression(next) {
       if (dead) return;
-      paused = false;
+      resume();
       express(next);
     },
     stop() {
       paused = true;
+      sleepSync();
       halt();
     },
     follow(target = "window") {
@@ -1023,7 +1065,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
         release();
         wake();
       } else if (!reduced) {
-        paused = false;
+        resume();
         attach(target);
       }
     },

@@ -5,7 +5,7 @@ import { contrast, ensureContrast, fromHex, mixHex, toHex, type Oklch } from "..
 import type { StateId } from "./choreo";
 import { edge, type OutlineLayout } from "./outline";
 import { putter } from "./put";
-import { BODY, cageTurn, hashString, ribbonPieces, rimOf, runAt, runOf, workTurn, type Rim } from "./ribbons";
+import { BODY, cageTurn, hashString, ribbonPieces, runAt, runOf, workTurn, type Rim } from "./ribbons";
 import { CHOREO, alarm, clamp, r3 } from "./shared";
 
 /**
@@ -68,6 +68,7 @@ const TAU = Math.PI * 2;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const SEEN = 0.01;
 const SHORT = 0.01;
+const ALONG_MIN = 1e-4;
 const SHADES = 48;
 
 const DOT_X = [-0.557, -0.013, 0.532] as const;
@@ -177,6 +178,13 @@ function isOutline(l: DecorLayout): l is DecorLayout & OutlineLayout {
 }
 
 const put = putter();
+
+/** A ribbon path slot's own gradient: its fill url never changes. */
+interface Slot {
+  grad: SVGLinearGradientElement;
+  stops: Element[];
+  ref: string;
+}
 
 interface Colors {
   head: string;
@@ -295,6 +303,10 @@ class Lane<T extends Element> {
     return this.used - 1;
   }
 
+  drawn(): boolean {
+    return this.used > 0;
+  }
+
   destroy(): void {
     if (this.group) this.group.remove();
     else for (const node of this.nodes) node.remove();
@@ -315,9 +327,8 @@ export function createDecor(
   const doc = host.back.ownerDocument;
   const { cx, cy, rx: R } = layout.body;
   const outline = isOutline(layout) ? layout : null;
-  const gradId: string[] = [];
-  const gradRef: string[] = [];
-  const gradStops: Element[][] = [];
+  const slotsBack: Slot[] = [];
+  const slotsFront: Slot[] = [];
   const seed = hashString(name);
   let K = 0;
   let rim: Rim | undefined;
@@ -334,20 +345,22 @@ export function createDecor(
   let notchW = 0;
   let dirty = false;
 
-  const grads = new Lane<SVGLinearGradientElement>(doc, host.defs, "linearGradient", null, (node, i) => {
-    gradId[i] = `${uid}-g${i}`;
-    gradRef[i] = `url(#${gradId[i]})`;
-    node.setAttribute("id", gradId[i]!);
-    node.setAttribute("gradientUnits", "userSpaceOnUse");
-    gradStops[i] = [0, 1, 2].map((s) => {
+  const slotted = (slots: Slot[], tag: string) => (_path: SVGPathElement, i: number) => {
+    const id = `${uid}-${tag}${i}`;
+    const grad = doc.createElementNS(SVG_NS, "linearGradient") as unknown as SVGLinearGradientElement;
+    grad.setAttribute("id", id);
+    grad.setAttribute("gradientUnits", "userSpaceOnUse");
+    const stops = [0, 1, 2].map((s) => {
       const stop = doc.createElementNS(SVG_NS, "stop");
       stop.setAttribute("offset", String(s / 2));
-      node.appendChild(stop);
+      grad.appendChild(stop);
       return stop;
     });
-  });
-  const ribBack = new Lane<SVGPathElement>(doc, host.back, "path", {});
-  const ribFront = new Lane<SVGPathElement>(doc, host.front, "path", {});
+    host.defs.appendChild(grad);
+    slots[i] = { grad, stops, ref: `url(#${id})` };
+  };
+  const ribBack = new Lane<SVGPathElement>(doc, host.back, "path", {}, slotted(slotsBack, "b"));
+  const ribFront = new Lane<SVGPathElement>(doc, host.front, "path", {}, slotted(slotsFront, "f"));
   const dotBack = new Lane<SVGCircleElement>(doc, host.back, "circle", {});
   const dotFront = new Lane<SVGCircleElement>(doc, host.front, "circle", {});
   const bars = new Lane<SVGPathElement>(doc, host.front, "path", {});
@@ -384,32 +397,36 @@ export function createDecor(
     const presence = turn.presence * weight;
     if (presence <= SEEN) return;
     K ||= scale();
-    if (outline && !rim) rim = rimOf(reach);
+    if (outline && !rim) rim = { at: reach };
     colors ??= colorsOf(palette);
     const pieces = ribbonPieces(presence, seed, turn.sweep, cage, rim);
     for (let i = 0; i < pieces.length; i++) {
       const p = pieces[i]!;
       const s0 = p.along[0];
       const s1 = p.along[1];
-      const path = (p.front ? ribFront : ribBack).next();
+      const lane = p.front ? ribFront : ribBack;
+      const path = lane.next();
+      const slot = (p.front ? slotsFront : slotsBack)[lane.index()]!;
       let d = "M" + RX(p.pts[0]!) + " " + RY(p.pts[1]!);
-      for (let q = 2; q < p.pts.length; q += 2) d += "L" + RX(p.pts[q]!) + " " + RY(p.pts[q + 1]!);
+      for (let q = 2; q < p.pts.length; q += 2) d += " " + RX(p.pts[q]!) + " " + RY(p.pts[q + 1]!);
       put(path, "d", d + "Z");
       put(path, "opacity", 1);
-      if (Math.hypot(p.to[0] - p.from[0], p.to[1] - p.from[1]) <= SHORT) {
+      const hues = colors!.ribbon(p.ribbon);
+      for (let k = 0; k < 3; k++) put(slot.stops[k]!, "stop-color", hues[k]!);
+      const dx = p.to[0] - p.from[0];
+      const dy = p.to[1] - p.from[1];
+      const run = s1 - s0;
+      if (Math.hypot(dx, dy) <= SHORT || run <= ALONG_MIN) {
         put(path, "fill", shade(p.ribbon, (s0 + s1) / 2));
         continue;
       }
-      const grad = grads.next();
-      const g = grads.index();
-      put(grad, "x1", RX(p.from[0]));
-      put(grad, "y1", RY(p.from[1]));
-      put(grad, "x2", RX(p.to[0]));
-      put(grad, "y2", RY(p.to[1]));
-      put(gradStops[g]![0]!, "stop-color", shade(p.ribbon, s0));
-      put(gradStops[g]![1]!, "stop-color", shade(p.ribbon, (s0 + s1) / 2));
-      put(gradStops[g]![2]!, "stop-color", shade(p.ribbon, s1));
-      put(path, "fill", gradRef[g]!);
+      const lead = s0 / run;
+      const tail = (1 - s0) / run;
+      put(slot.grad, "x1", RX(p.from[0] - dx * lead));
+      put(slot.grad, "y1", RY(p.from[1] - dy * lead));
+      put(slot.grad, "x2", RX(p.from[0] + dx * tail));
+      put(slot.grad, "y2", RY(p.from[1] + dy * tail));
+      put(path, "fill", slot.ref);
     }
   }
 
@@ -572,19 +589,18 @@ export function createDecor(
 
   return {
     update(frames) {
-      let drawn = false;
-      for (const f of frames) if (f.weight > SEEN && bears(f.state)) drawn = true;
-      if (!drawn && !dirty) return false;
-      dirty = drawn;
-      grads.begin();
+      let bearing = false;
+      for (const f of frames) if (f.weight > SEEN && bears(f.state)) bearing = true;
+      if (!bearing && !dirty) return false;
       for (const lane of lanes) lane.begin();
       notchW = 0;
-      if (drawn) {
+      if (bearing) {
         colors ??= colorsOf(palette);
         for (const f of frames) if (f.weight > SEEN) frame(f);
       }
       settle();
-      return drawn;
+      dirty = notchW > SEEN || lanes.some((lane) => lane.drawn());
+      return dirty;
     },
     clear() {
       for (const lane of lanes) {
@@ -597,7 +613,9 @@ export function createDecor(
     },
     destroy() {
       detachMask();
-      grads.destroy();
+      for (const slot of slotsBack.concat(slotsFront)) slot.grad.remove();
+      slotsBack.length = 0;
+      slotsFront.length = 0;
       for (const lane of lanes) lane.destroy();
       dirty = false;
     },

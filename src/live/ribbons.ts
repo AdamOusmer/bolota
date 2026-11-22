@@ -24,7 +24,6 @@ export const BODY = 80;
 const UNIT = BODY / 228.541;
 const RIM_MARGIN = 2;
 const RING = 38.8 * (116 / 114.2705);
-const RIM_STEPS = 180;
 const HOOP_TILT = 0.386;
 const HOOP_ROLL = 0.157;
 const HOOP_JITTER = 0.24;
@@ -55,13 +54,6 @@ const CAP = 7;
 /** How far the body reaches from its centre along a line at `angle`, either way, in ribbon units. */
 export interface Rim {
   at: (angle: number) => number;
-  max: number;
-}
-
-export function rimOf(at: (angle: number) => number): Rim {
-  let max = 0;
-  for (let k = 0; k < RIM_STEPS; k++) max = Math.max(max, at((k * Math.PI) / RIM_STEPS));
-  return { at, max: max * 1.02 };
 }
 
 /** One ribbon piece, closed, in ribbon units; `from`..`to` spans `along` of its ribbon's colour run. Pooled: valid until the next call. */
@@ -81,7 +73,10 @@ const MY = new Float64Array(MAX_SAMPLES);
 const NX = new Float64Array(MAX_SAMPLES);
 const NY = new Float64Array(MAX_SAMPLES);
 const HALF = new Float64Array(MAX_SAMPLES);
+const BEND = new Float64Array(MAX_SAMPLES);
 const NEAR = new Uint8Array(MAX_SAMPLES);
+const CAP_COS = Array.from({ length: CAP }, (_, c) => Math.cos((Math.PI * c) / CAP));
+const CAP_SIN = Array.from({ length: CAP }, (_, c) => Math.sin((Math.PI * c) / CAP));
 const ROLLS = [0, 0, 0];
 const pool: RibbonPiece[] = [];
 const out: RibbonPiece[] = [];
@@ -113,9 +108,8 @@ function cap(pts: number[], j: number, ahead: boolean): void {
   ty /= tl;
   const h = HALF[j]!;
   for (let c = 1; c < CAP; c++) {
-    const t = (Math.PI * c) / CAP;
-    const e = ahead ? Math.cos(t) : -Math.cos(t);
-    const g = ahead ? Math.sin(t) : -Math.sin(t);
+    const e = ahead ? CAP_COS[c]! : -CAP_COS[c]!;
+    const g = ahead ? CAP_SIN[c]! : -CAP_SIN[c]!;
     pts.push(MX[j]! + (NX[j]! * e + tx * g) * h, MY[j]! + (NY[j]! * e + ty * g) * h);
   }
 }
@@ -210,15 +204,12 @@ export function ribbonPieces(presence: number, seed: number, sweep: number, cage
         const el = Math.hypot(ex, c) || 1;
         NX[j] = (ex / el) * cr + (c / el) * sr;
         NY[j] = (ex / el) * sr - (c / el) * cr;
+        BEND[j] = (0.9 * (r * (c * c + flat * flat * s * s) ** 1.5)) / flat;
         if (j) onScreen += Math.hypot(MX[j]! - MX[j - 1]!, MY[j]! - MY[j - 1]!);
       }
       full = Math.min(full, 0.34 * onScreen);
       for (let j = 0; j <= last; j++) {
-        const u = SS[j]!;
-        const lam = head - span * (1 - u);
-        const s = Math.sin(lam);
-        const c = Math.cos(lam);
-        HALF[j] = Math.min((0.5 + 0.5 * u) * (full / 2), (0.9 * (r * (c * c + flat * flat * s * s) ** 1.5)) / flat);
+        HALF[j] = Math.min((0.5 + 0.5 * SS[j]!) * (full / 2), BEND[j]!);
       }
       cut(last, i * LANES + l);
     }

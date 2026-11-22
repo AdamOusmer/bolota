@@ -85,6 +85,17 @@ describe("lazy decor", () => {
     expect(doc.defaultView.queue.length).toBe(0);
   });
 
+  test("an idle parked instance stays parked when decor arrives; a looping one keeps its clock", async () => {
+    const mountLive = await fresh();
+    const idleDoc = new FakeDocument();
+    mountLive(asSvg(makeSvg(idleDoc)), "lazy-p", { animate: "hover" });
+    const loopDoc = new FakeDocument();
+    mountLive(asSvg(makeSvg(loopDoc)), "lazy-q", { animate: "hover" }).loop("done");
+    await new Promise((r) => realSetTimeout(r, 300));
+    expect(idleDoc.defaultView.queue.length).toBe(0);
+    expect(loopDoc.defaultView.queue.length).toBe(1);
+  });
+
   test("idle warmup shares one import, so a later instance draws decor with no wait", async () => {
     const mountLive = await fresh();
     for (let i = 0; i < 5; i++) {

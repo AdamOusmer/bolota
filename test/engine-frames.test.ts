@@ -1,7 +1,20 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
 import { describe, expect, test } from "bun:test";
-import { FakeDocument, actOf, frame, mountOn, nodes } from "./engine-dom";
+import { FakeDocument, FakeElement, actOf, frame, mounted, mountOn, nodes } from "./engine-dom";
+
+const ALWAYS = { animate: "always" } as const;
+
+function countActWrites(svg: FakeElement): { n: number } {
+  const act = svg.querySelector(".mo-act")!;
+  const set = act.setAttribute.bind(act);
+  const writes = { n: 0 };
+  act.setAttribute = (k: string, v: unknown) => {
+    if (k === "transform") writes.n++;
+    set(k, v);
+  };
+  return writes;
+}
 
 describe("mountEngine frame loop", () => {
   test("bolotas on one window share a single animation frame", () => {
@@ -60,5 +73,50 @@ describe("mountEngine frame loop", () => {
     expect(doc.defaultView.queue.length).toBe(0);
     a.handle.play("done", { loop: true });
     expect(doc.defaultView.queue.length).toBe(1);
+  });
+});
+
+describe("mountEngine drift-only frames", () => {
+  test("a held wander is drawn on about every third frame", () => {
+    const { doc, svg, handle } = mounted("facade-seed", ALWAYS);
+    handle.loop("wander");
+    let ms = 0;
+    for (let i = 0; i < 60; i++) frame(doc, (ms += 16));
+    const writes = countActWrites(svg);
+    const frames = 125;
+    for (let i = 0; i < frames; i++) frame(doc, (ms += 16));
+    expect(writes.n).toBeGreaterThan(frames * 0.15);
+    expect(writes.n).toBeLessThan(frames * 0.55);
+  });
+
+  test("a play or a pointer move draws on the very next frame", () => {
+    const pokes: [string, (h: ReturnType<typeof mounted>) => void][] = [
+      ["play", ({ handle }) => handle.play("thinking")],
+      ["pointer", ({ doc }) => doc.defaultView.fire("pointermove", { clientX: 900, clientY: 50, pointerType: "mouse" })],
+    ];
+    for (const [name, poke] of pokes) {
+      const bot = mounted("facade-seed", ALWAYS);
+      const { doc, handle } = bot;
+      handle.loop("wander");
+      handle.follow();
+      doc.log = { events: [] };
+      let ms = 0;
+      for (let i = 0; i < 90; i++) frame(doc, (ms += 16));
+      const counts: number[] = [];
+      let checked = false;
+      for (let i = 0; i < 400 && !checked; i++) {
+        doc.log.events.length = 0;
+        frame(doc, (ms += 16));
+        counts.push(doc.log.events.length);
+        if (counts.length >= 2 && counts.at(-2)! > 0 && counts.at(-1) === 0) {
+          poke(bot);
+          doc.log.events.length = 0;
+          frame(doc, (ms += 16));
+          expect(doc.log.events.length, name).toBeGreaterThan(0);
+          checked = true;
+        }
+      }
+      expect(checked, name).toBe(true);
+    }
   });
 });

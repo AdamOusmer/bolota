@@ -414,6 +414,33 @@ describe("live decor: hot path", () => {
     }
   });
 
+  test("update reports whether a lane node was drawn", () => {
+    const r = rig("decor-a");
+    expect(r.decor.update(one("done", 5))).toBe(false);
+    expect(r.decor.update(one("done", 1.2))).toBe(true);
+    expect(r.decor.update(one("done", 5))).toBe(false);
+    expect(r.decor.update(one("notify", 0.9))).toBe(true);
+    expect(r.decor.update(one("idle", 0))).toBe(false);
+  });
+
+  test("ribbon paths use implicit lineto, and each keeps one gradient across frames", () => {
+    const r = rig("decor-a");
+    const urls = new Map<FakeElement, Set<string>>();
+    const colours = new Set<string>();
+    for (let t = 0.4; t < 3.2; t += 0.1) {
+      r.decor.update(one("done", t));
+      for (const p of ribbonPaths(r)) {
+        expect(p.getAttribute("d")).toMatch(/^M-?\d+(\.\d+)? -?\d+(\.\d+)?( -?\d+(\.\d+)?)*Z$/);
+        const fill = p.getAttribute("fill")!;
+        if (fill.startsWith("url(")) urls.set(p, (urls.get(p) ?? new Set()).add(fill));
+      }
+      for (const stop of tags(r.els.defs, "stop")) colours.add(stop.getAttribute("stop-color")!);
+    }
+    expect(urls.size).toBeGreaterThan(0);
+    for (const set of urls.values()) expect(set.size).toBe(1);
+    expect(colours.size).toBeLessThanOrEqual(18);
+  });
+
   test("leaving a decorated state hides its nodes and then does nothing", () => {
     const r = rig("decor-a");
     r.decor.update(one("done", 1.2));

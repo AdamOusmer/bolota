@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
 import { describe, expect, test } from "bun:test";
-import { actOf, drain, eyeAttrs, frame, mounted } from "./engine-dom";
+import { actOf, drain, eyeAttrs, frame, mounted, rectsOf } from "./engine-dom";
 import { CHOREO } from "../src/live/choreo";
 
 const opacity = (svg: Svg) => svg.querySelector(".mo-eyes")!.getAttribute("opacity");
@@ -111,10 +111,10 @@ describe("engine liveliness", () => {
 
   test("rest picks the state a one-shot settles into", () => {
     const { doc, handle } = mounted();
-    handle.play("burst", { rest: "done" });
+    handle.play("burst", { rest: "thinking" });
     const end = advance(doc, 0, 12);
     expect(doc.defaultView.queue.length).toBe(1);
-    advance(doc, end, CHOREO.done.period! * 2);
+    advance(doc, end, CHOREO.thinking.duration * 2);
     expect(doc.defaultView.queue.length).toBe(1);
   });
 
@@ -145,6 +145,25 @@ describe("engine liveliness", () => {
     advance(doc, 0, 8);
     expect(doc.defaultView.queue.length).toBe(1);
     expect(drain(doc, 8000).drained).toBe(true);
+  });
+
+  test("the eye rects are left alone while the face is hidden", () => {
+    const { doc, svg, handle } = mounted();
+    handle.loop("done");
+    const transforms = () => rectsOf(svg).map((r) => r.getAttribute("transform")).join("|");
+    let hidden = 0;
+    let before = "";
+    for (let ms = 16; ms <= CHOREO.done.period! * 1000; ms += 16) {
+      frame(doc, ms);
+      if (opacity(svg) === "0") {
+        if (before) {
+          expect(transforms()).toBe(before);
+          hidden++;
+        }
+        before = transforms();
+      } else before = "";
+    }
+    expect(hidden).toBeGreaterThan(10);
   });
 
   test("stop freezes the frame and play resumes it", () => {
