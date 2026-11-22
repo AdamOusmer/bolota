@@ -51,7 +51,7 @@ const queued = (doc: FakeDocument) => doc.defaultView.queue.length;
 
 function drawn(svg: FakeElement): string {
   const figure = svg.querySelector(".mo-bob")!.children[0]!;
-  return figure.outerHTML.replace(/[0-9a-z]+-g(\d+)/g, "G$1");
+  return figure.outerHTML.replace(/[0-9a-z]+-([gbf]\d+)/g, "G$1");
 }
 
 function steps(doc: FakeDocument, from: number, n: number): number {
@@ -62,7 +62,7 @@ function steps(doc: FakeDocument, from: number, n: number): number {
 
 beforeAll(async () => {
   const doc = new FakeDocument();
-  avatar(doc, "sight-warm").handle.loop("orbit");
+  avatar(doc, "sight-warm").handle.loop("done");
   await settle();
 });
 
@@ -70,7 +70,7 @@ describe("sight: leaving and rejoining the loop", () => {
   test("an off-screen instance holds no frame and does no work", () => {
     const doc = world();
     const { svg, handle } = avatar(doc, "sight-a");
-    handle.loop("orbit");
+    handle.loop("done");
     steps(doc, 0, 10);
     FakeIO.made[0]!.set(svg, false);
     expect(queued(doc)).toBe(0);
@@ -89,7 +89,7 @@ describe("sight: leaving and rejoining the loop", () => {
   });
 
   const scenarios: [string, (h: ReturnType<typeof avatar>["handle"]) => void, number][] = [
-    ["mid-orbit", (h) => h.loop("orbit"), 40],
+    ["mid-orbit", (h) => h.loop("done"), 40],
     ["mid-burst", (h) => h.play("burst"), 20],
     ["mid-expression-morph", (h) => h.setExpression("angry"), 3],
   ];
@@ -127,8 +127,8 @@ describe("sight: leaving and rejoining the loop", () => {
     const sleeper = world();
     const b = avatar(sleeper, "sight-d");
     const io = FakeIO.made[0]!;
-    a.handle.loop("orbit");
-    b.handle.loop("orbit");
+    a.handle.loop("done");
+    b.handle.loop("done");
     steps(twin, 0, 30);
     steps(sleeper, 0, 30);
     io.set(b.svg, false);
@@ -152,7 +152,7 @@ describe("sight: the document and the registry", () => {
   test("a hidden document pauses every instance and showing it resumes them", () => {
     const doc = world();
     const all = [1, 2, 3].map((i) => avatar(doc, `sight-h${i}`));
-    all.forEach((x) => x.handle.loop("orbit"));
+    all.forEach((x) => x.handle.loop("done"));
     steps(doc, 0, 3);
     expect(queued(doc)).toBe(1);
     doc.hidden = true;
@@ -167,7 +167,7 @@ describe("sight: the document and the registry", () => {
     const doc = world();
     doc.hidden = true;
     const { handle } = avatar(doc, "sight-i");
-    handle.loop("orbit");
+    handle.loop("done");
     expect(queued(doc)).toBe(0);
     doc.hidden = false;
     doc.fire("visibilitychange");

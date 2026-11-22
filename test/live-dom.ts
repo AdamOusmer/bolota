@@ -199,6 +199,7 @@ export class FakeWindow extends Listenable {
   ResizeObserver = class {
     constructor(public cb: () => void) {}
     observe() {}
+    unobserve() {}
     disconnect() {}
   };
   matchMedia(q: string) {

@@ -11,6 +11,15 @@ interface Watch {
   shown: boolean;
 }
 
+/** A follower of the window's pointer: where it moved, that it left, and that `el`'s geometry may have changed. */
+export interface PointerWatch {
+  el: Element;
+  move(x: number, y: number): void;
+  leave(): void;
+  scroll(): void;
+  resize(): void;
+}
+
 interface Registry {
   v: number;
   ticks: Set<FrameTick>;
@@ -20,10 +29,13 @@ interface Registry {
   io: IntersectionObserver | null;
   hide: () => void;
   origin: number;
+  pointers: Set<PointerWatch>;
+  unpoint: (() => void) | null;
+  ro: ResizeObserver | null;
 }
 
 /** Shape version of the registry stored on the window; bump it when the fields change. */
-const VERSION = 2;
+const VERSION = 3;
 
 /** Blinks gather on boundaries this far apart; a blink gap is 1.9 s at least, so a window never makes a bolota blink early. */
 export const WINDOW_MS = 1600;
@@ -58,6 +70,9 @@ function frameLoop(view: Window): Registry {
     io: null,
     hide: () => mine.sight.forEach((w) => refresh(mine, w)),
     origin: NaN,
+    pointers: new Set(),
+    unpoint: null,
+    ro: null,
   };
   if (slot) privates.set(view, mine);
   else slots[KEY] = mine;
@@ -197,5 +212,71 @@ export function watchSight(view: Window, el: Element, change: SightChange): () =
     el.ownerDocument.removeEventListener("visibilitychange", loop.hide);
     loop.io?.disconnect();
     loop.io = null;
+  };
+}
+
+
+function each(loop: Registry, call: (w: PointerWatch) => void): void {
+  for (const w of loop.pointers) guarded(() => call(w));
+}
+
+/** One set of window listeners and one ResizeObserver, fanned out to every follower. */
+function attachPointer(view: Window, loop: Registry, doc: Document): () => void {
+  const win = view as Window & typeof globalThis;
+  const move = (ev: Event) => {
+    const p = ev as PointerEvent;
+    each(loop, (w) => w.move(p.clientX, p.clientY));
+  };
+  const leave = () => each(loop, (w) => w.leave());
+  const lift = (ev: Event) => {
+    if ((ev as PointerEvent).pointerType !== "mouse") leave();
+  };
+  const scroll = () => each(loop, (w) => w.scroll());
+  const resize = () => each(loop, (w) => w.resize());
+  const quiet = { passive: true } as const;
+  const geom = { passive: true, capture: true } as const;
+  view.addEventListener("pointermove", move, quiet);
+  view.addEventListener("pointerdown", move, quiet);
+  view.addEventListener("pointerup", lift, quiet);
+  view.addEventListener("pointercancel", lift, quiet);
+  view.addEventListener("blur", leave, quiet);
+  doc.addEventListener("pointerleave", leave, quiet);
+  view.addEventListener("scroll", scroll, geom);
+  view.addEventListener("resize", resize, quiet);
+  loop.ro = win.ResizeObserver
+    ? new win.ResizeObserver((entries) => {
+        for (const e of entries) each(loop, (w) => w.el === e.target && w.resize());
+      })
+    : null;
+  return () => {
+    view.removeEventListener("pointermove", move);
+    view.removeEventListener("pointerdown", move);
+    view.removeEventListener("pointerup", lift);
+    view.removeEventListener("pointercancel", lift);
+    view.removeEventListener("blur", leave);
+    doc.removeEventListener("pointerleave", leave);
+    view.removeEventListener("scroll", scroll, geom);
+    view.removeEventListener("resize", resize);
+    loop.ro?.disconnect();
+    loop.ro = null;
+  };
+}
+
+/**
+ * Tells `w` about the window's pointer and `w.el`'s geometry. Every follower
+ * of a window shares one set of listeners and one ResizeObserver, attached
+ * with the first and released with the last. Returns the function that stops.
+ */
+export function watchPointer(view: Window, w: PointerWatch): () => void {
+  const loop = frameLoop(view);
+  loop.pointers.add(w);
+  loop.unpoint ??= attachPointer(view, loop, w.el.ownerDocument);
+  loop.ro?.observe(w.el);
+  return () => {
+    if (!loop.pointers.delete(w)) return;
+    loop.ro?.unobserve(w.el);
+    if (loop.pointers.size) return;
+    loop.unpoint?.();
+    loop.unpoint = null;
   };
 }

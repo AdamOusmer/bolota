@@ -285,11 +285,24 @@ const ENTRIES: {
     // 22311 B (+26). Budget is that plus 100 B. Size accepted for a crowd that
     // no longer repaints on WebKit's main thread at rest (15% to 4% of the page
     // process for 24 live bolotas, iOS 27.2 simulator).
+    //
+    // Raised from 22411 to 24200 for open-bot-avatar's motion: the
+    // `working`, `waiting`, `blocked` and `done` states, the per-frame gaze
+    // pursuit with its attention fade and eye-origin aim, pen and finger
+    // tracking, the ribbon timing helpers the decor chunk now imports from
+    // here instead of bundling choreo a second time, and one shared set of
+    // window pointer listeners and one ResizeObserver for every follower
+    // (`watchPointer` in `live/frames.ts`, +319 B), and the idle savings:
+    // drift-only refreshes drawn one in three, decor load waking only what it
+    // draws, `data-mo-asleep` on stop, no eye fit behind a hidden face, and
+    // outline rays traced on demand. Measured 23804 B on bun 1.4.4,
+    // as `import *` because every underscore export is held by decor.js. Budget
+    // is that plus the ~270 B CI's bun 1.3.10 has measured over local, plus 100 B.
     name: "engine",
-    budget: 22411,
+    budget: 24200,
     external: ["*/decor.js"],
-    source: `import { mountEngine, _CHOREO, _r3 } from "../../src/engine";
-             globalThis.x = [mountEngine, _CHOREO, _r3];`,
+    source: `import * as engine from "../../src/engine";
+             globalThis.x = engine;`,
   },
   {
     // The chunk the engine loads on idle or on the first decor-bearing state.
@@ -302,8 +315,18 @@ const ENTRIES: {
     // arc table (rotation recurrence plus coordinate text table): it trades
     // bytes for no trig and no number formatting per frame, measuring 6724 B
     // on bun 1.4.2 and 6842 B on CI's bun 1.3.10.
+    //
+    // Raised from 7100 to 8300 for open-bot-avatar's ribbons
+    // (`live/ribbons.ts`): tapered filled pieces on tilted hoops, split where
+    // they pass behind the body, with a gradient along each in bolota's seeded
+    // ring colours, replacing the stroked arcs. Pooled sample buffers and a
+    // colour grid keep a frame from allocating or formatting much, and one
+    // gradient per path slot with fixed stops keeps most attribute writes off
+    // the stops. Measured 8038 B on bun 1.4.4 with the choreo helpers taken
+    // from engine.js (10456 B when it bundled its own choreo). Budget is that
+    // plus CI's ~120 B and ~2%.
     name: "decor (lazy chunk)",
-    budget: 7100,
+    budget: 8300,
     external: [],
     plugins: [decorSharesEngine],
     source: `import { createDecor } from "../../src/live/decor";

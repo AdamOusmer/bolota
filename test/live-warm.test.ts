@@ -36,8 +36,8 @@ afterEach(() => {
 const rigs = (svg: FakeElement) => svg.querySelectorAll(".mo-eye").map((e) => [...e.children[0]!.children[0]!.attrs.entries()].join(";"));
 
 describe("outline tables are warmed off the mount path", () => {
-  // Two tables of 1440 rays cost a cos and a sin per ray; the ray loop itself is trig-free.
-  const TABLES = 2 * 1440 * 2;
+  // A table of 1440 rays costs a cos and a sin per ray; the core reuses the face's table when no petal sets them apart.
+  const TABLES = 1440 * 2;
 
   test("a mount at rest does no ray work; the idle slice does it; a turn after that reads tables", () => {
     const { doc, flush } = idleDoc();

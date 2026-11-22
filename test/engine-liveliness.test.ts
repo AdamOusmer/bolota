@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
 import { describe, expect, test } from "bun:test";
-import { actOf, drain, eyeAttrs, frame, mounted } from "./engine-dom";
+import { actOf, drain, eyeAttrs, frame, mounted, rectsOf } from "./engine-dom";
 import { CHOREO } from "../src/live/choreo";
 
 const opacity = (svg: Svg) => svg.querySelector(".mo-eyes")!.getAttribute("opacity");
@@ -39,7 +39,7 @@ describe("engine liveliness", () => {
   });
 
   test("a looped periodic state re-arms past its own period and never parks", () => {
-    for (const state of ["orbit", "wink"] as const) {
+    for (const state of ["done", "wink"] as const) {
       const { doc, handle } = mounted();
       handle.loop(state);
       const span = CHOREO[state].period!;
@@ -63,8 +63,8 @@ describe("engine liveliness", () => {
     }
   });
 
-  test("orbit and comet loops are seamless across their period", () => {
-    for (const state of ["orbit", "comet"] as const) {
+  test("done and comet loops are seamless across their period", () => {
+    for (const state of ["done", "comet"] as const) {
       const { doc, svg, handle } = mounted();
       handle.loop(state);
       const span = (CHOREO[state].period ?? CHOREO[state].duration) * 1000;
@@ -111,16 +111,16 @@ describe("engine liveliness", () => {
 
   test("rest picks the state a one-shot settles into", () => {
     const { doc, handle } = mounted();
-    handle.play("burst", { rest: "orbit" });
+    handle.play("burst", { rest: "thinking" });
     const end = advance(doc, 0, 12);
     expect(doc.defaultView.queue.length).toBe(1);
-    advance(doc, end, CHOREO.orbit.period! * 2);
+    advance(doc, end, CHOREO.thinking.duration * 2);
     expect(doc.defaultView.queue.length).toBe(1);
   });
 
   test("a one-shot rests on whatever was looping before it", () => {
     const { doc, handle } = mounted();
-    handle.loop("orbit");
+    handle.loop("done");
     handle.play("burst");
     const end = advance(doc, 0, 12);
     expect(doc.defaultView.queue.length).toBe(1);
@@ -141,22 +141,41 @@ describe("engine liveliness", () => {
 
   test("a periodic state keeps running to fill a longer window, then parks", () => {
     const { doc, handle } = mounted();
-    handle.play("orbit", { for: 9 });
+    handle.play("done", { for: 9 });
     advance(doc, 0, 8);
     expect(doc.defaultView.queue.length).toBe(1);
     expect(drain(doc, 8000).drained).toBe(true);
   });
 
+  test("the eye rects are left alone while the face is hidden", () => {
+    const { doc, svg, handle } = mounted();
+    handle.loop("done");
+    const transforms = () => rectsOf(svg).map((r) => r.getAttribute("transform")).join("|");
+    let hidden = 0;
+    let before = "";
+    for (let ms = 16; ms <= CHOREO.done.period! * 1000; ms += 16) {
+      frame(doc, ms);
+      if (opacity(svg) === "0") {
+        if (before) {
+          expect(transforms()).toBe(before);
+          hidden++;
+        }
+        before = transforms();
+      } else before = "";
+    }
+    expect(hidden).toBeGreaterThan(10);
+  });
+
   test("stop freezes the frame and play resumes it", () => {
     const { doc, svg, handle } = mounted();
-    handle.loop("orbit");
+    handle.loop("done");
     const end = advance(doc, 0, 1);
     handle.stop();
     const frozen = look(svg);
     advance(doc, end, 1);
     expect(look(svg)).toBe(frozen);
     expect(eyeAttrs(svg).length).toBe(2);
-    handle.loop("orbit");
+    handle.loop("done");
     advance(doc, end + 1000, 1.3);
     expect(look(svg)).not.toBe(frozen);
   });

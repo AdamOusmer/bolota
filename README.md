@@ -277,8 +277,14 @@ Fourteen states ship, listed at runtime as `bot.states`:
 | `alert`, `exclaim`             | the body folds into an exclamation mark's dot, bar above it |
 | `notify`                       | a badge pops in and the gaze looks away from it |
 | `snooze`                       | drifts off                                     |
-| `play`, `orbit`, `swirl`       | body choreography with rings and trails        |
+| `play`, `swirl`                | body choreography with ribbons sweeping round it |
 | `burst`, `comet`               | collapse into particles, reassemble            |
+| `waiting`                      | leans aside with slit eyes and sighs           |
+| `blocked`                      | the body becomes an exclamation mark that jumps and shakes |
+| `done`                         | celebrates in a cage of ribbons while the head turns all the way round, then rests |
+
+`orbit` and `working` are retired: `play("orbit")` plays `done` and
+`play("working")` plays `swirl`.
 
 `setExpression` accepts every static roster name (`idle`, `happy`, `sad`,
 `mad`, `surprised`, `wink`, `sleepy`, `smug`, `unsure`, `scared`, `love`,
@@ -288,8 +294,17 @@ Fourteen states ship, listed at runtime as `bot.states`:
 `unsure`, and `wander` is the resting face. `bot.expressions` lists the bloub
 ids; `engineExpressions()` and `engineStates()` return the same lists without
 mounting. Unknown names are ignored. An expression shows on the resting
-states (`idle`, `wander`, `swirl`) and on `play`, `burst` and `comet`; every
-other state owns its eyes.
+states (`idle`, `wander`, `swirl`) and on `play`, `burst`, `comet`, `waiting`
+and `done`; every other state owns its eyes.
+
+The ribbons' motion, the idle look, the gaze pursuit and the `waiting`,
+`blocked` and `done` states are ported from
+[open-bot-avatar](https://github.com/DominikScholz/open-bot-avatar) (MIT):
+ribbons ride tilted hoops round the body and taper from tail to head, in
+bolota's own seeded ring colours; at rest the eyes hold, then glance to the
+next spot in a quick eased saccade; a pointer holds the gaze on every state,
+the look starting at the eyes and easing toward it every frame, and a pen or
+finger is followed while it is down.
 
 The motion is bloub's: the eyes sit on a sphere the size of the head and a
 head turn carries them round it, foreshortened at the side. Idle life glides

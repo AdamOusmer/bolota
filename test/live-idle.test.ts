@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { motionSeeds, motionVars } from "../src/animate";
 import { EASE_IN_OUT } from "../src/ease";
-import { BLINKS, BLINK_CYCLE, BLINK_DUR, BLINK_SHUT, BREATH, BREATH_MS, MAX_PITCH_DRIFT, MAX_YAW_DRIFT, headFrame, loopNoise, turnHead, wander } from "../src/live/head";
+import { BLINKS, BLINK_CYCLE, BLINK_DUR, BLINK_SHUT, BREATH, BREATH_MS, FIXATION, MAX_PITCH_DRIFT, MAX_YAW_DRIFT, SACCADE, headFrame, loopNoise, turnHead, wander } from "../src/live/head";
 import { idleDrift, idleFrame, idleLoops, idleShake } from "../src/live/idle";
 import { mountLive } from "../src/live/mount";
 import { traits } from "../src/traits";
@@ -219,19 +219,23 @@ describe("bloub's head", () => {
     }
   });
 
-  test("the wander is bloub's: smooth, bounded by its amplitude, and silent at strength 0", () => {
+  test("the wander is open-bot-avatar's: holds between eased saccades, bounded, and silent at strength 0", () => {
     const g = { yaw: 0, pitch: 0, roll: 0 };
     let prev = wander(0, 1, { yaw: 0, pitch: 0, roll: 0 });
-    let maxStep = 0;
+    let held = 0;
+    let frames = 0;
     for (let t = 1 / 60; t < 120; t += 1 / 60) {
       wander(t, 1, g);
       expect(Math.abs(g.yaw)).toBeLessThanOrEqual(MAX_YAW_DRIFT);
       expect(Math.abs(g.pitch)).toBeLessThanOrEqual(MAX_PITCH_DRIFT);
-      maxStep = Math.max(maxStep, Math.abs(g.yaw - prev.yaw), Math.abs(g.pitch - prev.pitch));
+      const moved = Math.abs(g.yaw - prev.yaw) + Math.abs(g.pitch - prev.pitch) > 1e-9;
+      const inSaccade = t % FIXATION <= SACCADE + 1 / 60;
+      expect({ t, stray: moved && !inSaccade }).toEqual({ t, stray: false });
+      if (!moved) held++;
+      frames++;
       prev = { ...g };
     }
-    // Under half a degree a frame at 60 Hz: a glide, never a saccade.
-    expect(maxStep).toBeLessThan(0.5);
+    expect(held / frames).toBeGreaterThan(0.85);
     wander(17.3, 0, g);
     expect([g.yaw, g.pitch, g.roll].every((v) => Math.abs(v) === 0)).toBe(true);
     expect(loopNoise(2.5, 6, 0.4)).toBeCloseTo(loopNoise(8.5, 6, 0.4), 12);

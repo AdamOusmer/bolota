@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
-// Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
-
-import { EASE } from "../ease";
-import { easeInOutCubic } from "./choreo";
+// Derived from bloub (c) 2026 Jeremy Perret, MIT, and open-bot-avatar (c) 2026 Dominik Scholz, MIT. See LICENSE.
 
 /**
  * Where the eyes look when something outside drives them: bloub's `Look`, and
@@ -30,7 +27,7 @@ export const NO_LOOK: Readonly<Look> = { yaw: 0, pitch: 0, mix: 0, wander: 1 };
 export const FOLLOW_MAX_YAW = 35;
 /** The height the gaze holds at with the pointer level with the bolota: just above the equator, attentive rather than vacant. */
 export const FOLLOW_PITCH = 10;
-/** How far up it reaches with the pointer at the top of the viewport. */
+/** How far up it reaches with the pointer far above. */
 export const FOLLOW_PITCH_UP = 26;
 /**
  * How far down it reaches at the bottom. Further than up: pitch maps to travel
@@ -38,18 +35,51 @@ export const FOLLOW_PITCH_UP = 26;
  */
 export const FOLLOW_PITCH_DOWN = -45;
 
-/**
- * Seconds a retarget takes on the CSS `ease` curve. Every pointer move
- * retargets from wherever the curve is, so a moving pointer is trailed by
- * about this much and a parked one is reached in a single clean arrival.
- */
-export const FOLLOW_MORPH = 0.08;
-/** Seconds the gaze takes to hand back to the state's own when the pointer leaves. */
-export const LOOK_MORPH = 0.24;
+/** Seconds for the look to cover ~63% of the way to a moving target. */
+export const FOLLOW_TAU = 0.12;
+/** Seconds for attention to fade in or out, and for a released look to relax. */
+export const ATTEND_TAU = 0.3;
+/** Pointer distance, in avatar sizes, at which the look is at tanh(1) of full. */
+export const REACH = 1;
+/** Smallest reach, CSS px, so a small avatar still uses its range. */
+export const MIN_REACH = 160;
+/** The reach is at least this share of the viewport's diagonal, so the look keeps turning across the page. */
+export const VIEW_REACH = 0.25;
+
+const EPS_DEG = 0.05;
+const EPS_MIX = 0.002;
+const MAX_DT = 0.1;
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/** Where the look starts on screen (the eyes), the avatar's size and the viewport's diagonal, CSS px. */
+export interface Origin extends Point {
+  size: number;
+  view: number;
+}
 
 /**
- * The look a pointer at `nx`, `ny` asks for, each -1..1 across the viewport
- * from the bolota's centre, right and down positive. Each half of the
+ * The pointer as a look direction from the eyes, -1..1 each way: radial and
+ * soft, saturating gently past about one avatar away or a quarter of the
+ * viewport's diagonal, whichever is further.
+ */
+export function pointerAim(pointer: Point, origin: Origin, out: Point): Point {
+  const reach = Math.max(origin.size * REACH, MIN_REACH, origin.view * VIEW_REACH);
+  const dx = (pointer.x - origin.x) / reach;
+  const dy = (pointer.y - origin.y) / reach;
+  const m = Math.hypot(dx, dy);
+  const k = Number.isFinite(m) && m > 1e-9 ? Math.tanh(m) / m : 0;
+  out.x = dx * k;
+  out.y = dy * k;
+  return out;
+}
+
+/**
+ * The look a pointer at `nx`, `ny` asks for, each -1..1 from `pointerAim`,
+ * right and down positive. Each half of the
  * vertical sweep is its own lerp out of the rest height, so looking down is as
  * live as looking up.
  */
@@ -63,38 +93,57 @@ export function followLook(nx: number, ny: number, gain: number, o: Look): Look 
 }
 
 /**
- * One gaze glide: from a look to a look over `dur` seconds on `ease`. A new
- * target starts from wherever the glide is, never from the last target, so a
- * stream of pointer moves glides instead of juddering.
+ * The gaze pursuit: the look eases toward its target every frame, frame-rate
+ * independent, and attention fades the pointer's hold in and out on its own
+ * slower curve, so taking up or losing a target turns rather than snaps.
  */
 export class Glide {
-  private from: Look = { ...NO_LOOK };
-  private to: Look = { ...NO_LOOK };
-  private at = 0;
-  private dur = LOOK_MORPH;
-  private ease: (t: number) => number = easeInOutCubic;
+  private readonly cur: Look = { ...NO_LOOK };
+  private readonly to: Look = { ...NO_LOOK };
+  private attention = 0;
+  private holding = false;
+  private at = NaN;
+
+  private advance(now: number): void {
+    const dt = this.at === this.at ? Math.min(MAX_DT, Math.max(0, now - this.at)) : 0;
+    this.at = now;
+    if (dt <= 0) return;
+    const k = 1 - Math.exp(-dt / (this.holding ? FOLLOW_TAU : ATTEND_TAU));
+    const ka = 1 - Math.exp(-dt / ATTEND_TAU);
+    this.cur.yaw += (this.to.yaw - this.cur.yaw) * k;
+    this.cur.pitch += (this.to.pitch - this.cur.pitch) * k;
+    this.attention += ((this.holding ? 1 : 0) - this.attention) * ka;
+    if (this.arrived()) {
+      this.cur.yaw = this.to.yaw;
+      this.cur.pitch = this.to.pitch;
+      this.attention = this.holding ? 1 : 0;
+    }
+  }
+
+  private arrived(): boolean {
+    return (
+      Math.abs(this.to.yaw - this.cur.yaw) < EPS_DEG &&
+      Math.abs(this.to.pitch - this.cur.pitch) < EPS_DEG &&
+      Math.abs((this.holding ? 1 : 0) - this.attention) < EPS_MIX
+    );
+  }
 
   /** The look at `now`, into `o`. */
   sample(now: number, o: Look): Look {
-    const k = this.dur > 0 ? (now - this.at) / this.dur : 1;
-    if (k >= 1) {
-      o.yaw = this.to.yaw;
-      o.pitch = this.to.pitch;
-      o.mix = this.to.mix;
-      o.wander = this.to.wander;
-      return o;
-    }
-    const e = this.ease(k < 0 ? 0 : k);
-    o.yaw = this.from.yaw + (this.to.yaw - this.from.yaw) * e;
-    o.pitch = this.from.pitch + (this.to.pitch - this.from.pitch) * e;
-    o.mix = this.from.mix + (this.to.mix - this.from.mix) * e;
-    o.wander = this.from.wander + (this.to.wander - this.from.wander) * e;
+    this.advance(now);
+    const a = this.attention;
+    const w = a * a * (3 - 2 * a);
+    o.yaw = this.cur.yaw;
+    o.pitch = this.cur.pitch;
+    o.mix = w;
+    o.wander = 1 - w;
     return o;
   }
 
-  /** Whether the glide has arrived by `now`. */
+  /** Whether the look has arrived by `now`. */
   settled(now: number): boolean {
-    return now - this.at >= this.dur;
+    this.advance(now);
+    return this.arrived();
   }
 
   /** The target, to read only. */
@@ -102,15 +151,13 @@ export class Glide {
     return this.to;
   }
 
-  /** Glides to `look` from where it is at `now`: a pointer's on `ease`, a release on bloub's in-out curve. */
+  /** Pursues `look` from where the gaze is at `now`; `release` relaxes back to rest instead. */
   retarget(look: Readonly<Look>, now: number, release: boolean): void {
-    this.sample(now, this.from);
-    this.to.yaw = look.yaw;
-    this.to.pitch = look.pitch;
-    this.to.mix = look.mix;
-    this.to.wander = look.wander;
-    this.at = now;
-    this.dur = release ? LOOK_MORPH : FOLLOW_MORPH;
-    this.ease = release ? easeInOutCubic : EASE;
+    this.advance(now);
+    this.holding = !release;
+    this.to.yaw = release ? 0 : look.yaw;
+    this.to.pitch = release ? 0 : look.pitch;
+    this.to.mix = release ? 0 : 1;
+    this.to.wander = release ? 1 : 0;
   }
 }

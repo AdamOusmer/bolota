@@ -9,12 +9,12 @@ import type { Expression } from "../expression";
 import { IDENT, r3, type Pose } from "../morph";
 import { resolve } from "../render";
 import { IDLE_ACT, actTransform, type Act } from "./act";
-import { CHOREO, expressed, newEyes, type Eyes, type Head, type StateId } from "./choreo";
+import { CHOREO, EXPRESSION_MORPH, RETIRED, expressed, newEyes, type Eyes, type Head, type StateId } from "./choreo";
 import type { Decor, DecorFrame, DecorHost, DecorPalette } from "./decor.js";
 import { eyeBox, settleEyes, type Correction, type Eye, type EyeBox } from "./fit";
-import { Glide, NO_LOOK, followLook, type Look } from "./follow";
-import { JITTER_MS, blinkSlot, cancelRead, readNextFrame, startFrames, stopFrames, watchSight } from "./frames";
-import { BLINK_CYCLE, BREATH_MS, lid, nextBlink, type Gaze } from "./head";
+import { Glide, NO_LOOK, followLook, pointerAim, type Look, type Origin, type Point } from "./follow";
+import { JITTER_MS, blinkSlot, cancelRead, readNextFrame, startFrames, stopFrames, watchPointer, watchSight } from "./frames";
+import { BLINK_CYCLE, BREATH_MS, FIXATION, SACCADE, lid, nextBlink, type Gaze } from "./head";
 import { ALIASES, resolveExpression } from "./names";
 import { idleDrift, idleFrame, idleLoops, idleShake } from "./idle";
 import { prepared } from "./outline";
@@ -46,6 +46,9 @@ const ENTRANCE = 0.2;
 /** `.mo-root`'s `--mo-amp` transition on hover, in seconds. */
 const AMP_RAMP = 0.4;
 
+/** A frame that only drifts (a held wander, the float) is drawn on every this-many refreshes; the rest are skipped whole. */
+const DRIFT_EVERY = 3;
+
 const q = (v: number, k: number) => Math.round(v * k);
 
 const POSE_VARS = [
@@ -62,9 +65,11 @@ const stamp = (sig: Float64Array, i: number, v: number): number => {
 
 const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
-const clamp1 = (v: number) => (v < -1 ? -1 : v > 1 ? 1 : v);
+const current = (id: string): string => (has(RETIRED, id) ? RETIRED[id]! : id);
 
 const POSE_KEYS = Object.keys(IDENT) as (keyof Pose)[];
+
+const sized = (vb: number[]) => vb.length === 4 && vb[2]! > 0 && vb[3]! > 0;
 
 /** The face of a seeded bolota at rest: the pose and every turn at identity, so the eyes sit where the static render drew them. */
 function atRest(e: Eyes, g: Gaze, turn: number): boolean {
@@ -213,6 +218,9 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let quietAt = 0;
   let restId: StateId = "idle";
   let restLoop = false;
+  let driftOnly = false;
+  let skipped = 0;
+  let exprUntil = 0;
   let exprPose: Pose | null = null;
   let stillId: StateId = "idle";
 
@@ -221,16 +229,13 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let aiming = false;
   let aimX = NaN;
   let aimY = NaN;
-  let gcx = 0;
-  let gcy = 0;
-  let halfW = 1;
-  let halfH = 1;
+  const origin: Origin = { x: 0, y: 0, size: 1, view: 0 };
+  const aimAt: Point = { x: 0, y: 0 };
   let gain = 1;
   let measured = false;
   let stale = true;
   let gainStale = true;
   let detach: (() => void) | null = null;
-  let resized: ResizeObserver | null = null;
 
   const mk = <K extends keyof SVGElementTagNameMap>(tag: K) => doc.createElementNS(SVG_NS, tag);
 
@@ -559,7 +564,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   function drawDecor(frames: DecorFrame[]): boolean {
     if (!decor) {
       if (!decorModule) return false;
-      decor = decorModule.createDecor(decorHost, L, palette as DecorPalette, Math.random().toString(36).slice(2));
+      decor = decorModule.createDecor(decorHost, L, palette as DecorPalette, Math.random().toString(36).slice(2), name);
     }
     return decor.update(frames);
   }
@@ -568,7 +573,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     void loadDecor().then(() => {
       if (dead || !decorModule) return;
       if (reduced) still();
-      else wake();
+      else if (drawDecor(tl.decorFrames(clock, decorNow)) || awake || ticking) wake();
     });
   }
 
@@ -614,6 +619,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       stamp(f, 17, turn)
     ) {
       changed = sAlpha.set(e.alpha >= 1 ? null : r3(e.alpha)) || changed;
+      if (e.alpha <= 0) return changed;
       headNow.spread = e.head.spread;
       faceNow.pose = p;
       faceNow.own = e.own;
@@ -651,19 +657,18 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
 
   /**
    * Points the gaze glide where the pointer asks, or hands it back to the
-   * state's own when there is no pointer to look at or the state owns its
-   * face. Retargets only when the ask moved; whether the glide is still going.
+   * state's own when there is no pointer to look at. Retargets only when the
+   * ask moved; whether the glide is still going.
    */
-  function aim(now: number, baseFace: boolean): boolean {
-    const on = following && !!pointer && measured && baseFace;
+  function aim(now: number): boolean {
+    const on = following && !!pointer && measured;
     if (!on) {
       if (aiming) {
         aiming = false;
         glide.retarget(NO_LOOK, now, true);
       }
     } else {
-      const nx = clamp1((pointer!.x - gcx) / halfW);
-      const ny = clamp1((pointer!.y - gcy) / halfH);
+      const { x: nx, y: ny } = pointerAim(pointer!, origin, aimAt);
       if (!aiming || nx !== aimX || ny !== aimY) {
         aiming = true;
         aimX = nx;
@@ -677,7 +682,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   function frame(now: number): boolean {
     const id = tl.state(now);
     const c = CHOREO[id];
-    const busy = aim(now, c.baseFace);
+    const busy = aim(now);
     const look = glide.sample(now, lookNow);
     const act = tl.sample(now, actNow);
     const e = tl.eyes(now, eyesNow);
@@ -690,12 +695,14 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     let lively = 0;
     for (const f of frames) if (!CHOREO[f.state].ownsLiveliness) lively += f.weight;
     const alive = e.alpha > 0.01;
-    idleDrift(eyeMs + wanderAt, alive ? lively * look.wander * amp : 0, lively * amp, idle);
+    const glance = lively * lively * (3 - 2 * lively);
+    idleDrift(eyeMs + wanderAt, alive ? glance * look.wander * amp : 0, lively * amp, idle);
     act.x += idle.x;
     act.y += idle.y;
     const h = e.head;
-    gazeNow.yaw = h.yaw + (look.yaw - h.yaw) * look.mix + idle.gaze.yaw;
-    gazeNow.pitch = h.pitch + (look.pitch - h.pitch) * look.mix + idle.gaze.pitch;
+    const kept = c.ownsGaze ? 0 : 1;
+    gazeNow.yaw = h.yaw + (look.yaw - h.yaw * kept) * look.mix + idle.gaze.yaw;
+    gazeNow.pitch = h.pitch + (look.pitch - h.pitch * kept) * look.mix + idle.gaze.pitch;
     gazeNow.roll = h.roll + idle.gaze.roll;
 
     const changed = paint(act, e, gazeNow);
@@ -705,10 +712,30 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     if (cue !== null) entranceAt = now;
 
     const drawn = drawDecor(frames);
+    driftOnly = !busy && !drawn && frames.length === 1 && isStatic(id) && settledOn(id, now);
 
     const moving = !isStatic(id) || (lively > 0 && amp > 0);
     const animating = tl.next(now) < Infinity ? moving || id !== restId : moving && restLoop;
     return changed || busy || drawn || animating;
+  }
+
+  /** No hand-off is coming, or the next is a looped static state restarting on its own pose. */
+  const settledOn = (id: StateId, now: number): boolean => tl.next(now) === Infinity || (restLoop && id === restId);
+
+  const holding = (): boolean => (((eyeMs + wanderAt) / 1000) % FIXATION) >= SACCADE;
+
+  /** Nothing but the idle drift would change on this refresh, so it can be left undrawn: the motion is a function of the clock alone. */
+  function drifting(): boolean {
+    return (
+      driftOnly &&
+      idle.blink === 1 &&
+      !blinking() &&
+      shakeSettled() &&
+      entrance() === 1 &&
+      clock >= exprUntil &&
+      clock >= ampAt + AMP_RAMP &&
+      holding()
+    );
   }
 
   function tick(ms: number): void {
@@ -718,6 +745,8 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     eyeMs += dt * 1000;
     bodyMs += dt * 1000;
     idleEval();
+    if (awake && drifting() && ++skipped < DRIFT_EVERY) return;
+    skipped = 0;
     if (awake) {
       if (frame(clock)) quietAt = 0;
       else if (!quietAt) quietAt = ms;
@@ -797,6 +826,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   }
 
   function wake(): void {
+    driftOnly = false;
     if (dead || paused || reduced) return;
     if (!sight) {
       pendingWake = true;
@@ -808,14 +838,27 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     start();
   }
 
+  /** The eyes' midpoint as a fraction of the svg's box, where a look starts. */
+  function eyesAt(): [number, number] {
+    const vb = (svg.getAttribute("viewBox") ?? "").split(/[\s,]+/).map(Number);
+    if (!sized(vb) || !L.eyes.length) return [0.5, 0.5];
+    let ex = 0;
+    let ey = 0;
+    for (const e of L.eyes) {
+      ex += e.cx / L.eyes.length;
+      ey += e.cy / L.eyes.length;
+    }
+    return [(ex - vb[0]!) / vb[2]!, (ey - vb[1]!) / vb[3]!];
+  }
+
   function measure(): void {
     const r = svg.getBoundingClientRect();
-    gcx = r.left + r.width / 2;
-    gcy = r.top + r.height / 2;
+    const [fx, fy] = eyesAt();
+    origin.x = r.left + r.width * fx;
+    origin.y = r.top + r.height * fy;
+    origin.size = Math.max(r.width, r.height);
+    origin.view = Math.hypot(view.innerWidth || 0, view.innerHeight || 0);
     measured = r.width > 0 && r.height > 0;
-    const radius = Math.max(1, Math.min(r.width, r.height) / 2);
-    halfW = Math.max(1, (view.innerWidth || 8 * radius) / 2);
-    halfH = Math.max(1, (view.innerHeight || 8 * radius) / 2);
     if (gainStale) gain = (parseFloat(view.getComputedStyle(eyesG).getPropertyValue("--mo-track-travel")) || TRAVEL) / TRAVEL;
     stale = gainStale = false;
   }
@@ -839,6 +882,16 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     remeasure();
   };
 
+  /** The stylesheet's breath stops with the loop: stopped, or out of sight. */
+  function sleepSync(): void {
+    if (built) put(svg, "data-mo-asleep", paused || !sight ? "" : null);
+  }
+
+  function resume(): void {
+    paused = false;
+    sleepSync();
+  }
+
   /**
    * Off screen, or in a hidden tab, the instance leaves the frame loop and its
    * clock stops with it: the timeline resumes from the frame it froze on, with
@@ -848,7 +901,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
    */
   function sightChange(visible: boolean): void {
     sight = visible;
-    put(svg, "data-mo-asleep", visible ? null : "");
+    sleepSync();
     if (!visible) return halt();
     if (following) stale = true;
     if (following && pointer) readNextFrame(view, measure);
@@ -869,36 +922,50 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     stale = gainStale = true;
   }
 
+  const at = { x: 0, y: 0 };
+
+  function moveTo(x: number, y: number): void {
+    at.x = x;
+    at.y = y;
+    pointer = at;
+    if (stale) readNextFrame(view, measure);
+    wake();
+  }
+
+  function leave(): void {
+    pointer = null;
+    wake();
+  }
+
+  /** A follower of one element: its own pointer listeners, the window's shared geometry. */
+  function attachTo(target: Element): () => void {
+    const onMove = (ev: Event) => moveTo((ev as PointerEvent).clientX, (ev as PointerEvent).clientY);
+    const onLift = (ev: Event) => {
+      if ((ev as PointerEvent).pointerType !== "mouse") leave();
+    };
+    const quiet = { passive: true } as const;
+    target.addEventListener("pointermove", onMove, quiet);
+    target.addEventListener("pointerdown", onMove, quiet);
+    target.addEventListener("pointerup", onLift, quiet);
+    target.addEventListener("pointercancel", onLift, quiet);
+    target.addEventListener("pointerleave", leave, quiet);
+    const geometry = watchPointer(view, { el: svg, move() {}, leave() {}, scroll: onScroll, resize: onGeom });
+    return () => {
+      target.removeEventListener("pointermove", onMove);
+      target.removeEventListener("pointerdown", onMove);
+      target.removeEventListener("pointerup", onLift);
+      target.removeEventListener("pointercancel", onLift);
+      target.removeEventListener("pointerleave", leave);
+      geometry();
+    };
+  }
+
   function attach(target: Element | "window"): void {
     release();
-    const moves: EventTarget = target === "window" ? view : target;
-    const leaves: EventTarget = target === "window" ? doc : target;
-    const onMove = (ev: Event) => {
-      const p = ev as PointerEvent;
-      if (p.pointerType === "touch") return;
-      pointer = { x: p.clientX, y: p.clientY };
-      if (stale) readNextFrame(view, measure);
-      wake();
-    };
-    const onLeave = () => {
-      pointer = null;
-      wake();
-    };
-    const geom = { passive: true, capture: true } as const;
-    moves.addEventListener("pointermove", onMove, { passive: true });
-    leaves.addEventListener("pointerleave", onLeave, { passive: true });
-    view.addEventListener("scroll", onScroll, geom);
-    view.addEventListener("resize", onGeom, { passive: true });
-    resized = view.ResizeObserver ? new view.ResizeObserver(onGeom) : null;
-    resized?.observe(svg);
-    detach = () => {
-      moves.removeEventListener("pointermove", onMove);
-      leaves.removeEventListener("pointerleave", onLeave);
-      view.removeEventListener("scroll", onScroll, geom);
-      view.removeEventListener("resize", onGeom);
-      resized?.disconnect();
-      resized = null;
-    };
+    detach =
+      target === "window"
+        ? watchPointer(view, { el: svg, move: moveTo, leave, scroll: onScroll, resize: onGeom })
+        : attachTo(target);
     following = true;
     onGeom();
   }
@@ -918,6 +985,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     }
     shakeTo = e?.p.shake ?? 0;
     shakeAt = clock;
+    exprUntil = instant ? 0 : clock + EXPRESSION_MORPH;
     shakeCurve = e ? MORPH_IN : MORPH_OUT;
     put(svg, "--mo-head", tint.head!);
     put(svg, "--mo-eye", tint.eye!);
@@ -956,7 +1024,9 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   const handle: EngineHandle = {
     states: Object.keys(CHOREO),
     expressions: Object.keys(ALIASES),
-    play(state, o) {
+    play(asked, given) {
+      const state = current(asked);
+      const o = given?.rest ? { ...given, rest: current(given.rest) } : given;
       for (const id of [state, o?.rest ?? state]) if (!has(CHOREO, id)) throw new Error(`mountLive: unknown state "${id}"`);
       if (dead) return;
       const id = state as StateId;
@@ -966,7 +1036,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
         still();
         return;
       }
-      paused = false;
+      resume();
       const looped = !!o?.loop;
       const next = (o?.rest as StateId | undefined) ?? (looped ? id : restId);
       restLoop = looped ? true : next === restId && restLoop;
@@ -981,11 +1051,12 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     },
     setExpression(next) {
       if (dead) return;
-      paused = false;
+      resume();
       express(next);
     },
     stop() {
       paused = true;
+      sleepSync();
       halt();
     },
     follow(target = "window") {
@@ -994,7 +1065,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
         release();
         wake();
       } else if (!reduced) {
-        paused = false;
+        resume();
         attach(target);
       }
     },

@@ -10,6 +10,45 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## 0.3.0
+
+No face changes. The live engine takes open-bot-avatar's motion (MIT, see
+LICENSE): its ribbon animation, its idle look, its gaze pursuit and three
+agent states. `orbit` and `working` are retired.
+
+### Changed
+
+- **Ribbons replace the stroked rings and trails** of `play`, `swirl` and
+  `comet`: filled pieces that taper from tail to head on tilted hoops round the
+  body, split where they pass behind it, in bolota's seeded ring colours.
+  Ribbons are seeded by the name, so one name always draws the same ones.
+- **The idle look holds, then glances.** The head's slow sine drift is
+  replaced by fixations every 1.9 s reached in a 0.16 s eased saccade, centred
+  40% of the time.
+- **The gaze eases toward the pointer every frame** instead of restarting an
+  80 ms curve on each move, and its hold fades in and out over 0.3 s. The look
+  starts at the eyes, not the box centre, and saturates softly about one
+  avatar away. A pointer now holds the gaze on every state, not only the
+  resting ones; `done` adds it to its own turn.
+- **Followers share one set of window listeners.** Every `follow()` on a
+  window used to add its own pointer, scroll and resize listeners and its own
+  ResizeObserver; now one set and one observer serve them all, attached with
+  the first follower and released with the last, on the same shared registry
+  as the frame loop.
+- **Pen and finger are followed while down** and released on lift, cancel,
+  window blur or leaving the window. A touch scroll cancels the pointer, so
+  0.2.8's scroll saving holds.
+- **`orbit` and `working` are retired.** `play("orbit")` plays `done`,
+  `play("working")` plays `swirl`, and the `orbit` sequence runs `done`.
+  Neither is listed in `engineStates()` any more.
+
+### Added
+
+- **States `waiting`, `blocked` and `done`.** `waiting` leans aside with slit
+  eyes and sighs; `blocked` turns the body into an exclamation mark that jumps
+  and shakes; `done` celebrates in a cage of ribbons while the head turns all
+  the way round three times, the face fading as it turns away, then rests.
+
 ## 0.2.8
 
 No face changes. A live bolota does nothing on scroll unless a pointer is

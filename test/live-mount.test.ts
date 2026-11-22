@@ -140,6 +140,21 @@ describe("mountLive markup", () => {
     expect(handle.states).toEqual(engineStates());
     expect(handle.expressions).toEqual(engineExpressions());
   });
+
+  test("retired ids still play, as the states that replaced them", () => {
+    const { handle } = mounted();
+    expect(handle.states).not.toContain("orbit");
+    expect(handle.states).not.toContain("working");
+    const drawn = (id: string) => {
+      const m = mounted();
+      m.handle.play(id, { loop: true });
+      run(m.doc, 16, 1);
+      return attrs(m.svg);
+    };
+    expect(drawn("orbit")).toEqual(drawn("done"));
+    expect(drawn("working")).toEqual(drawn("swirl"));
+    expect(() => handle.play("working", { rest: "orbit" })).not.toThrow();
+  });
 });
 
 describe("mountLive clock", () => {
@@ -178,7 +193,7 @@ describe("mountLive clock", () => {
 
   test("a looped periodic state never parks until another state replaces it", () => {
     const { doc, handle } = mounted();
-    handle.loop("orbit");
+    handle.loop("done");
     const ms = run(doc, 0, 8);
     expect(doc.defaultView.queue.length).toBe(1);
     handle.loop("idle");
@@ -188,7 +203,7 @@ describe("mountLive clock", () => {
 
   test("stop pauses, play resumes", () => {
     const { doc, handle } = mounted();
-    handle.loop("orbit");
+    handle.loop("done");
     frame(doc, 16);
     handle.stop();
     expect(doc.defaultView.queue.length).toBe(0);
@@ -196,6 +211,18 @@ describe("mountLive clock", () => {
     expect(doc.defaultView.queue.length).toBe(1);
     handle.destroy();
     expect(doc.defaultView.queue.length).toBe(0);
+  });
+
+  test("stop leaves the breath to sleep and play wakes it", () => {
+    const { doc, svg, handle } = mounted();
+    handle.loop("done");
+    frame(doc, 16);
+    expect(svg.hasAttribute("data-mo-asleep")).toBe(false);
+    handle.stop();
+    expect(svg.hasAttribute("data-mo-asleep")).toBe(true);
+    handle.play("wide");
+    expect(svg.hasAttribute("data-mo-asleep")).toBe(false);
+    handle.destroy();
   });
 
   test("wander drifts the head and floats the body without end; the resting face holds still", () => {
@@ -210,7 +237,8 @@ describe("mountLive clock", () => {
       frame(doc, (ms += 16));
       seen.add(`${act()}|${attrs(svg).join()}`);
     }
-    expect(seen.size).toBe(30);
+    expect(seen.size).toBeGreaterThanOrEqual(9);
+    expect(seen.size).toBeLessThan(30);
     expect(doc.defaultView.queue.length).toBe(1);
     handle.loop("idle");
     ms = run(doc, ms, 2);
@@ -345,11 +373,22 @@ describe("mountLive gaze", () => {
     run(doc, 2000, 4);
     expect(doc.defaultView.queue.length).toBe(0);
 
-    win.fire("pointermove", { clientX: 900, clientY: 50, pointerType: "touch" });
-    expect(doc.defaultView.queue.length).toBe(0);
-
     doc.fire("pointerleave");
     run(doc, 6000, 3);
+    expect(attrs(svg)).toEqual(rest);
+  });
+
+  test("a finger is followed while it is down and released when it lifts", () => {
+    const { doc, svg, handle } = mounted();
+    const win = doc.defaultView;
+    const rest = attrs(svg);
+    handle.follow();
+    frame(doc, 16);
+    win.fire("pointerdown", { clientX: 900, clientY: 50, pointerType: "touch" });
+    run(doc, 16, 1);
+    expect(attrs(svg)).not.toEqual(rest);
+    win.fire("pointerup", { clientX: 900, clientY: 50, pointerType: "touch" });
+    run(doc, 2000, 3);
     expect(attrs(svg)).toEqual(rest);
   });
 
@@ -364,7 +403,7 @@ describe("mountLive gaze", () => {
     expect(doc.defaultView.count() + doc.count()).toBe(0);
   });
 
-  test("a state that owns its gaze ignores the pointer", () => {
+  test("a state with its own eyes still follows the pointer", () => {
     const { doc, svg, handle } = mounted();
     handle.loop("wide");
     handle.follow();
@@ -374,7 +413,7 @@ describe("mountLive gaze", () => {
     const still = attrs(svg);
     win.fire("pointermove", { clientX: 900, clientY: 50, pointerType: "mouse" });
     run(doc, 3000, 1);
-    expect(attrs(svg)).toEqual(still);
+    expect(attrs(svg)).not.toEqual(still);
   });
 });
 

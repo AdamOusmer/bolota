@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
 import { describe, expect, test } from "bun:test";
-import { drain, eyeAttrs, eyeCentre, frame, mounted, rectsOf, type FakeDocument } from "./engine-dom";
+import { FakeDocument, drain, eyeAttrs, eyeCentre, frame, mountOn, mounted, rectsOf } from "./engine-dom";
 
 const move = (doc: FakeDocument, clientX: number, clientY: number, pointerType = "mouse") =>
   doc.defaultView.fire("pointermove", { clientX, clientY, pointerType });
@@ -32,6 +32,23 @@ describe("follow attach and detach", () => {
     expect(listeners(doc)).toBeGreaterThan(0);
     handle.follow(false);
     expect(listeners(doc)).toBe(1);
+  });
+
+  test("every follower of a window shares one set of listeners, and one move reaches them all", () => {
+    const doc = new FakeDocument();
+    const all = ["a", "b", "c", "d"].map((n) => mountOn(doc, n));
+    const base = listeners(doc);
+    all[0]!.handle.follow();
+    const one = listeners(doc) - base;
+    for (const m of all.slice(1)) m.handle.follow();
+    expect(listeners(doc) - base).toBe(one);
+    frame(doc, 16);
+    const rest = all.map((m) => eyeAttrs(m.svg));
+    move(doc, 900, 50);
+    drain(doc, 16, 5);
+    all.forEach((m, i) => expect(eyeAttrs(m.svg)).not.toEqual(rest[i]));
+    for (const m of all) m.handle.follow(false);
+    expect(listeners(doc)).toBe(base);
   });
 
   test("destroy detaches too", () => {
@@ -80,12 +97,21 @@ describe("follow moves the eyes", () => {
     expect(centre).toBeLessThan(down);
   });
 
-  test("a touch pointer is ignored", () => {
-    const { doc, handle } = mounted();
-    handle.follow();
-    drain(doc, 0, 5);
-    move(doc, 900, 50, "touch");
-    expect(doc.defaultView.queue.length).toBe(0);
+  test("a touch pointer turns the eyes like a mouse", () => {
+    const touched = mounted();
+    touched.handle.follow();
+    frame(touched.doc, 16);
+    move(touched.doc, 900, 50, "touch");
+    drain(touched.doc, 16, 5);
+    expect(eyeX(touched.svg)).toBeCloseTo(eyeX(pointed(900, 50).svg), 6);
+  });
+
+  test("the look starts at the eyes and saturates softly", () => {
+    const near = eyeX(pointed(120, 50).svg);
+    const far = eyeX(pointed(900, 50).svg);
+    const farther = eyeX(pointed(5000, 50).svg);
+    expect(near).toBeLessThan(far);
+    expect(farther - far).toBeLessThan(far - near);
   });
 
   test("leaving releases the gaze back to the resting face", () => {
@@ -104,7 +130,7 @@ describe("follow moves the eyes", () => {
     expect(eyeAttrs(svg)).toEqual(held);
   });
 
-  test("a state that owns its gaze is not overridden by the pointer", () => {
+  test("the pointer holds the gaze on a state with its own eyes too", () => {
     const { doc, svg, handle } = mounted();
     handle.loop("wide");
     handle.follow();
@@ -114,7 +140,7 @@ describe("follow moves the eyes", () => {
     move(doc, 900, 50);
     frame(doc, 5000);
     drain(doc, 5000, 1);
-    expect(eyeAttrs(svg)).toEqual(own);
+    expect(eyeAttrs(svg)).not.toEqual(own);
   });
 });
 

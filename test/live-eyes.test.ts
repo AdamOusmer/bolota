@@ -49,12 +49,13 @@ describe("per-state eyes", () => {
     expect(CHOREO.wink.eyes(0.6).pose.esy2).toBeCloseTo(0, 12);
   });
 
-  test("notify looks away and orbit's head jostles round a full turn", () => {
+  test("notify looks away, and done's head turns all the way round with its face gone while it faces away", () => {
     expect(CHOREO.notify.eyes(1).head.yaw).toBeLessThan(-20);
-    const hs = times("orbit").map((t) => CHOREO.orbit.eyes(t).head);
-    expect(Math.min(...hs.map((h) => h.yaw))).toBeLessThan(-12);
-    expect(Math.max(...hs.map((h) => h.yaw))).toBeGreaterThan(12);
-    expect(Math.max(...hs.map((h) => Math.abs(h.roll)))).toBeGreaterThan(4);
+    const spin = Array.from({ length: 800 }, (_, i) => CHOREO.done.eyes((i / 800) * 3.87));
+    expect(Math.min(...spin.map((e) => e.head.yaw))).toBeLessThan(-150);
+    expect(Math.max(...spin.map((e) => e.head.yaw))).toBeGreaterThan(150);
+    for (const e of spin) if (Math.abs(e.head.yaw) > 80) expect(e.alpha).toBe(0);
+    expect(CHOREO.done.eyes(0).alpha).toBe(1);
   });
 
   test("a head roll lifts one eye over the other, a turn narrows the far eye", () => {
@@ -87,7 +88,6 @@ describe("per-state eyes", () => {
       expect(faceEyes(l, CHOREO.idle.eyes(1))).toEqual(l.eyes.map(({ cx, cy, rx, ry, rot }) => ({ cx, cy, rx, ry, rot })));
     }
   });
-
 });
 
 describe("timeline eyes", () => {
@@ -158,14 +158,12 @@ function matrix(list: string): Matrix {
 describe("upright face", () => {
   const R = 33, CX = 50, CY = 50;
 
-  test("only orbit lifts its face off the spin, and only while it plays", () => {
-    for (const id of IDS)
-      for (const t of times(id)) expect(CHOREO[id].act(t).upright, `${id} @${t}`).toBe(id === "orbit" ? 1 : 0);
-    expect(CHOREO.orbit.baseFace || CHOREO.orbit.acceptsExpression).toBeFalsy();
+  test("no state lifts its face off the body", () => {
+    for (const id of IDS) for (const t of times(id)) expect(CHOREO[id].act(t).upright, `${id} @${t}`).toBe(0);
   });
 
-  test("orbit's and play's eyes keep level axes and a uniform scale", () => {
-    for (const id of ["orbit", "play"] as const)
+  test("play's eyes keep level axes and a uniform scale", () => {
+    for (const id of ["play"] as const)
       for (let i = 0; i <= 96; i++) {
         const act = CHOREO[id].act((i / 96) * span(id));
         const [a, b, c, d] = mul(matrix(actTransform(act, R, CX, CY)), matrix(uprightTransform(act, CX, CY)));
@@ -174,26 +172,5 @@ describe("upright face", () => {
         expect(d, `${id} #${i}`).toBeCloseTo(act.s, 2);
       }
     expect(uprightTransform(CHOREO.play.act(1), CX, CY)).toBe("");
-  });
-
-  test("the face turns with the body only by what the blend has not yet unwound", () => {
-    const tl = new Timeline("idle");
-    tl.play("orbit", 1);
-    tl.play("idle", 3);
-    for (let now = 0.5; now < 5; now += 0.01) {
-      const act: Act = tl.sample(now);
-      const [a, b] = mul(matrix(actTransform(act, R, CX, CY)), matrix(uprightTransform(act, CX, CY)));
-      const turn = (Math.atan2(b, a) * 180) / Math.PI;
-      const want = (((act.rot * (1 - act.upright)) % 360) + 540) % 360 - 180;
-      expect(Math.abs(turn - want), `@${now}`).toBeLessThan(0.05);
-    }
-    expect(tl.sample(5).upright).toBe(0);
-  });
-
-  test("orbit never squashes, so a level face sees the outline only turned", () => {
-    for (let i = 0; i <= 96; i++) {
-      const act = CHOREO.orbit.act((i / 96) * span("orbit"));
-      expect([act.sx, act.sy]).toEqual([1, 1]);
-    }
   });
 });

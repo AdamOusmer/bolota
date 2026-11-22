@@ -38,7 +38,7 @@ describe("lazy decor", () => {
     const doc = new FakeDocument();
     const svg = makeSvg(doc);
     const handle = mountLive(asSvg(svg), "lazy-a");
-    handle.loop("orbit");
+    handle.loop("done");
     run(doc, 0, 0.5);
     expect(decorNodes(svg)).toBe(0);
     await settle();
@@ -63,7 +63,7 @@ describe("lazy decor", () => {
     const doc = new FakeDocument();
     const svg = makeSvg(doc);
     const handle = mountLive(asSvg(svg), "lazy-c");
-    handle.loop("orbit");
+    handle.loop("done");
     handle.destroy();
     await settle();
     expect(doc.defaultView.queue.length).toBe(0);
@@ -78,11 +78,22 @@ describe("lazy decor", () => {
     doc.defaultView.reduced = true;
     const svg = makeSvg(doc);
     const handle = mountLive(asSvg(svg), "lazy-d");
-    handle.play("orbit");
+    handle.play("done");
     expect(decorNodes(svg)).toBe(0);
     await settle();
     expect(decorNodes(svg)).toBeGreaterThan(0);
     expect(doc.defaultView.queue.length).toBe(0);
+  });
+
+  test("an idle parked instance stays parked when decor arrives; a looping one keeps its clock", async () => {
+    const mountLive = await fresh();
+    const idleDoc = new FakeDocument();
+    mountLive(asSvg(makeSvg(idleDoc)), "lazy-p", { animate: "hover" });
+    const loopDoc = new FakeDocument();
+    mountLive(asSvg(makeSvg(loopDoc)), "lazy-q", { animate: "hover" }).loop("done");
+    await new Promise((r) => realSetTimeout(r, 300));
+    expect(idleDoc.defaultView.queue.length).toBe(0);
+    expect(loopDoc.defaultView.queue.length).toBe(1);
   });
 
   test("idle warmup shares one import, so a later instance draws decor with no wait", async () => {
@@ -96,7 +107,7 @@ describe("lazy decor", () => {
     await new Promise((r) => realSetTimeout(r, 300));
     const doc = new FakeDocument();
     const svg = makeSvg(doc);
-    mountLive(asSvg(svg), "lazy-w9").loop("orbit");
+    mountLive(asSvg(svg), "lazy-w9").loop("done");
     run(doc, 0, 0.5);
     expect(decorNodes(svg)).toBeGreaterThan(0);
   });

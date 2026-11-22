@@ -9,4 +9,4 @@
  */
 
 export { r3 } from "../morph";
-export { CHOREO } from "./choreo";
+export { CHOREO, DONE_TURN, WORK_AT, WORK_TURN, alarm, celebration, clamp, noise, workAngle } from "./choreo";
