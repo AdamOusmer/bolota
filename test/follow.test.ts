@@ -80,12 +80,21 @@ describe("follow moves the eyes", () => {
     expect(centre).toBeLessThan(down);
   });
 
-  test("a touch pointer is ignored", () => {
-    const { doc, handle } = mounted();
-    handle.follow();
-    drain(doc, 0, 5);
-    move(doc, 900, 50, "touch");
-    expect(doc.defaultView.queue.length).toBe(0);
+  test("a touch pointer turns the eyes like a mouse", () => {
+    const touched = mounted();
+    touched.handle.follow();
+    frame(touched.doc, 16);
+    move(touched.doc, 900, 50, "touch");
+    drain(touched.doc, 16, 5);
+    expect(eyeX(touched.svg)).toBeCloseTo(eyeX(pointed(900, 50).svg), 6);
+  });
+
+  test("the look starts at the eyes and saturates softly", () => {
+    const near = eyeX(pointed(120, 50).svg);
+    const far = eyeX(pointed(900, 50).svg);
+    const farther = eyeX(pointed(5000, 50).svg);
+    expect(near).toBeLessThan(far);
+    expect(farther - far).toBeLessThan(far - near);
   });
 
   test("leaving releases the gaze back to the resting face", () => {

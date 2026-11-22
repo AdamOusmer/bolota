@@ -3,6 +3,7 @@ MIT License
 Copyright (c) 2026 Adam Ousmer
 Copyright (c) 2026 Alain (blobatar, the deterministic renderer this is forked from)
 Copyright (c) 2026 Jeremy Perret (bloub, the animation engine this one derives from)
+Copyright (c) 2026 Dominik Scholz (open-bot-avatar, whose ribbons, gaze pursuit and agent states this ports)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

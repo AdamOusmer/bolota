@@ -345,11 +345,22 @@ describe("mountLive gaze", () => {
     run(doc, 2000, 4);
     expect(doc.defaultView.queue.length).toBe(0);
 
-    win.fire("pointermove", { clientX: 900, clientY: 50, pointerType: "touch" });
-    expect(doc.defaultView.queue.length).toBe(0);
-
     doc.fire("pointerleave");
     run(doc, 6000, 3);
+    expect(attrs(svg)).toEqual(rest);
+  });
+
+  test("a finger is followed while it is down and released when it lifts", () => {
+    const { doc, svg, handle } = mounted();
+    const win = doc.defaultView;
+    const rest = attrs(svg);
+    handle.follow();
+    frame(doc, 16);
+    win.fire("pointerdown", { clientX: 900, clientY: 50, pointerType: "touch" });
+    run(doc, 16, 1);
+    expect(attrs(svg)).not.toEqual(rest);
+    win.fire("pointerup", { clientX: 900, clientY: 50, pointerType: "touch" });
+    run(doc, 2000, 3);
     expect(attrs(svg)).toEqual(rest);
   });
 

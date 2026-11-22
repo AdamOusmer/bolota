@@ -12,7 +12,7 @@ import { IDLE_ACT, actTransform, type Act } from "./act";
 import { CHOREO, expressed, newEyes, type Eyes, type Head, type StateId } from "./choreo";
 import type { Decor, DecorFrame, DecorHost, DecorPalette } from "./decor.js";
 import { eyeBox, settleEyes, type Correction, type Eye, type EyeBox } from "./fit";
-import { Glide, NO_LOOK, followLook, type Look } from "./follow";
+import { Glide, NO_LOOK, followLook, pointerAim, type Look, type Origin, type Point } from "./follow";
 import { JITTER_MS, blinkSlot, cancelRead, readNextFrame, startFrames, stopFrames, watchSight } from "./frames";
 import { BLINK_CYCLE, BREATH_MS, lid, nextBlink, type Gaze } from "./head";
 import { ALIASES, resolveExpression } from "./names";
@@ -62,9 +62,9 @@ const stamp = (sig: Float64Array, i: number, v: number): number => {
 
 const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
-const clamp1 = (v: number) => (v < -1 ? -1 : v > 1 ? 1 : v);
-
 const POSE_KEYS = Object.keys(IDENT) as (keyof Pose)[];
+
+const sized = (vb: number[]) => vb.length === 4 && vb[2]! > 0 && vb[3]! > 0;
 
 /** The face of a seeded bolota at rest: the pose and every turn at identity, so the eyes sit where the static render drew them. */
 function atRest(e: Eyes, g: Gaze, turn: number): boolean {
@@ -221,10 +221,8 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let aiming = false;
   let aimX = NaN;
   let aimY = NaN;
-  let gcx = 0;
-  let gcy = 0;
-  let halfW = 1;
-  let halfH = 1;
+  const origin: Origin = { x: 0, y: 0, size: 1 };
+  const aimAt: Point = { x: 0, y: 0 };
   let gain = 1;
   let measured = false;
   let stale = true;
@@ -559,7 +557,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   function drawDecor(frames: DecorFrame[]): boolean {
     if (!decor) {
       if (!decorModule) return false;
-      decor = decorModule.createDecor(decorHost, L, palette as DecorPalette, Math.random().toString(36).slice(2));
+      decor = decorModule.createDecor(decorHost, L, palette as DecorPalette, Math.random().toString(36).slice(2), name);
     }
     return decor.update(frames);
   }
@@ -662,8 +660,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
         glide.retarget(NO_LOOK, now, true);
       }
     } else {
-      const nx = clamp1((pointer!.x - gcx) / halfW);
-      const ny = clamp1((pointer!.y - gcy) / halfH);
+      const { x: nx, y: ny } = pointerAim(pointer!, origin, aimAt);
       if (!aiming || nx !== aimX || ny !== aimY) {
         aiming = true;
         aimX = nx;
@@ -808,14 +805,26 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     start();
   }
 
+  /** The eyes' midpoint as a fraction of the svg's box, where a look starts. */
+  function eyesAt(): [number, number] {
+    const vb = (svg.getAttribute("viewBox") ?? "").split(/[\s,]+/).map(Number);
+    if (!sized(vb) || !L.eyes.length) return [0.5, 0.5];
+    let ex = 0;
+    let ey = 0;
+    for (const e of L.eyes) {
+      ex += e.cx / L.eyes.length;
+      ey += e.cy / L.eyes.length;
+    }
+    return [(ex - vb[0]!) / vb[2]!, (ey - vb[1]!) / vb[3]!];
+  }
+
   function measure(): void {
     const r = svg.getBoundingClientRect();
-    gcx = r.left + r.width / 2;
-    gcy = r.top + r.height / 2;
+    const [fx, fy] = eyesAt();
+    origin.x = r.left + r.width * fx;
+    origin.y = r.top + r.height * fy;
+    origin.size = Math.max(r.width, r.height);
     measured = r.width > 0 && r.height > 0;
-    const radius = Math.max(1, Math.min(r.width, r.height) / 2);
-    halfW = Math.max(1, (view.innerWidth || 8 * radius) / 2);
-    halfH = Math.max(1, (view.innerHeight || 8 * radius) / 2);
     if (gainStale) gain = (parseFloat(view.getComputedStyle(eyesG).getPropertyValue("--mo-track-travel")) || TRAVEL) / TRAVEL;
     stale = gainStale = false;
   }
@@ -875,7 +884,6 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     const leaves: EventTarget = target === "window" ? doc : target;
     const onMove = (ev: Event) => {
       const p = ev as PointerEvent;
-      if (p.pointerType === "touch") return;
       pointer = { x: p.clientX, y: p.clientY };
       if (stale) readNextFrame(view, measure);
       wake();
@@ -884,16 +892,35 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       pointer = null;
       wake();
     };
+    const onLift = (ev: Event) => {
+      if ((ev as PointerEvent).pointerType !== "mouse") onLeave();
+    };
+    const onOut = (ev: Event) => {
+      if (!(ev as PointerEvent).relatedTarget) onLeave();
+    };
     const geom = { passive: true, capture: true } as const;
-    moves.addEventListener("pointermove", onMove, { passive: true });
-    leaves.addEventListener("pointerleave", onLeave, { passive: true });
+    const quiet = { passive: true } as const;
+    moves.addEventListener("pointermove", onMove, quiet);
+    moves.addEventListener("pointerdown", onMove, quiet);
+    moves.addEventListener("pointerup", onLift, quiet);
+    moves.addEventListener("pointercancel", onLift, quiet);
+    leaves.addEventListener("pointerleave", onLeave, quiet);
+    if (target === "window") {
+      view.addEventListener("pointerout", onOut, quiet);
+      view.addEventListener("blur", onLeave, quiet);
+    }
     view.addEventListener("scroll", onScroll, geom);
     view.addEventListener("resize", onGeom, { passive: true });
     resized = view.ResizeObserver ? new view.ResizeObserver(onGeom) : null;
     resized?.observe(svg);
     detach = () => {
       moves.removeEventListener("pointermove", onMove);
+      moves.removeEventListener("pointerdown", onMove);
+      moves.removeEventListener("pointerup", onLift);
+      moves.removeEventListener("pointercancel", onLift);
       leaves.removeEventListener("pointerleave", onLeave);
+      view.removeEventListener("pointerout", onOut);
+      view.removeEventListener("blur", onLeave);
       view.removeEventListener("scroll", onScroll, geom);
       view.removeEventListener("resize", onGeom);
       resized?.disconnect();

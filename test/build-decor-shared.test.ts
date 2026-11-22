@@ -29,6 +29,6 @@ test("decor chunk imports its shared helpers from engine.js and holds no copy", 
   for (const n of names) expect(exported).toContain(n);
 
   expect(decor.match(/from"\.\/engine\.js"/g)).toHaveLength(1);
-  expect(names.sort()).toEqual(["_CHOREO", "_r3"]);
+  expect(names.sort()).toEqual(["_CHOREO","_DONE_TURN","_WORK_AT","_WORK_TURN","_alarm","_celebration","_clamp","_noise","_r3","_workAngle"]);
   expect(decor).not.toContain("1000)/1000");
 });

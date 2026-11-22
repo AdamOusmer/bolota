@@ -10,7 +10,7 @@ import type { BunPlugin } from "bun";
  * `./engine.js` is external and resolves to the file `scripts/build.ts` emits
  * next to the chunk.
  */
-const SHARED = ["CHOREO", "r3"];
+const SHARED = ["CHOREO", "DONE_TURN", "WORK_AT", "WORK_TURN", "alarm", "celebration", "clamp", "noise", "r3", "workAngle"];
 
 export const decorSharesEngine: BunPlugin = {
   name: "decor-shares-engine",

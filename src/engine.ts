@@ -45,7 +45,8 @@ export interface EngineHandle {
   /**
    * Sets, or with `null` clears, the held eye expression. Accepts a roster name
    * or a bloub id; unknown names are ignored. Visible on states that rest on the
-   * base face (`idle`, `wander`, `swirl`) and on `play`, `burst`, `comet`.
+   * base face (`idle`, `wander`, `swirl`) and on `play`, `burst`, `comet`,
+   * `working`, `waiting`, `done`.
    */
   setExpression(name: string | null): void;
   /** The bloub expression ids; every roster name from `bolota/expression` is accepted as well. */
@@ -72,4 +73,15 @@ export function mountEngine(svg: SVGSVGElement, name: string, opts?: EngineOptio
   return mountLive(svg, name, opts);
 }
 
-export { CHOREO as _CHOREO, r3 as _r3 } from "./live/shared";
+export {
+  CHOREO as _CHOREO,
+  DONE_TURN as _DONE_TURN,
+  WORK_AT as _WORK_AT,
+  WORK_TURN as _WORK_TURN,
+  alarm as _alarm,
+  celebration as _celebration,
+  clamp as _clamp,
+  noise as _noise,
+  r3 as _r3,
+  workAngle as _workAngle,
+} from "./live/shared";

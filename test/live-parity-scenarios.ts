@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 
-import { CHOREO, type StateId } from "../src/live/choreo";
+import { CHOREO, OBA_STATES, type StateId } from "../src/live/choreo";
 import { HOLD, Timeline, frameDt, type PlayOptions } from "../src/live/timeline";
 
 /**
@@ -81,7 +81,7 @@ export interface Scenario {
 }
 
 const SEEDS = ["parity-a", "parity-b"] as const;
-export const IDS = Object.keys(CHOREO) as StateId[];
+export const IDS = (Object.keys(CHOREO) as StateId[]).filter((id) => !OBA_STATES.includes(id));
 
 const combos: [string, StateId, PlayOptions][] = [
   ["hold 0", "wide", { hold: 0 }],

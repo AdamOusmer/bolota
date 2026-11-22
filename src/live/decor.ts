@@ -1,15 +1,16 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 // Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
-import { contrast, ensureContrast, fromHex, mixHex, toHex, type Oklch } from "../color";
-import { clamp, type StateId } from "./choreo";
+import { contrast, fromHex, mixHex, toHex, type Oklch } from "../color";
+import type { StateId } from "./choreo";
 import { edge, type OutlineLayout } from "./outline";
 import { putter } from "./put";
-import { CHOREO, r3 } from "./shared";
+import { BODY, cageTurn, hashString, ribbonPalette, ribbonPieces, rimOf, runAt, workTurn, type Rim } from "./ribbons";
+import { CHOREO, WORK_AT, alarm, clamp, r3 } from "./shared";
 
 /**
- * What a state draws around the body rather than does to it: rings, the
- * swoosh, comet ribbons, burst particles, the thinking dots, the "!" bars and
+ * What a state draws around the body rather than does to it: the ribbons
+ * (open-bot-avatar's hoops, see `ribbons.ts`), burst particles, the thinking dots, the "!" bars and
  * the notification badge with its notch. Geometry and timing are bloub's
  * (`bloub/decor.ts` and the `pose` of each state in `bloub/states.ts`); the
  * paint is the seed's own, a short OKLCh ramp off `palette.head`.
@@ -51,20 +52,6 @@ export interface DecorLayout {
   body: { cx: number; cy: number; rx: number };
 }
 
-interface ArcSeed {
-  a: number;
-  k: number;
-  tilt: number;
-  speed: number;
-  phase: number;
-  sweep: number;
-  hue: number;
-  hueSpan: number;
-  width: number;
-  cx: number;
-  cy: number;
-}
-
 interface Particle {
   birth: number;
   angle: number;
@@ -72,9 +59,6 @@ interface Particle {
 }
 
 interface Seeds {
-  rings: ArcSeed[];
-  swoosh: ArcSeed[];
-  ribbons: ArcSeed[];
   particles: Particle[];
   barUpright: string;
   barItalic: string;
@@ -83,7 +67,7 @@ interface Seeds {
 const TAU = Math.PI * 2;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const SEEN = 0.01;
-const ARC_STEPS = 64;
+const SHORT = 0.01;
 
 const DOT_X = [-0.557, -0.013, 0.532] as const;
 const DOT_R = 0.165;
@@ -97,11 +81,11 @@ const GLYPH_DOT_CY = 0.42;
 const GLYPH_BAR_CY = -0.55;
 const GLYPH_AXIS = GLYPH_DOT_CY - GLYPH_BAR_CY;
 const ORBIT_PERIOD = 4 / 1.25;
+const PLAY_SPAN = 2.2;
+const SWIRL_SPAN = 1.22;
+const COMET_FROM = 0.15;
+const COMET_SPAN = 1.8;
 const HAZE_STEPS = 8;
-const RING_FAN = 110;
-const RING_SPAN = 0.4;
-const RING_VS_HEAD = 1.6;
-const RING_VS_BG = 1.3;
 const ACCENT_VS_HEAD = 2;
 const ACCENT_VS_BG = 1.5;
 const ACCENT_CHROMA = 0.19;
@@ -153,57 +137,13 @@ function barPath(r1: number, r2v: number): string {
 }
 
 function buildSeeds(): Seeds {
-  const ringRng = createRng(0xa11ce);
-  const rings = Array.from({ length: 6 }, (_, i) => ({
-    a: 1.3 + ringRng() * 0.1,
-    k: 0.05 + ringRng() * 0.4,
-    tilt: (i / 6) * Math.PI + ringRng() * 0.5,
-    speed: 3 + ringRng() * 0.7,
-    phase: ringRng() * TAU,
-    sweep: 0.6 + ringRng() * 0.25,
-    hue: (i * 360) / 6 + ringRng() * 30,
-    hueSpan: 60 + ringRng() * 60,
-    width: 0.05 + ringRng() * 0.012,
-    cx: 0,
-    cy: 0.1,
-  }));
-  const swoosh = Array.from({ length: 4 }, (_, i) => ({
-    a: 0.78 + i * 0.2,
-    k: 0.05 + i * 0.02,
-    tilt: -0.62 + i * 0.05,
-    speed: 0.3,
-    phase: 0.06 * i,
-    sweep: 0.4,
-    hue: 95 + i * 62,
-    hueSpan: 100,
-    width: 0.05,
-    cx: 0,
-    cy: -0.12,
-  }));
-  const cometRng = createRng(0xc0e7);
-  const ribbons = Array.from({ length: 4 }, (_, i) => {
-    const d = i - 1.5;
-    return {
-      a: 0.85 * (1 + d * 0.03),
-      k: (0.15 / 0.85) * (1 + d * 0.16),
-      tilt: (34 * Math.PI) / 180 + d * 0.035,
-      speed: 210 / 360,
-      phase: -i * 0.045 + cometRng() * 0.012,
-      sweep: 0.34,
-      hue: i * 85 + cometRng() * 20,
-      hueSpan: 80,
-      width: 0.095,
-      cx: 0,
-      cy: 0,
-    };
-  });
   const particleRng = createRng(0xbeef);
   const particles = Array.from({ length: 5 }, (_, i) => ({
     birth: i * 0.2,
     angle: particleRng() * TAU,
     rho: 0.58 + particleRng() * 0.18,
   }));
-  return { rings, swoosh, ribbons, particles, barUpright: barPath(0.145, 0.082), barItalic: barPath(0.12, 0.12) };
+  return { particles, barUpright: barPath(0.145, 0.082), barItalic: barPath(0.12, 0.12) };
 }
 
 let seeds: Seeds | null = null;
@@ -220,6 +160,9 @@ function bears(state: StateId): boolean {
     case "swirl":
     case "burst":
     case "comet":
+    case "working":
+    case "blocked":
+    case "done":
       return true;
     default:
       return false;
@@ -236,7 +179,6 @@ interface Colors {
   head: string;
   accent: string;
   haze: string[] | null;
-  stops(seed: ArcSeed): string[];
 }
 
 /**
@@ -267,30 +209,12 @@ function accentOf(head: Oklch, bg: Oklch | null): string {
 function colorsOf(palette: DecorPalette): Colors {
   const head = fromHex(palette.head);
   const bg = palette.bg ? fromHex(palette.bg) : null;
-  const away = (c: Oklch, vsHead: number, vsBg: number): string => {
-    const onHead = ensureContrast(c, head, vsHead);
-    return toHex(bg ? ensureContrast(onHead, bg, vsBg) : onHead);
-  };
-  const tone = clamp(head.l + (head.l > 0.6 ? -0.2 : 0.2), 0.3, 0.8);
-  const chroma = clamp(head.c * 1.15, 0.09, 0.17);
-  const found = new WeakMap<ArcSeed, string[]>();
   return {
     head: palette.head,
     accent: accentOf(head, bg),
     haze: bg
       ? Array.from({ length: HAZE_STEPS }, (_, i) => mixHex(palette.bg!, palette.head, i / (HAZE_STEPS - 1)))
       : null,
-    stops(seed) {
-      let s = found.get(seed);
-      if (!s) {
-        const from = head.h + (mod360(seed.hue) / 360 - 0.5) * RING_FAN;
-        s = [0, 0.5, 1].map((k) =>
-          away({ l: tone, c: chroma, h: mod360(from + seed.hueSpan * RING_SPAN * k) }, RING_VS_HEAD, RING_VS_BG),
-        );
-        found.set(seed, s);
-      }
-      return s;
-    },
   };
 }
 
@@ -352,6 +276,7 @@ export function createDecor(
   layout: DecorLayout,
   palette: DecorPalette,
   uid: string,
+  name: string = uid,
 ): Decor {
   const doc = host.back.ownerDocument;
   const { cx, cy, rx: R } = layout.body;
@@ -359,8 +284,10 @@ export function createDecor(
   const gradId: string[] = [];
   const gradRef: string[] = [];
   const gradStops: Element[][] = [];
-  const gradSeed: (ArcSeed | undefined)[] = [];
-  const gradOx: number[] = [];
+  const seed = hashString(name);
+  let K = 0;
+  let rim: Rim | undefined;
+  let runs: ReturnType<typeof ribbonPalette> | null = null;
   let colors: Colors | null = null;
   let mask: SVGMaskElement | null = null;
   let maskRect: SVGRectElement | null = null;
@@ -375,7 +302,6 @@ export function createDecor(
   const grads = new Lane<SVGLinearGradientElement>(doc, host.defs, "linearGradient", null, (node, i) => {
     gradId[i] = `${uid}-g${i}`;
     gradRef[i] = `url(#${gradId[i]})`;
-    gradSeed[i] = undefined;
     node.setAttribute("id", gradId[i]!);
     node.setAttribute("gradientUnits", "userSpaceOnUse");
     gradStops[i] = [0, 1, 2].map((s) => {
@@ -385,87 +311,62 @@ export function createDecor(
       return stop;
     });
   });
-  const stroked = (node: SVGPathElement) => {
-    node.setAttribute("fill", "none");
-    node.setAttribute("stroke-linecap", "round");
-  };
-  const arcBack = new Lane<SVGPathElement>(doc, host.back, "path", {}, stroked);
-  const arcFront = new Lane<SVGPathElement>(doc, host.front, "path", {}, stroked);
+  const ribBack = new Lane<SVGPathElement>(doc, host.back, "path", {});
+  const ribFront = new Lane<SVGPathElement>(doc, host.front, "path", {});
   const dotBack = new Lane<SVGCircleElement>(doc, host.back, "circle", {});
   const dotFront = new Lane<SVGCircleElement>(doc, host.front, "circle", {});
   const bars = new Lane<SVGPathElement>(doc, host.front, "path", {});
   const badge = new Lane<SVGCircleElement>(doc, host.front, "circle", {});
-  const lanes = [arcBack, arcFront, dotBack, dotFront, bars, badge];
+  const lanes = [ribBack, ribFront, dotBack, dotFront, bars, badge];
 
   const X = (v: number) => r2(cx + v * R);
   const Y = (v: number) => r2(cy + v * R);
 
-  let pathFront = "";
-  let pathBack = "";
+  const RX = (v: number) => cents(cx + v * K);
+  const RY = (v: number) => cents(cy + v * K);
 
-  function trace(seed: ArcSeed, ox: number, t: number): void {
-    const spin = seed.phase + t * seed.speed * TAU;
-    const cu = Math.cos(seed.tilt);
-    const su = Math.sin(seed.tilt);
-    const kz = Math.sqrt(Math.max(0, 1 - seed.k * seed.k));
-    const stride = (seed.sweep * TAU) / ARC_STEPS;
-    const cs = Math.cos(stride);
-    const sn = Math.sin(stride);
-    let ct = Math.cos(spin);
-    let st = Math.sin(spin);
-    let front = "";
-    let back = "";
-    let prev: boolean | null = null;
-    for (let i = 0; i <= ARC_STEPS; i++) {
-      const x = seed.a * (ct * cu - st * su * seed.k) + ox;
-      const y = seed.a * (ct * su + st * cu * seed.k) + seed.cy;
-      const behind = seed.a * st * kz < 0;
-      const point = (behind !== prev ? "M" : "L") + cents(cx + x * R) + " " + cents(cy + y * R);
-      if (behind) back += point;
-      else front += point;
-      prev = behind;
-      const next = ct * cs - st * sn;
-      st = st * cs + ct * sn;
-      ct = next;
-    }
-    pathFront = front;
-    pathBack = back;
+  /** Decor units per ribbon unit: the body's larger side spans `BODY` of them, as open-bot-avatar sizes its ribbons. */
+  function scale(): number {
+    if (!outline) return R / (BODY / 2);
+    const wide = edge(outline, 0) + edge(outline, Math.PI);
+    const tall = edge(outline, Math.PI / 2) + edge(outline, -Math.PI / 2);
+    return Math.max(wide, tall) / BODY;
   }
 
-  function arc(seed: ArcSeed, ox: number, t: number, opacity: number): void {
-    if (opacity <= SEEN) return;
-    colors ??= colorsOf(palette);
-    trace(seed, ox, t);
-    const grad = grads.next();
-    const g = grads.index();
-    if (gradSeed[g] !== seed || gradOx[g] !== ox) {
-      gradSeed[g] = seed;
-      gradOx[g] = ox;
-      const gx = Math.cos(seed.tilt) * seed.a * R;
-      const gy = Math.sin(seed.tilt) * seed.a * R;
-      put(grad, "x1", r2(cx + ox * R - gx));
-      put(grad, "y1", r2(cy + seed.cy * R - gy));
-      put(grad, "x2", r2(cx + ox * R + gx));
-      put(grad, "y2", r2(cy + seed.cy * R + gy));
-      const stops = colors.stops(seed);
-      for (let s = 0; s < 3; s++) put(gradStops[g]![s]!, "stop-color", stops[s]!);
-    }
-    const width = r3(seed.width * R);
-    const op = r3(opacity);
-    half(arcBack, pathBack, g, width, op);
-    half(arcFront, pathFront, g, width, op);
+  function reach(angle: number): number {
+    const far = Math.max(edge(outline!, angle), edge(outline!, angle + Math.PI));
+    return far / K;
   }
 
-  function half(lane: Lane<SVGPathElement>, d: string, g: number, width: string, opacity: string): void {
-    const path = lane.next();
-    if (d === "") {
-      put(path, "opacity", 0);
-      return;
+  function ribbons(turn: { presence: number; sweep: number }, cage: number, weight: number): void {
+    const presence = turn.presence * weight;
+    if (presence <= SEEN) return;
+    K ||= scale();
+    if (outline && !rim) rim = rimOf(reach);
+    runs ??= ribbonPalette(palette.head, seed);
+    for (const p of ribbonPieces(presence, seed, turn.sweep, cage, rim)) {
+      const run = runs[p.ribbon]!;
+      const [s0, s1] = p.along;
+      const path = (p.front ? ribFront : ribBack).next();
+      let d = "M" + RX(p.pts[0]!) + " " + RY(p.pts[1]!);
+      for (let q = 2; q < p.pts.length; q += 2) d += "L" + RX(p.pts[q]!) + " " + RY(p.pts[q + 1]!);
+      put(path, "d", d + "Z");
+      put(path, "opacity", 1);
+      if (Math.hypot(p.to[0] - p.from[0], p.to[1] - p.from[1]) <= SHORT) {
+        put(path, "fill", runAt(run, (s0 + s1) / 2));
+        continue;
+      }
+      const grad = grads.next();
+      const g = grads.index();
+      put(grad, "x1", RX(p.from[0]));
+      put(grad, "y1", RY(p.from[1]));
+      put(grad, "x2", RX(p.to[0]));
+      put(grad, "y2", RY(p.to[1]));
+      put(gradStops[g]![0]!, "stop-color", runAt(run, s0));
+      put(gradStops[g]![1]!, "stop-color", runAt(run, (s0 + s1) / 2));
+      put(gradStops[g]![2]!, "stop-color", runAt(run, s1));
+      put(path, "fill", gradRef[g]!);
     }
-    put(path, "d", d);
-    put(path, "stroke", gradRef[g]!);
-    put(path, "stroke-width", width);
-    put(path, "opacity", opacity);
   }
 
   function disc(lane: Lane<SVGCircleElement>, x: number, y: number, r: number, fill: string, opacity: number): void {
@@ -547,24 +448,27 @@ export function createDecor(
     const w = f.weight;
     const s = getSeeds();
     switch (f.state) {
-      case "play": {
-        const fade = clamp(t / 0.35) * clamp((2.2 - t) / 0.5);
-        for (const seed of s.swoosh) arc(seed, 0.45 - t * 0.42, t, fade * w);
+      case "play":
+        ribbons(workTurn(t, PLAY_SPAN), 0, w);
         break;
-      }
-      case "orbit": {
-        const fade = clamp(t / 0.8) * clamp((ORBIT_PERIOD - t) / 0.9);
-        s.rings.forEach((seed, i) => arc(seed, 0, t, fade * clamp((t - i * 0.13) / 0.3) * w));
+      case "orbit":
+        ribbons(cageTurn(t, ORBIT_PERIOD), 1, w);
         break;
-      }
       case "swirl":
-        for (let i = 0; i < 3; i++) {
-          arc(s.rings[i]!, 0, t, clamp((t - i * 0.06) / 0.14) * clamp((1.22 - t) / 0.34) * w);
-        }
+        ribbons(workTurn(t, SWIRL_SPAN), 0, w);
         break;
-      case "comet": {
-        const fade = clamp((t - 0.15) / 0.25) * clamp((1.95 - t) / 0.3);
-        for (const seed of s.ribbons) arc(seed, 0, t, fade * w);
+      case "comet":
+        ribbons(workTurn(t - COMET_FROM, COMET_SPAN), 0, w);
+        break;
+      case "working":
+        ribbons(workTurn(t - WORK_AT), 0, w);
+        break;
+      case "done":
+        ribbons(cageTurn(t), 1, w);
+        break;
+      case "blocked": {
+        const a = alarm(t);
+        bar(s.barUpright, 0, GLYPH_BAR_CY - 0.09 * a.jump, (a.turn * 180) / Math.PI, w);
         break;
       }
       case "burst":

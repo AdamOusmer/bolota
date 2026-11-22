@@ -10,6 +10,35 @@ as important. Releases that move it say so first.
 The mapping is frozen per **generation**. bolota renders gen2, and a
 generation change ships as a major, never as a patch.
 
+## Unreleased
+
+No face changes. The live engine takes open-bot-avatar's motion (MIT, see
+LICENSE): its ribbons, its gaze pursuit and four agent states.
+
+### Changed
+
+- **Ribbons replace the stroked rings and trails** of `play`, `orbit`,
+  `swirl` and `comet`: filled pieces that taper from tail to head on tilted
+  hoops round the body, split where they pass behind it, with a gradient along
+  each and colours stepped along the body's own ramp. A neutral body gets
+  tinted grays. Ribbons are seeded by the name, so one name always draws the
+  same ones.
+- **The gaze eases toward the pointer every frame** instead of restarting an
+  80 ms curve on each move, and its hold fades in and out over 0.3 s. The look
+  starts at the eyes, not the box centre, and saturates softly about one
+  avatar away instead of across the whole viewport.
+- **Pen and finger are followed while down** and released on lift, cancel,
+  window blur or leaving the window. A touch scroll cancels the pointer, so
+  0.2.8's scroll saving holds.
+
+### Added
+
+- **States `working`, `waiting`, `blocked` and `done`.** `working` bobs
+  over the work with darting eyes and sweeps a band of ribbons round every
+  7.5 s; `waiting` leans aside with slit eyes and sighs; `blocked` turns the
+  body into an exclamation mark that jumps and shakes; `done` celebrates in a
+  cage of ribbons, then rests.
+
 ## 0.2.8
 
 No face changes. A live bolota does nothing on scroll unless a pointer is

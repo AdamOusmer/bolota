@@ -55,7 +55,7 @@ const nil = (v: unknown) => v ?? null;
 
 describe("live choreography", () => {
   test("covers the bloub catalog with the same timing and flags", () => {
-    expect(Object.keys(CHOREO).sort()).toEqual(Object.keys(CATALOG).sort());
+    expect(([...IDS] as string[]).sort()).toEqual(Object.keys(CATALOG).sort());
     expect(HOLD).toBe(FROZEN_HOLD);
     for (const id of IDS) {
       const c = CHOREO[id];

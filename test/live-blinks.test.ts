@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { _layout } from "../src/bolota";
-import { CHOREO, ENTRANCE_BLINK, type StateId } from "../src/live/choreo";
+import { CHOREO, ENTRANCE_BLINK, OBA_STATES, type StateId } from "../src/live/choreo";
 import { faceEyes } from "../src/live/rig";
 import { Timeline } from "../src/live/timeline";
 import { CLOSINGS, IDLE } from "./fixtures/blink-closings";
@@ -10,7 +10,7 @@ import { CLOSINGS, IDLE } from "./fixtures/blink-closings";
 const FRAME = 1 / 60;
 const STEP = 1 / 180;
 const START = 0.5;
-const IDS = Object.keys(CHOREO) as StateId[];
+const IDS = (Object.keys(CHOREO) as StateId[]).filter((id) => !OBA_STATES.includes(id));
 
 /** Times each eye starts to close: its height over width falls under half of what it was over the last 0.3 s. */
 function closings(open: (number | null)[][], times: number[]): number[][] {
