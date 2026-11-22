@@ -84,7 +84,7 @@ describe("the eyes glide", () => {
 
   test("states hand the eyes over without a flick", () => {
     for (const seed of SEEDS) {
-      for (const id of ["wander", "wink", "wide", "notify", "play", "swirl", "orbit"]) {
+      for (const id of ["wander", "wink", "wide", "notify", "play", "swirl"]) {
         const { doc, svg, handle } = mount(seed);
         handle.play(id);
         const { step, flips } = smoothness(record(doc, svg, 0, 4).out, 0.6);
@@ -94,14 +94,14 @@ describe("the eyes glide", () => {
     }
   });
 
-  test("wander drifts the head slowly, a fraction of a unit a frame", () => {
+  test("wander holds and glances in eased saccades, never a flick", () => {
     for (const seed of SEEDS) {
       const { doc, svg, handle } = mount(seed);
       handle.loop("wander");
       const ms = record(doc, svg, 0, 1).ms;
       const { out } = record(doc, svg, ms, 6);
       const { step, flips } = smoothness(out);
-      expect(step, seed).toBeLessThan(0.6);
+      expect(step, seed).toBeLessThan(1.5);
       expect(flips, seed).toBe(0);
       const xs = out.map((f) => f[0]![0]);
       expect(Math.max(...xs) - Math.min(...xs), seed).toBeGreaterThan(1);

@@ -113,7 +113,7 @@ describe("follow moves the eyes", () => {
     expect(eyeAttrs(svg)).toEqual(held);
   });
 
-  test("a state that owns its gaze is not overridden by the pointer", () => {
+  test("the pointer holds the gaze on a state with its own eyes too", () => {
     const { doc, svg, handle } = mounted();
     handle.loop("wide");
     handle.follow();
@@ -123,7 +123,7 @@ describe("follow moves the eyes", () => {
     move(doc, 900, 50);
     frame(doc, 5000);
     drain(doc, 5000, 1);
-    expect(eyeAttrs(svg)).toEqual(own);
+    expect(eyeAttrs(svg)).not.toEqual(own);
   });
 });
 

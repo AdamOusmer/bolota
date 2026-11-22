@@ -11,7 +11,7 @@ import type { EngineHandle } from "./engine";
 export const SEQUENCES = {
   entrance: "swirl",
   burst: "burst",
-  orbit: "orbit",
+  orbit: "done",
   comet: "comet",
 } as const;
 

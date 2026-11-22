@@ -38,7 +38,7 @@ describe("lazy decor", () => {
     const doc = new FakeDocument();
     const svg = makeSvg(doc);
     const handle = mountLive(asSvg(svg), "lazy-a");
-    handle.loop("orbit");
+    handle.loop("done");
     run(doc, 0, 0.5);
     expect(decorNodes(svg)).toBe(0);
     await settle();
@@ -63,7 +63,7 @@ describe("lazy decor", () => {
     const doc = new FakeDocument();
     const svg = makeSvg(doc);
     const handle = mountLive(asSvg(svg), "lazy-c");
-    handle.loop("orbit");
+    handle.loop("done");
     handle.destroy();
     await settle();
     expect(doc.defaultView.queue.length).toBe(0);
@@ -78,7 +78,7 @@ describe("lazy decor", () => {
     doc.defaultView.reduced = true;
     const svg = makeSvg(doc);
     const handle = mountLive(asSvg(svg), "lazy-d");
-    handle.play("orbit");
+    handle.play("done");
     expect(decorNodes(svg)).toBe(0);
     await settle();
     expect(decorNodes(svg)).toBeGreaterThan(0);
@@ -96,7 +96,7 @@ describe("lazy decor", () => {
     await new Promise((r) => realSetTimeout(r, 300));
     const doc = new FakeDocument();
     const svg = makeSvg(doc);
-    mountLive(asSvg(svg), "lazy-w9").loop("orbit");
+    mountLive(asSvg(svg), "lazy-w9").loop("done");
     run(doc, 0, 0.5);
     expect(decorNodes(svg)).toBeGreaterThan(0);
   });

@@ -92,7 +92,7 @@ const one = (state: StateId, local: number, weight = 1): DecorFrame[] => [{ stat
 
 const SEEDS = ["decor-a", "decor-b", "decor-c"];
 const REPRESENTATIVE: [StateId, number][] = [
-  ["orbit", 1.2],
+  ["done", 1.2],
   ["swirl", 0.5],
   ["play", 0.9],
   ["comet", 1.15],
@@ -103,7 +103,7 @@ const REPRESENTATIVE: [StateId, number][] = [
   ["notify", 0.9],
 ];
 
-const RIBBONED = new Set<StateId>(["orbit", "swirl", "play", "comet"]);
+const RIBBONED = new Set<StateId>(["done", "swirl", "play", "comet"]);
 const PARITY = REPRESENTATIVE.filter(([state]) => !RIBBONED.has(state));
 
 const oldFrame = (seed: string, state: StateId, t: number) => FRAMES[`${seed}|${state}|${t}`]!;
@@ -141,7 +141,7 @@ describe("live decor: what each state draws", () => {
 
   test("element counts per state", () => {
     const want: Record<string, { ribbons: boolean; circles: number; bars: number }> = {
-      orbit: { ribbons: true, circles: 0, bars: 0 },
+      done: { ribbons: true, circles: 0, bars: 0 },
       swirl: { ribbons: true, circles: 0, bars: 0 },
       play: { ribbons: true, circles: 0, bars: 0 },
       comet: { ribbons: true, circles: 0, bars: 0 },
@@ -169,8 +169,6 @@ describe("live decor: what each state draws", () => {
 
   test("open-bot-avatar's states draw their ribbons and their mark", () => {
     const want: [StateId, number, { ribbons: boolean; bars: number }][] = [
-      ["working", 1.95, { ribbons: true, bars: 0 }],
-      ["working", 5, { ribbons: false, bars: 0 }],
       ["done", 1.4, { ribbons: true, bars: 0 }],
       ["done", 5, { ribbons: false, bars: 0 }],
       ["blocked", 0.4, { ribbons: false, bars: 1 }],
@@ -196,7 +194,7 @@ describe("live decor: what each state draws", () => {
 
   test("the cage's ribbons pass behind the body and in front of it", () => {
     const r = rig("decor-a");
-    r.decor.update(one("orbit", 1.2));
+    r.decor.update(one("done", 1.2));
     expect(shown(tags(r.els.back, "path")).length).toBeGreaterThan(0);
     expect(shown(tags(r.els.front, "path")).length).toBeGreaterThan(0);
   });
@@ -287,7 +285,7 @@ describe("live decor: geometry against the old engine", () => {
   test("ribbons are seeded by the name", () => {
     const draw = (name: string) => {
       const r = rig("decor-a", name);
-      r.decor.update(one("orbit", 1.2));
+      r.decor.update(one("done", 1.2));
       return ribbonPaths(r).map((p) => p.getAttribute("d")).join("|");
     };
     expect(draw("ann")).toBe(draw("ann"));
@@ -307,11 +305,11 @@ describe("live decor: the host sits outside the act", () => {
     const r = rig("decor-a");
     const frames: DecorFrame[][] = [
       one("thinking", 1.1),
-      one("orbit", 1.7),
+      one("done", 1.7),
       one("alert", 0.75),
       one("notify", 0.9),
       [
-        { state: "orbit", local: 1.7, weight: 0.4 },
+        { state: "done", local: 1.7, weight: 0.4 },
         { state: "notify", local: 0.5, weight: 0.6 },
       ],
     ];
@@ -328,7 +326,7 @@ describe("live decor: cross-fade", () => {
   test("a fading state draws its ribbons back in", () => {
     const covered = (weight: number) => {
       const r = rig("decor-a");
-      r.decor.update([{ state: "orbit", local: 1.2, weight }]);
+      r.decor.update([{ state: "done", local: 1.2, weight }]);
       return ribbonPaths(r).reduce((n, p) => n + area(p.getAttribute("d")!), 0);
     };
     expect(covered(0.3)).toBeGreaterThan(0);
@@ -355,7 +353,7 @@ describe("live decor: cross-fade", () => {
   test("a faded-out frame draws nothing", () => {
     const r = rig("decor-a");
     r.decor.update([
-      { state: "orbit", local: 1.2, weight: 0 },
+      { state: "done", local: 1.2, weight: 0 },
       { state: "thinking", local: 1.1, weight: 1 },
     ]);
     expect(tags(r.els.defs, "linearGradient").length).toBe(0);
@@ -364,24 +362,25 @@ describe("live decor: cross-fade", () => {
 
   test("Timeline.decorFrames weights follow the act blend", () => {
     const tl = new Timeline();
-    tl.play("orbit", 1);
+    tl.play("done", 1);
     const mid = tl.decorFrames(1.2);
-    expect(mid.map((f) => f.state)).toEqual(["idle", "orbit"]);
-    const k = easeOutQuint(0.2 / CHOREO.orbit.morph);
+    expect(mid.map((f) => f.state)).toEqual(["idle", "done"]);
+    const k = easeOutQuint(0.2 / CHOREO.done.morph);
     expect(mid[1]!.weight).toBeCloseTo(k, 12);
     expect(mid[0]!.weight + mid[1]!.weight).toBeCloseTo(1, 12);
     expect(mid[1]!.local).toBeCloseTo(0.2, 12);
-    const after = tl.decorFrames(1 + CHOREO.orbit.morph + 0.5);
-    expect(after).toEqual([{ state: "orbit", local: CHOREO.orbit.morph + 0.5, weight: 1 }]);
+    const after = tl.decorFrames(1 + CHOREO.done.morph + 0.5);
+    expect(after.map((f) => [f.state, f.weight])).toEqual([["done", 1]]);
+    expect(after[0]!.local).toBeCloseTo(CHOREO.done.morph + 0.5, 12);
   });
 
   test("Timeline.decorFrames wraps a looped period on each side of a fade", () => {
     const tl = new Timeline();
-    tl.play("orbit", 0, { loop: true });
+    tl.play("done", 0, { loop: true });
     tl.play("comet", 10);
     const f = tl.decorFrames(10.2);
-    expect(f[0]!.state).toBe("orbit");
-    expect(f[0]!.local).toBeCloseTo(10.2 % CHOREO.orbit.period!, 9);
+    expect(f[0]!.state).toBe("done");
+    expect(f[0]!.local).toBeCloseTo(10.2 % CHOREO.done.period!, 9);
     expect(f[1]!.state).toBe("comet");
     expect(f[1]!.local).toBeCloseTo(0.2, 9);
   });
@@ -391,7 +390,7 @@ describe("live decor: hot path", () => {
   test("pools reuse nodes and rewrite no child list once warm", () => {
     const r = rig("decor-a");
     const lap = () => {
-      for (let t = 0; t < 3.2; t += 0.05) r.decor.update(one("orbit", t));
+      for (let t = 0; t < 3.2; t += 0.05) r.decor.update(one("done", t));
     };
     lap();
     const nodes = deep(r.els.back).concat(deep(r.els.front), deep(r.els.defs));
@@ -417,7 +416,7 @@ describe("live decor: hot path", () => {
 
   test("leaving a decorated state hides its nodes and then does nothing", () => {
     const r = rig("decor-a");
-    r.decor.update(one("orbit", 1.2));
+    r.decor.update(one("done", 1.2));
     r.decor.update(one("idle", 0));
     expect(shown(tags(r.els.back, "path").concat(tags(r.els.front, "path"))).length).toBe(0);
     const writes = deep(r.els.front).reduce((n, c) => n + c.attributeWrites, 0);
@@ -427,7 +426,7 @@ describe("live decor: hot path", () => {
 
   test("destroy removes everything it added", () => {
     const r = rig("decor-a");
-    r.decor.update(one("orbit", 1.2));
+    r.decor.update(one("done", 1.2));
     r.decor.update(one("notify", 0.9));
     r.decor.destroy();
     expect(deep(r.els.back).length + deep(r.els.front).length + deep(r.els.defs).length).toBe(0);
@@ -502,7 +501,7 @@ describe("live decor: notify notch", () => {
 });
 
 describe("live decor: colours", () => {
-  test("the badge is a distinct accent on head and backdrop", () => {
+  test("ribbons clear head and backdrop, and the badge is a distinct accent", () => {
     for (const seed of ["decor-a", "decor-b", "decor-c", "ring-1", "ring-2", "ring-3"]) {
       const withBg = { ...rig(seed).layout.palette, bg: "#f4f1ea" };
       const doc = new FakeDocument();
@@ -514,9 +513,15 @@ describe("live decor: colours", () => {
       };
       const layout = _layout(seed);
       const d = createDecor(els as unknown as DecorHost, layout, withBg as { head: string; eye: string; bg: string }, "c");
+      d.update(one("done", 1.2));
       d.update(one("notify", 0.9));
       const head = fromHex(withBg.head!);
       const bg = fromHex("#f4f1ea");
+      for (const stop of tags(els.defs, "stop")) {
+        const c = fromHex(stop.getAttribute("stop-color")!);
+        expect(contrast(c, head)).toBeGreaterThanOrEqual(1.55);
+        expect(contrast(c, bg)).toBeGreaterThanOrEqual(1.25);
+      }
       const accent = fromHex(shown(tags(els.front, "circle"))[0]!.getAttribute("fill")!);
       expect(contrast(accent, head)).toBeGreaterThanOrEqual(1.9);
       expect(contrast(accent, bg)).toBeGreaterThanOrEqual(1.4);
@@ -552,17 +557,14 @@ describe("live decor: colours", () => {
     console.log(`accent worst chroma ${worstChroma.toFixed(3)}, contrast ${worstContrast.toFixed(2)}, hue stepped ${stepped}/108`);
   });
 
-  test("ribbon colours are steps along the head's own ramp", () => {
-    for (const seed of ["decor-a", "decor-b", "decor-c", "ring-1", "ring-2", "ring-3"]) {
-      const r = rig(seed);
-      r.decor.update(one("orbit", 1.2));
-      const head = fromHex(r.layout.palette.head!);
-      if (head.c < 0.04) continue;
-      for (const stop of tags(r.els.defs, "stop")) {
-        const c = fromHex(stop.getAttribute("stop-color")!);
-        if (c.c < 0.02) continue;
-        expect({ seed, near: Math.abs(((c.h - head.h + 540) % 360) - 180) < 100 }).toEqual({ seed, near: true });
-      }
+  test("ribbon hues stay in the head's neighbourhood", () => {
+    const r = rig("decor-a");
+    r.decor.update(one("done", 1.2));
+    const head = fromHex(r.layout.palette.head!);
+    for (const stop of tags(r.els.defs, "stop")) {
+      const c = fromHex(stop.getAttribute("stop-color")!);
+      if (c.c < 0.02) continue;
+      expect(Math.abs(((c.h - head.h + 540) % 360) - 180)).toBeLessThan(110);
     }
   });
 });

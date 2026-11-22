@@ -26,9 +26,8 @@ import { IDLE_ACT, restAct, type Act } from "./act";
  * renderer turns on the face's sphere as bloub's engine does. A bolota keeps
  * its seeded eyes on the resting face; a state that draws its own face draws
  * bloub's. Eyes ride inside the act's transform, so a state that
- * shrinks the body takes the face with it. `orbit` spins the body and keeps the
- * face level through `Act.upright`, as bloub does; `play` holds its triangle
- * unturned, so its face is level without it.
+ * shrinks the body takes the face with it. `play` holds its triangle
+ * unturned, so its face is level.
  */
 
 const TAU = Math.PI * 2;
@@ -56,15 +55,14 @@ const COMET_DOT = 0.129;
 /** `alert`/`exclaim`: the body is the glyph's dot. */
 const GLYPH_DOT_R = 0.34;
 const GLYPH_DOT_CY = 0.42;
-/** `play`/`orbit`: the triangle's centre circles the origin at this radius. */
+/** `play`: the triangle's centre sits this far below the origin. */
 const TRI_ORBIT = 0.213;
 /**
  * Mean radius of bloub's measured triangle profile, summed in index order as
  * `posed()` sums it. That mean is the whole of what the triangle still does on
- * a bolota: `play` and `orbit` draw the seed at 86% size.
+ * a bolota: `play` draws the seed at 86% size.
  */
 const TRI_MEAN = 0.8605015624999998;
-const ORBIT_PERIOD = 4 / 1.25;
 const WINK_CLOSE = 0.16;
 const WINK_HOLD = 0.12;
 const WINK_OPEN = 0.18;
@@ -188,13 +186,9 @@ const WIDE_EYES: Eyes = { ...face(bloubEye(0.356, 0.875), 11.6, 6.92, 0, 18.43),
 /** bloub's big round 0.505 × 0.498 eyes, turned away from the badge. */
 const NOTIFY_EYES: Eyes = { ...face(bloubEye(0.505, 0.498), -12.2, -21.94, -5.82, 18.89), alpha: 1, own: 1 };
 
-/** bloub's 0.18 × 0.34 eyes for `play` and `orbit`, a little under rest. */
+/** bloub's 0.18 × 0.34 eyes for `play`, a little under rest. */
 const SMALL = bloubEye(0.18, 0.34);
 const PLAY_EYES: Eyes = { ...face(SMALL, -6, 12, -8, 15), alpha: 1, own: 1 };
-const ORBIT_BASE = pose({ ...SMALL, lock: 1 });
-const ORBIT_JOSTLE_YAW = 16;
-const ORBIT_JOSTLE_PITCH = 10;
-const ORBIT_JOSTLE_ROLL = 6;
 
 export interface Choreo {
   /** Seconds a one-shot runs before handing back (plus the timeline's hold). */
@@ -217,6 +211,8 @@ export interface Choreo {
   acceptsExpression?: boolean;
   /** Ambient wander and drift must not compose on top. */
   ownsLiveliness?: boolean;
+  /** A pointer's look adds to the state's head turn instead of replacing it. */
+  ownsGaze?: boolean;
   /** Local time at which the state reads best, for a single still frame. */
   still: number;
   /**
@@ -258,21 +254,6 @@ const fading = (alpha: number, out: Eyes): Eyes => {
   return out;
 };
 
-/** The orbit's angle at `t`, with the sines and cosines `act` and `eyes` both need. */
-const SPIN = { t: NaN, rot: 0, sin: 0, cos: 0, sin2: 0 };
-
-function spin(t: number) {
-  if (SPIN.t !== t) {
-    const rot = -TAU * 1.25 * t;
-    SPIN.t = t;
-    SPIN.rot = rot;
-    SPIN.sin = Math.sin(rot);
-    SPIN.cos = Math.cos(rot);
-    SPIN.sin2 = Math.sin(rot * 2);
-  }
-  return SPIN;
-}
-
 /** open-bot-avatar's lengths are in a 0 0 100 100 box whose body is about 80 across: 40 of them are one R. */
 const OBA_R = 40;
 /** How far open-bot-avatar's -1..1 gaze turns bolota's head, in degrees. */
@@ -280,8 +261,7 @@ const GAZE_YAW = 30;
 const GAZE_PITCH = 25;
 const wave = (t: number, period: number, phase = 0) => Math.sin((TAU * t) / period + phase);
 
-/** A working turn: the first ribbons sweep `WORK_AT` s in, once a period, over `WORK_TURN` s. */
-export const WORK_PERIOD = 7.5;
+/** A working turn, as `swirl` and the trails sweep their ribbons: `WORK_AT` s in, over `WORK_TURN` s. */
 export const WORK_AT = 1.2;
 export const WORK_TURN = 1.5;
 const WORK_EASE = 6.2;
@@ -294,18 +274,6 @@ export function workAngle(t: number): number {
   return TAU * (1 - (1 + e) * Math.exp(-e));
 }
 
-/** Working: the eyes dart across the work, mostly down at it. */
-function dartAt(t: number): [number, number] {
-  const SLOT = 0.62;
-  const s = Math.floor(t / SLOT);
-  const at = (k: number): [number, number] => [(noise(0, 2001 + k * 3) * 2 - 1) * 0.8, 0.1 + noise(0, 2002 + k * 3) * 0.5];
-  const a = at(s - 1);
-  const b = at(s);
-  const e = clamp((t - s * SLOT) / 0.12);
-  const k = e * e * (3 - 2 * e);
-  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
-}
-
 const looking = (o: Eyes, gx: number, gy: number): Eyes => {
   o.head.yaw = gx * GAZE_YAW;
   o.head.pitch = -gy * GAZE_PITCH;
@@ -316,7 +284,6 @@ const looking = (o: Eyes, gx: number, gy: number): Eyes => {
   return o;
 };
 
-const WORK_SQUINT = pose({ esy: 0.8 });
 const WAIT_SLIT = pose({ esx: 1.15, esy: 0.3 });
 const WAIT_PERIOD = 6.5;
 const ALARM = 2.6;
@@ -347,6 +314,15 @@ export function celebration(t: number): number {
 
 const near = (a: number) => a - TAU * Math.round(a / TAU);
 
+/** How far round `done` has turned the head `t` s in, radians, the nearest way: a third of the ribbons' sweep. */
+const doneTurn = (t: number) => (t < DONE_TURN ? near(celebration(t) / 3) : 0);
+
+/** How much of the face shows as the head turns `a` radians away: gone before the eyes reach the rim. */
+const facing = (a: number) => {
+  const k = clamp((Math.cos(a) - 0.25) / 0.45);
+  return k * k * (3 - 2 * k);
+};
+
 export type StateId =
   | "idle"
   | "wander"
@@ -358,17 +334,18 @@ export type StateId =
   | "exclaim"
   | "snooze"
   | "play"
-  | "orbit"
   | "swirl"
   | "burst"
   | "comet"
-  | "working"
   | "waiting"
   | "blocked"
   | "done";
 
 /** The states open-bot-avatar brought, which the bloub catalog never had. */
-export const OBA_STATES: readonly StateId[] = ["working", "waiting", "blocked", "done"];
+export const OBA_STATES: readonly StateId[] = ["waiting", "blocked", "done"];
+
+/** Ids that still play, as the state that replaced them. */
+export const RETIRED: Readonly<Record<string, StateId>> = { orbit: "done", working: "swirl" };
 
 export const CHOREO: Record<StateId, Choreo> = {
   idle: {
@@ -502,37 +479,6 @@ export const CHOREO: Record<StateId, Choreo> = {
     act: () => PLAY_ACT,
     eyes: () => PLAY_EYES,
   },
-  orbit: {
-    duration: 3.4,
-    morph: 0.6,
-    period: ORBIT_PERIOD,
-    blinkIn: false,
-    baseBody: false,
-    baseFace: false,
-    ownsLiveliness: true,
-    still: 1.2,
-    act: (t, o = newAct()) => {
-      const w = spin(t);
-      restAct(o);
-      o.x = -TRI_ORBIT * w.sin;
-      o.y = TRI_ORBIT * w.cos;
-      o.rot = (w.rot * 180) / Math.PI;
-      o.s = TRI_MEAN;
-      o.upright = 1;
-      return o;
-    },
-    eyes: (t, o = newEyes()) => {
-      const w = spin(t);
-      setPose(o.pose, ORBIT_BASE);
-      o.head.roll = w.sin2 * ORBIT_JOSTLE_ROLL;
-      o.head.yaw = w.sin * ORBIT_JOSTLE_YAW;
-      o.head.pitch = w.cos * ORBIT_JOSTLE_PITCH;
-      o.head.spread = 0;
-      o.alpha = 1;
-      o.own = 1;
-      return o;
-    },
-  },
   swirl: {
     duration: 1.3,
     minDuration: 1.3,
@@ -582,33 +528,6 @@ export const CHOREO: Record<StateId, Choreo> = {
       return o;
     },
     eyes: (t, o = newEyes()) => fading(cometCollapse(t).eyeAlpha, o),
-  },
-  working: {
-    duration: WORK_PERIOD,
-    morph: 0.45,
-    period: WORK_PERIOD,
-    blinkIn: false,
-    baseBody: true,
-    baseFace: false,
-    acceptsExpression: true,
-    still: WORK_AT + WORK_TURN / 2,
-    act: (t, o = newAct()) => {
-      const beat = wave(t, 0.7);
-      const swell = Math.sin(workAngle(t) / 2);
-      restAct(o);
-      o.rot = 3 + 0.6 * beat + 3 * swell;
-      o.y = (-0.3 * (0.5 + 0.5 * beat) - 1.2 * swell) / OBA_R;
-      o.sx = 1.005 + 0.005 * beat;
-      o.sy = 0.99 - 0.008 * beat;
-      return o;
-    },
-    eyes: (t, o = newEyes()) => {
-      const turn = workAngle(t);
-      const swell = Math.sin(turn / 2);
-      const [gx, gy] = dartAt(t);
-      setPose(o.pose, WORK_SQUINT);
-      return looking(o, clamp(gx * (1 - swell) - 0.85 * Math.sin(turn), -1, 1), gy * (1 - swell) - 0.3 * swell);
-    },
   },
   waiting: {
     duration: WAIT_PERIOD,
@@ -661,18 +580,23 @@ export const CHOREO: Record<StateId, Choreo> = {
     baseFace: false,
     acceptsExpression: true,
     ownsLiveliness: true,
+    ownsGaze: true,
     still: 1.4,
     act: (t, o = newAct()) => {
       const swell = t < DONE_TURN ? Math.sin((Math.PI * t) / DONE_TURN) : 0;
       restAct(o);
       o.y = (-2.2 * swell) / OBA_R;
       o.sy = 1 + 0.04 * swell;
+      o.eyeAlpha = facing(doneTurn(t));
       return o;
     },
     eyes: (t, o = newEyes()) => {
+      const turn = doneTurn(t);
       setPose(o.pose, IDENT);
-      const turn = t < DONE_TURN ? near(celebration(t) / 3) : 0;
-      return looking(o, Math.sin(turn), 0);
+      looking(o, 0, 0);
+      o.head.yaw = (turn * 180) / Math.PI;
+      o.alpha = facing(turn);
+      return o;
     },
   },
 };

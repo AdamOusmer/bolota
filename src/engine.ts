@@ -46,7 +46,7 @@ export interface EngineHandle {
    * Sets, or with `null` clears, the held eye expression. Accepts a roster name
    * or a bloub id; unknown names are ignored. Visible on states that rest on the
    * base face (`idle`, `wander`, `swirl`) and on `play`, `burst`, `comet`,
-   * `working`, `waiting`, `done`.
+   * `waiting`, `done`.
    */
   setExpression(name: string | null): void;
   /** The bloub expression ids; every roster name from `bolota/expression` is accepted as well. */

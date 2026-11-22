@@ -290,7 +290,7 @@ const ENTRIES: {
     // `working`, `waiting`, `blocked` and `done` states, the per-frame gaze
     // pursuit with its attention fade and eye-origin aim, pen and finger
     // tracking, and the ribbon timing helpers the decor chunk now imports from
-    // here instead of bundling choreo a second time. Measured 23478 B on bun 1.4.4,
+    // here instead of bundling choreo a second time. Measured 23277 B on bun 1.4.4,
     // as `import *` because every underscore export is held by decor.js. Budget
     // is that plus the ~270 B CI's bun 1.3.10 has measured over local, plus 100 B.
     name: "engine",
@@ -311,14 +311,15 @@ const ENTRIES: {
     // bytes for no trig and no number formatting per frame, measuring 6724 B
     // on bun 1.4.2 and 6842 B on CI's bun 1.3.10.
     //
-    // Raised from 7100 to 8100 for open-bot-avatar's ribbons
+    // Raised from 7100 to 8250 for open-bot-avatar's ribbons
     // (`live/ribbons.ts`): tapered filled pieces on tilted hoops, split where
-    // they pass behind the body, with a gradient along each and colours from
-    // the body's own ramp, replacing the stroked arcs. Measured 7772 B on bun 1.4.4
-    // with the choreo helpers taken from engine.js (10456 B when it bundled its
-    // own choreo). Budget is that plus CI's ~120 B and ~3%.
+    // they pass behind the body, with a gradient along each in bolota's seeded
+    // ring colours, replacing the stroked arcs. Pooled sample buffers and a
+    // colour grid keep a frame from allocating or formatting much. Measured
+    // 7896 B on bun 1.4.4 with the choreo helpers taken from engine.js (10456 B
+    // when it bundled its own choreo). Budget is that plus CI's ~120 B and ~3%.
     name: "decor (lazy chunk)",
-    budget: 8100,
+    budget: 8250,
     external: [],
     plugins: [decorSharesEngine],
     source: `import { createDecor } from "../../src/live/decor";

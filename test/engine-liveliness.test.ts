@@ -39,7 +39,7 @@ describe("engine liveliness", () => {
   });
 
   test("a looped periodic state re-arms past its own period and never parks", () => {
-    for (const state of ["orbit", "wink"] as const) {
+    for (const state of ["done", "wink"] as const) {
       const { doc, handle } = mounted();
       handle.loop(state);
       const span = CHOREO[state].period!;
@@ -63,8 +63,8 @@ describe("engine liveliness", () => {
     }
   });
 
-  test("orbit and comet loops are seamless across their period", () => {
-    for (const state of ["orbit", "comet"] as const) {
+  test("done and comet loops are seamless across their period", () => {
+    for (const state of ["done", "comet"] as const) {
       const { doc, svg, handle } = mounted();
       handle.loop(state);
       const span = (CHOREO[state].period ?? CHOREO[state].duration) * 1000;
@@ -111,16 +111,16 @@ describe("engine liveliness", () => {
 
   test("rest picks the state a one-shot settles into", () => {
     const { doc, handle } = mounted();
-    handle.play("burst", { rest: "orbit" });
+    handle.play("burst", { rest: "done" });
     const end = advance(doc, 0, 12);
     expect(doc.defaultView.queue.length).toBe(1);
-    advance(doc, end, CHOREO.orbit.period! * 2);
+    advance(doc, end, CHOREO.done.period! * 2);
     expect(doc.defaultView.queue.length).toBe(1);
   });
 
   test("a one-shot rests on whatever was looping before it", () => {
     const { doc, handle } = mounted();
-    handle.loop("orbit");
+    handle.loop("done");
     handle.play("burst");
     const end = advance(doc, 0, 12);
     expect(doc.defaultView.queue.length).toBe(1);
@@ -141,7 +141,7 @@ describe("engine liveliness", () => {
 
   test("a periodic state keeps running to fill a longer window, then parks", () => {
     const { doc, handle } = mounted();
-    handle.play("orbit", { for: 9 });
+    handle.play("done", { for: 9 });
     advance(doc, 0, 8);
     expect(doc.defaultView.queue.length).toBe(1);
     expect(drain(doc, 8000).drained).toBe(true);
@@ -149,14 +149,14 @@ describe("engine liveliness", () => {
 
   test("stop freezes the frame and play resumes it", () => {
     const { doc, svg, handle } = mounted();
-    handle.loop("orbit");
+    handle.loop("done");
     const end = advance(doc, 0, 1);
     handle.stop();
     const frozen = look(svg);
     advance(doc, end, 1);
     expect(look(svg)).toBe(frozen);
     expect(eyeAttrs(svg).length).toBe(2);
-    handle.loop("orbit");
+    handle.loop("done");
     advance(doc, end + 1000, 1.3);
     expect(look(svg)).not.toBe(frozen);
   });

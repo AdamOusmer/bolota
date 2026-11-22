@@ -9,7 +9,7 @@ import type { Expression } from "../expression";
 import { IDENT, r3, type Pose } from "../morph";
 import { resolve } from "../render";
 import { IDLE_ACT, actTransform, type Act } from "./act";
-import { CHOREO, expressed, newEyes, type Eyes, type Head, type StateId } from "./choreo";
+import { CHOREO, RETIRED, expressed, newEyes, type Eyes, type Head, type StateId } from "./choreo";
 import type { Decor, DecorFrame, DecorHost, DecorPalette } from "./decor.js";
 import { eyeBox, settleEyes, type Correction, type Eye, type EyeBox } from "./fit";
 import { Glide, NO_LOOK, followLook, pointerAim, type Look, type Origin, type Point } from "./follow";
@@ -61,6 +61,8 @@ const stamp = (sig: Float64Array, i: number, v: number): number => {
 };
 
 const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
+
+const current = (id: string): string => (has(RETIRED, id) ? RETIRED[id]! : id);
 
 const POSE_KEYS = Object.keys(IDENT) as (keyof Pose)[];
 
@@ -221,7 +223,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   let aiming = false;
   let aimX = NaN;
   let aimY = NaN;
-  const origin: Origin = { x: 0, y: 0, size: 1 };
+  const origin: Origin = { x: 0, y: 0, size: 1, view: 0 };
   const aimAt: Point = { x: 0, y: 0 };
   let gain = 1;
   let measured = false;
@@ -649,11 +651,11 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
 
   /**
    * Points the gaze glide where the pointer asks, or hands it back to the
-   * state's own when there is no pointer to look at or the state owns its
-   * face. Retargets only when the ask moved; whether the glide is still going.
+   * state's own when there is no pointer to look at. Retargets only when the
+   * ask moved; whether the glide is still going.
    */
-  function aim(now: number, baseFace: boolean): boolean {
-    const on = following && !!pointer && measured && baseFace;
+  function aim(now: number): boolean {
+    const on = following && !!pointer && measured;
     if (!on) {
       if (aiming) {
         aiming = false;
@@ -674,7 +676,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   function frame(now: number): boolean {
     const id = tl.state(now);
     const c = CHOREO[id];
-    const busy = aim(now, c.baseFace);
+    const busy = aim(now);
     const look = glide.sample(now, lookNow);
     const act = tl.sample(now, actNow);
     const e = tl.eyes(now, eyesNow);
@@ -687,12 +689,14 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     let lively = 0;
     for (const f of frames) if (!CHOREO[f.state].ownsLiveliness) lively += f.weight;
     const alive = e.alpha > 0.01;
-    idleDrift(eyeMs + wanderAt, alive ? lively * look.wander * amp : 0, lively * amp, idle);
+    const glance = lively * lively * (3 - 2 * lively);
+    idleDrift(eyeMs + wanderAt, alive ? glance * look.wander * amp : 0, lively * amp, idle);
     act.x += idle.x;
     act.y += idle.y;
     const h = e.head;
-    gazeNow.yaw = h.yaw + (look.yaw - h.yaw) * look.mix + idle.gaze.yaw;
-    gazeNow.pitch = h.pitch + (look.pitch - h.pitch) * look.mix + idle.gaze.pitch;
+    const kept = c.ownsGaze ? 0 : 1;
+    gazeNow.yaw = h.yaw + (look.yaw - h.yaw * kept) * look.mix + idle.gaze.yaw;
+    gazeNow.pitch = h.pitch + (look.pitch - h.pitch * kept) * look.mix + idle.gaze.pitch;
     gazeNow.roll = h.roll + idle.gaze.roll;
 
     const changed = paint(act, e, gazeNow);
@@ -824,6 +828,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     origin.x = r.left + r.width * fx;
     origin.y = r.top + r.height * fy;
     origin.size = Math.max(r.width, r.height);
+    origin.view = Math.hypot(view.innerWidth || 0, view.innerHeight || 0);
     measured = r.width > 0 && r.height > 0;
     if (gainStale) gain = (parseFloat(view.getComputedStyle(eyesG).getPropertyValue("--mo-track-travel")) || TRAVEL) / TRAVEL;
     stale = gainStale = false;
@@ -895,9 +900,6 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     const onLift = (ev: Event) => {
       if ((ev as PointerEvent).pointerType !== "mouse") onLeave();
     };
-    const onOut = (ev: Event) => {
-      if (!(ev as PointerEvent).relatedTarget) onLeave();
-    };
     const geom = { passive: true, capture: true } as const;
     const quiet = { passive: true } as const;
     moves.addEventListener("pointermove", onMove, quiet);
@@ -905,10 +907,7 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
     moves.addEventListener("pointerup", onLift, quiet);
     moves.addEventListener("pointercancel", onLift, quiet);
     leaves.addEventListener("pointerleave", onLeave, quiet);
-    if (target === "window") {
-      view.addEventListener("pointerout", onOut, quiet);
-      view.addEventListener("blur", onLeave, quiet);
-    }
+    if (target === "window") view.addEventListener("blur", onLeave, quiet);
     view.addEventListener("scroll", onScroll, geom);
     view.addEventListener("resize", onGeom, { passive: true });
     resized = view.ResizeObserver ? new view.ResizeObserver(onGeom) : null;
@@ -919,7 +918,6 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
       moves.removeEventListener("pointerup", onLift);
       moves.removeEventListener("pointercancel", onLift);
       leaves.removeEventListener("pointerleave", onLeave);
-      view.removeEventListener("pointerout", onOut);
       view.removeEventListener("blur", onLeave);
       view.removeEventListener("scroll", onScroll, geom);
       view.removeEventListener("resize", onGeom);
@@ -983,7 +981,9 @@ export function mountLive(svg: SVGSVGElement, name: string, opts: LiveOptions = 
   const handle: EngineHandle = {
     states: Object.keys(CHOREO),
     expressions: Object.keys(ALIASES),
-    play(state, o) {
+    play(asked, given) {
+      const state = current(asked);
+      const o = given?.rest ? { ...given, rest: current(given.rest) } : given;
       for (const id of [state, o?.rest ?? state]) if (!has(CHOREO, id)) throw new Error(`mountLive: unknown state "${id}"`);
       if (dead) return;
       const id = state as StateId;

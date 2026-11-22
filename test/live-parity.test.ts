@@ -2,11 +2,11 @@ import { afterAll, describe, expect, test } from "bun:test";
 
 import { _layout } from "../src/bolota";
 import { actTransform, type Act } from "../src/live/act";
-import { CHOREO } from "../src/live/choreo";
+import { CHOREO, RETIRED } from "../src/live/choreo";
 import { HOLD, Timeline } from "../src/live/timeline";
 import { ACTS, HOLD as FROZEN_HOLD } from "./fixtures/parity-acts";
 import { CATALOG, POINTS } from "./fixtures/parity-catalog";
-import { IDS, Rig, SCENARIOS } from "./live-parity-scenarios";
+import { IDS, RETIRED_SCENARIOS, Rig, SCENARIOS } from "./live-parity-scenarios";
 
 /**
  * The live timeline against the engine it replaced, frame by frame.
@@ -55,7 +55,7 @@ const nil = (v: unknown) => v ?? null;
 
 describe("live choreography", () => {
   test("covers the bloub catalog with the same timing and flags", () => {
-    expect(([...IDS] as string[]).sort()).toEqual(Object.keys(CATALOG).sort());
+    expect(([...IDS] as string[]).sort()).toEqual(Object.keys(CATALOG).filter((id) => !(id in RETIRED)).sort());
     expect(HOLD).toBe(FROZEN_HOLD);
     for (const id of IDS) {
       const c = CHOREO[id];
@@ -99,14 +99,14 @@ describe("live timeline matches the old engine", () => {
   });
 
   test("every frozen scenario has a test", () => {
-    expect(Object.keys(ACTS).sort()).toEqual(SCENARIOS.map((s) => s.name).sort());
+    expect(Object.keys(ACTS).filter((name) => !RETIRED_SCENARIOS.has(name)).sort()).toEqual(SCENARIOS.map((s) => s.name).sort());
   });
 
   for (const s of SCENARIOS) test(s.name, () => runScenario(s.name, s.seed, s.run));
 
   test("sample is pure: rereading the past gives the same act", () => {
     const tl = new Timeline();
-    tl.play("orbit", 0, { loop: true });
+    tl.play("done", 0, { loop: true });
     tl.play("burst", 0.3);
     tl.play("comet", 0.35);
     const ts = Array.from({ length: 200 }, (_, i) => i * 0.031);
@@ -120,11 +120,11 @@ describe("live timeline matches the old engine", () => {
 describe("corrected from the old engine", () => {
   test("an outgoing state keeps its own looping through the fade", () => {
     const tl = new Timeline();
-    tl.play("orbit", 0, { loop: true });
+    tl.play("done", 0, { loop: true });
     tl.play("burst", 5);
-    const period = CHOREO.orbit.period!;
-    expect(tl.sample(5).rot).toBeCloseTo(CHOREO.orbit.act(5 % period).rot, 9);
-    expect(tl.eyes(5).pose).toEqual(CHOREO.orbit.eyes(5 % period).pose);
+    const period = CHOREO.done.period!;
+    expect(tl.sample(5).y).toBeCloseTo(CHOREO.done.act(5 % period).y, 9);
+    expect(tl.eyes(5).head.yaw).toBeCloseTo(CHOREO.done.eyes(5 % period).head.yaw, 9);
   });
 
   test("a hand-back to a looped rest keeps it looping", () => {

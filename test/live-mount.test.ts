@@ -140,6 +140,21 @@ describe("mountLive markup", () => {
     expect(handle.states).toEqual(engineStates());
     expect(handle.expressions).toEqual(engineExpressions());
   });
+
+  test("retired ids still play, as the states that replaced them", () => {
+    const { handle } = mounted();
+    expect(handle.states).not.toContain("orbit");
+    expect(handle.states).not.toContain("working");
+    const drawn = (id: string) => {
+      const m = mounted();
+      m.handle.play(id, { loop: true });
+      run(m.doc, 16, 1);
+      return attrs(m.svg);
+    };
+    expect(drawn("orbit")).toEqual(drawn("done"));
+    expect(drawn("working")).toEqual(drawn("swirl"));
+    expect(() => handle.play("working", { rest: "orbit" })).not.toThrow();
+  });
 });
 
 describe("mountLive clock", () => {
@@ -178,7 +193,7 @@ describe("mountLive clock", () => {
 
   test("a looped periodic state never parks until another state replaces it", () => {
     const { doc, handle } = mounted();
-    handle.loop("orbit");
+    handle.loop("done");
     const ms = run(doc, 0, 8);
     expect(doc.defaultView.queue.length).toBe(1);
     handle.loop("idle");
@@ -188,7 +203,7 @@ describe("mountLive clock", () => {
 
   test("stop pauses, play resumes", () => {
     const { doc, handle } = mounted();
-    handle.loop("orbit");
+    handle.loop("done");
     frame(doc, 16);
     handle.stop();
     expect(doc.defaultView.queue.length).toBe(0);
@@ -375,7 +390,7 @@ describe("mountLive gaze", () => {
     expect(doc.defaultView.count() + doc.count()).toBe(0);
   });
 
-  test("a state that owns its gaze ignores the pointer", () => {
+  test("a state with its own eyes still follows the pointer", () => {
     const { doc, svg, handle } = mounted();
     handle.loop("wide");
     handle.follow();
@@ -385,7 +400,7 @@ describe("mountLive gaze", () => {
     const still = attrs(svg);
     win.fire("pointermove", { clientX: 900, clientY: 50, pointerType: "mouse" });
     run(doc, 3000, 1);
-    expect(attrs(svg)).toEqual(still);
+    expect(attrs(svg)).not.toEqual(still);
   });
 });
 

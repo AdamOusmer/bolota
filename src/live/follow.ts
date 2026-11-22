@@ -43,6 +43,8 @@ export const ATTEND_TAU = 0.3;
 export const REACH = 1;
 /** Smallest reach, CSS px, so a small avatar still uses its range. */
 export const MIN_REACH = 160;
+/** The reach is at least this share of the viewport's diagonal, so the look keeps turning across the page. */
+export const VIEW_REACH = 0.25;
 
 const EPS_DEG = 0.05;
 const EPS_MIX = 0.002;
@@ -53,17 +55,19 @@ export interface Point {
   y: number;
 }
 
-/** Where the look starts on screen (the eyes), and the avatar's size, CSS px. */
+/** Where the look starts on screen (the eyes), the avatar's size and the viewport's diagonal, CSS px. */
 export interface Origin extends Point {
   size: number;
+  view: number;
 }
 
 /**
  * The pointer as a look direction from the eyes, -1..1 each way: radial and
- * soft, so it saturates gently past about one avatar away.
+ * soft, saturating gently past about one avatar away or a quarter of the
+ * viewport's diagonal, whichever is further.
  */
 export function pointerAim(pointer: Point, origin: Origin, out: Point): Point {
-  const reach = Math.max(origin.size, MIN_REACH) * REACH;
+  const reach = Math.max(origin.size * REACH, MIN_REACH, origin.view * VIEW_REACH);
   const dx = (pointer.x - origin.x) / reach;
   const dy = (pointer.y - origin.y) / reach;
   const m = Math.hypot(dx, dy);

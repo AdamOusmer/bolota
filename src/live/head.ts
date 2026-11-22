@@ -2,6 +2,7 @@
 // Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
 import { EASE_IN_OUT } from "../ease";
+import { noise } from "./choreo";
 
 /**
  * bloub's head, from `bloub/face.ts`: the eyes are painted on a sphere and a
@@ -67,24 +68,44 @@ export function loopNoise(t: number, period: number, seed = 0): number {
   return 0.55 * Math.sin(p + seed) + 0.3 * Math.sin(2 * p + seed * 1.7 + 1.1) + 0.15 * Math.sin(3 * p + seed * 2.3 + 2.4);
 }
 
-/** bloub's gaze drift amplitudes, in degrees, at the size the owner settled on. */
-const WANDER_YAW_SLOW = 7.81;
-const WANDER_YAW_FAST = 2.27;
-const WANDER_PITCH_SLOW = 7.75;
-const WANDER_PITCH_FAST = 2.33;
 const WANDER_ROLL = 3.28;
 
-/** The furthest the drift turns the head, in degrees. */
-export const MAX_YAW_DRIFT = WANDER_YAW_SLOW + WANDER_YAW_FAST;
-export const MAX_PITCH_DRIFT = WANDER_PITCH_SLOW + WANDER_PITCH_FAST;
+/** open-bot-avatar's idle look: a fixation every `FIXATION` s, reached in `SACCADE` s, centred `CENTRED` of the time. */
+export const FIXATION = 1.9;
+export const SACCADE = 0.25;
+const CENTRED = 0.4;
+/** How far a fixation turns the head, in degrees: about bloub's drift, so a glance never leaves the face. */
+export const MAX_YAW_DRIFT = 12;
+export const MAX_PITCH_DRIFT = 7;
+
+const FIX = { k: NaN, x: 0, y: 0 };
+
+function fixation(k: number): void {
+  FIX.k = k;
+  if (noise(0, 1000 + k * 3) < CENTRED) {
+    FIX.x = 0;
+    FIX.y = 0;
+    return;
+  }
+  FIX.x = (noise(0, 1001 + k * 3) * 2 - 1) * MAX_YAW_DRIFT;
+  FIX.y = (noise(0, 1002 + k * 3) * 2 - 1) * MAX_PITCH_DRIFT;
+}
 
 /**
- * The slow wander of the head, in degrees, at time `t` in seconds and strength
- * `k`. Mutually incommensurate periods, so it never visibly repeats.
+ * The idle look of the head, in degrees, at time `t` in seconds and strength
+ * `k`: long holds between short eased saccades, as open-bot-avatar's eyes look
+ * around. The roll still drifts on bloub's slow noise.
  */
 export function wander(t: number, k: number, o: Gaze): Gaze {
-  o.yaw = (loopNoise(t, 6.0, 0.4) * WANDER_YAW_SLOW + loopNoise(t, 1.8, 2.1) * WANDER_YAW_FAST) * k;
-  o.pitch = (loopNoise(t, 5.1, 1.3) * WANDER_PITCH_SLOW + loopNoise(t, 2.1, 0.7) * WANDER_PITCH_FAST) * k;
+  const s = Math.floor(t / FIXATION);
+  fixation(s - 1);
+  const ax = FIX.x;
+  const ay = FIX.y;
+  fixation(s);
+  const u = Math.min(1, Math.max(0, (t - s * FIXATION) / SACCADE));
+  const e = u * u * (3 - 2 * u);
+  o.yaw = (ax + (FIX.x - ax) * e) * k;
+  o.pitch = (ay + (FIX.y - ay) * e) * k;
   o.roll = loopNoise(t, 7.3, 3.2) * WANDER_ROLL * k;
   return o;
 }

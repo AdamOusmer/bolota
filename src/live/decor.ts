@@ -1,12 +1,12 @@
 // Copyright (c) 2026 Adam Ousmer. MIT licensed. See LICENSE.
 // Derived from bloub (c) 2026 Jeremy Perret, MIT. See LICENSE.
 
-import { contrast, fromHex, mixHex, toHex, type Oklch } from "../color";
+import { contrast, ensureContrast, fromHex, mixHex, toHex, type Oklch } from "../color";
 import type { StateId } from "./choreo";
 import { edge, type OutlineLayout } from "./outline";
 import { putter } from "./put";
-import { BODY, cageTurn, hashString, ribbonPalette, ribbonPieces, rimOf, runAt, workTurn, type Rim } from "./ribbons";
-import { CHOREO, WORK_AT, alarm, clamp, r3 } from "./shared";
+import { BODY, cageTurn, hashString, ribbonPieces, rimOf, runAt, runOf, workTurn, type Rim } from "./ribbons";
+import { CHOREO, alarm, clamp, r3 } from "./shared";
 
 /**
  * What a state draws around the body rather than does to it: the ribbons
@@ -68,6 +68,7 @@ const TAU = Math.PI * 2;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const SEEN = 0.01;
 const SHORT = 0.01;
+const SHADES = 48;
 
 const DOT_X = [-0.557, -0.013, 0.532] as const;
 const DOT_R = 0.165;
@@ -80,12 +81,16 @@ const NOTIF_MARGIN = 0.054;
 const GLYPH_DOT_CY = 0.42;
 const GLYPH_BAR_CY = -0.55;
 const GLYPH_AXIS = GLYPH_DOT_CY - GLYPH_BAR_CY;
-const ORBIT_PERIOD = 4 / 1.25;
 const PLAY_SPAN = 2.2;
 const SWIRL_SPAN = 1.22;
 const COMET_FROM = 0.15;
 const COMET_SPAN = 1.8;
 const HAZE_STEPS = 8;
+const RING_FAN = 110;
+const RING_SPAN = 0.4;
+const RING_VS_HEAD = 1.6;
+const RING_VS_BG = 1.3;
+const RINGS = 6;
 const ACCENT_VS_HEAD = 2;
 const ACCENT_VS_BG = 1.5;
 const ACCENT_CHROMA = 0.19;
@@ -156,11 +161,9 @@ function bears(state: StateId): boolean {
     case "exclaim":
     case "notify":
     case "play":
-    case "orbit":
     case "swirl":
     case "burst":
     case "comet":
-    case "working":
     case "blocked":
     case "done":
       return true;
@@ -179,6 +182,20 @@ interface Colors {
   head: string;
   accent: string;
   haze: string[] | null;
+  /** Ribbon `i`'s three stops, tail to head: the seeded ring hues bolota's rings always wore. */
+  ribbon(i: number): string[];
+}
+
+/** The hue and hue span of each of bolota's six rings, from the ring seeds' own stream. */
+function ringHues(): { hue: number; span: number }[] {
+  const rng = createRng(0xa11ce);
+  return Array.from({ length: RINGS }, (_, i) => {
+    for (let k = 0; k < 6; k++) rng();
+    const hue = (i * 360) / RINGS + rng() * 30;
+    const span = 60 + rng() * 60;
+    rng();
+    return { hue, span };
+  });
 }
 
 /**
@@ -209,7 +226,24 @@ function accentOf(head: Oklch, bg: Oklch | null): string {
 function colorsOf(palette: DecorPalette): Colors {
   const head = fromHex(palette.head);
   const bg = palette.bg ? fromHex(palette.bg) : null;
+  const away = (c: Oklch): string => {
+    const onHead = ensureContrast(c, head, RING_VS_HEAD);
+    return toHex(bg ? ensureContrast(onHead, bg, RING_VS_BG) : onHead);
+  };
+  const tone = clamp(head.l + (head.l > 0.6 ? -0.2 : 0.2), 0.3, 0.8);
+  const chroma = clamp(head.c * 1.15, 0.09, 0.17);
+  const hues = ringHues();
+  const found: string[][] = [];
   return {
+    ribbon(i) {
+      const r = i % RINGS;
+      if (!found[r]) {
+        const { hue, span } = hues[r]!;
+        const from = head.h + (mod360(hue) / 360 - 0.5) * RING_FAN;
+        found[r] = [0, 0.5, 1].map((k) => away({ l: tone, c: chroma, h: mod360(from + span * RING_SPAN * k) }));
+      }
+      return found[r]!;
+    },
     head: palette.head,
     accent: accentOf(head, bg),
     haze: bg
@@ -287,7 +321,8 @@ export function createDecor(
   const seed = hashString(name);
   let K = 0;
   let rim: Rim | undefined;
-  let runs: ReturnType<typeof ribbonPalette> | null = null;
+  const runs: ReturnType<typeof runOf>[] = [];
+  const shades: string[][] = [];
   let colors: Colors | null = null;
   let mask: SVGMaskElement | null = null;
   let maskRect: SVGRectElement | null = null;
@@ -338,22 +373,31 @@ export function createDecor(
     return far / K;
   }
 
+  /** Ribbon `r`'s colour `t` of the way along it, on a 1/`SHADES` grid so a frame formats no colour twice. */
+  function shade(r: number, t: number): string {
+    const row = (shades[r] ??= []);
+    const i = Math.round(clamp(t) * SHADES);
+    return (row[i] ??= runAt((runs[r] ??= runOf(colors!.ribbon(r))), i / SHADES));
+  }
+
   function ribbons(turn: { presence: number; sweep: number }, cage: number, weight: number): void {
     const presence = turn.presence * weight;
     if (presence <= SEEN) return;
     K ||= scale();
     if (outline && !rim) rim = rimOf(reach);
-    runs ??= ribbonPalette(palette.head, seed);
-    for (const p of ribbonPieces(presence, seed, turn.sweep, cage, rim)) {
-      const run = runs[p.ribbon]!;
-      const [s0, s1] = p.along;
+    colors ??= colorsOf(palette);
+    const pieces = ribbonPieces(presence, seed, turn.sweep, cage, rim);
+    for (let i = 0; i < pieces.length; i++) {
+      const p = pieces[i]!;
+      const s0 = p.along[0];
+      const s1 = p.along[1];
       const path = (p.front ? ribFront : ribBack).next();
       let d = "M" + RX(p.pts[0]!) + " " + RY(p.pts[1]!);
       for (let q = 2; q < p.pts.length; q += 2) d += "L" + RX(p.pts[q]!) + " " + RY(p.pts[q + 1]!);
       put(path, "d", d + "Z");
       put(path, "opacity", 1);
       if (Math.hypot(p.to[0] - p.from[0], p.to[1] - p.from[1]) <= SHORT) {
-        put(path, "fill", runAt(run, (s0 + s1) / 2));
+        put(path, "fill", shade(p.ribbon, (s0 + s1) / 2));
         continue;
       }
       const grad = grads.next();
@@ -362,9 +406,9 @@ export function createDecor(
       put(grad, "y1", RY(p.from[1]));
       put(grad, "x2", RX(p.to[0]));
       put(grad, "y2", RY(p.to[1]));
-      put(gradStops[g]![0]!, "stop-color", runAt(run, s0));
-      put(gradStops[g]![1]!, "stop-color", runAt(run, (s0 + s1) / 2));
-      put(gradStops[g]![2]!, "stop-color", runAt(run, s1));
+      put(gradStops[g]![0]!, "stop-color", shade(p.ribbon, s0));
+      put(gradStops[g]![1]!, "stop-color", shade(p.ribbon, (s0 + s1) / 2));
+      put(gradStops[g]![2]!, "stop-color", shade(p.ribbon, s1));
       put(path, "fill", gradRef[g]!);
     }
   }
@@ -451,17 +495,11 @@ export function createDecor(
       case "play":
         ribbons(workTurn(t, PLAY_SPAN), 0, w);
         break;
-      case "orbit":
-        ribbons(cageTurn(t, ORBIT_PERIOD), 1, w);
-        break;
       case "swirl":
         ribbons(workTurn(t, SWIRL_SPAN), 0, w);
         break;
       case "comet":
         ribbons(workTurn(t - COMET_FROM, COMET_SPAN), 0, w);
-        break;
-      case "working":
-        ribbons(workTurn(t - WORK_AT), 0, w);
         break;
       case "done":
         ribbons(cageTurn(t), 1, w);

@@ -7,7 +7,7 @@ describe("mountEngine frame loop", () => {
   test("bolotas on one window share a single animation frame", () => {
     const doc = new FakeDocument();
     const bots = ["a-seed", "b-seed", "c-seed"].map((name) => mountOn(doc, name));
-    bots.forEach(({ handle }) => handle.loop("orbit"));
+    bots.forEach(({ handle }) => handle.loop("done"));
     expect(doc.defaultView.queue.length).toBe(1);
 
     frame(doc, 16);
@@ -21,8 +21,8 @@ describe("mountEngine frame loop", () => {
     const doc = new FakeDocument();
     const still = mountOn(doc, "still-seed");
     const live = mountOn(doc, "live-seed");
-    still.handle.loop("orbit");
-    live.handle.loop("orbit");
+    still.handle.loop("done");
+    live.handle.loop("done");
     frame(doc, 16);
     still.handle.stop();
 
@@ -38,7 +38,7 @@ describe("mountEngine frame loop", () => {
   test("frames update the figure in place instead of rebuilding it", () => {
     const doc = new FakeDocument();
     const { svg, handle } = mountOn(doc, "steady-seed");
-    handle.loop("orbit");
+    handle.loop("done");
     frame(doc, 16);
     const before = nodes(svg);
 
@@ -53,12 +53,12 @@ describe("mountEngine frame loop", () => {
     const doc = new FakeDocument();
     const a = mountOn(doc, "a-seed");
     const b = mountOn(doc, "b-seed");
-    a.handle.loop("orbit");
-    b.handle.loop("orbit");
+    a.handle.loop("done");
+    b.handle.loop("done");
     a.handle.stop();
     b.handle.stop();
     expect(doc.defaultView.queue.length).toBe(0);
-    a.handle.play("orbit", { loop: true });
+    a.handle.play("done", { loop: true });
     expect(doc.defaultView.queue.length).toBe(1);
   });
 });
